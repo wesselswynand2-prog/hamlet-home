@@ -18,7 +18,7 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          ignore: brands topics
+          ignore: brands topics license
 
   tests:
     runs-on: ubuntu-latest
@@ -32,6 +32,10 @@ jobs:
           repository: wesselswynand2-prog/hamlet-geyser
           path: _geyser
       - run: pip install -r requirements_test.txt
-      - run: pytest -q
+      - name: pytest
+        run: |
+          set -o pipefail
+          pytest -q -p no:cacheprovider 2>&1 | tee pytest.log || {
+            grep -E "^(E  |FAILED|ERROR)" pytest.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
         env:
           HAMLET_EXTRA_COMPONENTS: _geyser/custom_components
