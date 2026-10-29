@@ -9,6 +9,20 @@ const fmtW = (w, signed = false) => {
 };
 const fmtKwh = (v, d = 1) => (num(v) === null ? "–" : `${Number(v).toFixed(d)} kWh`);
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const fmtDur = (h) => {
+  if (num(h) === null) return "–";
+  const m = Math.round(h * 60);
+  if (m < 60) return `${Math.max(m, 1)} min`;
+  if (h >= 48) return `${(h / 24).toFixed(1)} days`;
+  return `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+};
+const clockIn = (h) => {
+  const d = new Date(Date.now() + h * 3600e3), now = new Date();
+  const t = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return t;
+  const tom = new Date(now); tom.setDate(now.getDate() + 1);
+  return d.toDateString() === tom.toDateString() ? `${t} tomorrow` : `${d.toLocaleDateString([], { weekday: "short" })} ${t}`;
+};
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const STYLE = `
@@ -72,6 +86,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .money .k { font-size: 13px; color: var(--muted); }
 .money .v { font-size: clamp(20px, 6vw, 28px); white-space: nowrap; font-weight: 400; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .money .s { font-size: 12px; color: var(--muted); }
+.money .k ha-icon { --mdc-icon-size: 16px; vertical-align: -3px; margin-right: 4px; color: var(--c-batt); }
+.money > div.off { border-color: var(--c-bad); }
+.money > div.off .k, .money > div.off .k ha-icon { color: var(--c-bad); }
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 18px; }
 @media (max-width: 520px) { .stats { grid-template-columns: 1fr; } }
 .stat { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; min-width: 0; }
@@ -293,7 +310,7 @@ class HamletHomePanel extends HTMLElement {
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
       <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div></section>
-      <section class="card s5"><h2>Today <span class="sub" id="todaysub"></span></h2><div id="today"></div></section>
+      <section class="card s5"><h2>Today <span class="sub" id="todaysub"></span></h2><div id="batt"></div><div id="today"></div><div id="battset"></div></section>
       <section class="card" id="prio" hidden><h2>Solar priority <span class="sub" id="priosub"></span></h2><div id="priobody"></div></section>
       <section class="card">
         <h2>Power <span class="sub"><span class="seg" id="dayseg"><button data-day="today" aria-pressed="${this._day === "today"}">Today</button><button data-day="yesterday" aria-pressed="${this._day === "yesterday"}">Yesterday</button></span></span></h2>
@@ -310,6 +327,7 @@ class HamletHomePanel extends HTMLElement {
         <p class="muted small">Battery should be + while charging and grid + while buying. Change sensors or flip signs in Settings → Devices &amp; services → Hamlet Home → Configure.</p></details></section>`;
     this._flowBuilt = null;
     this._tariffShown = null;
+    this._battShown = null;
     this._ro = new ResizeObserver(() => { this._renderChart(); this._renderHistory(); });
     this._ro.observe(this.shadowRoot.getElementById("chart"));
     if (this._snap) { this._apply(this._snap); this._renderChart(); this._renderHistory(); this._renderRaw(); }
@@ -368,6 +386,7 @@ class HamletHomePanel extends HTMLElement {
       return this._renderHistory();
     }
     if (ev.target.closest("#savetariff")) return this._saveTariff();
+    if (ev.target.closest("#savebatt")) return this._saveBattery();
     const pr = ev.target.closest("[data-prio]");
     if (pr) return this._prioClick(pr);
     return this._waterClick(ev);
@@ -386,6 +405,7 @@ class HamletHomePanel extends HTMLElement {
     else if (s.note && this._isAdmin) { note.hidden = false; note.textContent = s.note; }
     else note.hidden = true;
     this._renderFlow();
+    this._renderBattery();
     this._renderToday();
     this._renderTariff();
     this._renderPrio();
@@ -486,6 +506,70 @@ class HamletHomePanel extends HTMLElement {
     extras.forEach((e, i) => { setNode(`n-ex${i}`, fmtW(e.w)); dash(`w-ex${i}`, e.w, "var(--c-load)", true); });
     const sub = this.shadowRoot.getElementById("flowsub");
     if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  /* ----------------------------------------------------------- battery */
+  _renderBattery() {
+    const el = this.shadowRoot.getElementById("batt"); if (!el) return;
+    const b = this._snap.battery;
+    if (!b) { this._setHTML(el, ""); return; }
+    const kw = (w) => (w >= 1000 ? `${(w / 1000).toFixed(1)} kW` : `${Math.round(w)} W`);
+    const reserve = `down to ${b.reserve}%`;
+    let k1 = b.grid_off ? "Power is off – battery lasts" : "If the power goes off", v1, s1;
+    if (!b.capacity_kwh) {
+      v1 = "–";
+      s1 = this._isAdmin ? "Set the battery size below" : "Learning the battery size…";
+    } else if (num(b.soc) !== null && b.soc <= b.reserve) {
+      v1 = "At reserve"; s1 = `Battery at ${Math.round(b.soc)}%, reserve is ${b.reserve}%`;
+    } else if (b.backup_h === null || b.backup_h === undefined) {
+      v1 = "Solar covers it"; s1 = `Solar is carrying the house · ${fmtKwh(b.usable_kwh)} in the battery`;
+    } else {
+      v1 = fmtDur(b.backup_h);
+      s1 = `${b.backup_h < 48 ? `until ${clockIn(b.backup_h)} · ` : ""}${kw(b.drain_w)} load · ${reserve}`;
+    }
+    let k2 = "Full in", v2, s2;
+    if (b.state === "full") { k2 = "Battery"; v2 = "Full"; s2 = `${Math.round(b.soc)}%`; }
+    else if (b.state === "charging") {
+      if (b.full_h === null || b.full_h === undefined) { v2 = "–"; s2 = `charging at ${kw(b.charge_w)}`; }
+      else { v2 = fmtDur(b.full_h); s2 = `${b.full_h < 48 ? `around ${clockIn(b.full_h)} · ` : ""}charging at ${kw(b.charge_w)}`; }
+    } else {
+      v2 = "Not charging";
+      s2 = b.state === "discharging" ? `battery giving ${kw(-(this._snap.live?.battery ?? 0))}` : "battery resting";
+    }
+    this._setHTML(el, `<div class="money">
+      <div class="${b.grid_off ? "off" : ""}"><div class="k"><ha-icon icon="${b.grid_off ? "mdi:transmission-tower-off" : "mdi:battery-clock"}"></ha-icon>${k1}</div><div class="v">${v1}</div><div class="s">${s1}</div></div>
+      <div><div class="k"><ha-icon icon="mdi:battery-charging-high"></ha-icon>${k2}</div><div class="v">${v2}</div><div class="s">${s2}</div></div>
+    </div>`);
+    this._renderBattSettings();
+  }
+
+  _renderBattSettings() {
+    const el = this.shadowRoot.getElementById("battset"); if (!el) return;
+    const b = this._snap.battery;
+    if (!b || !this._isAdmin) { el.innerHTML = ""; this._battShown = null; return; }
+    const set = b.capacity_source === "set" ? b.capacity_kwh : "";
+    const key = JSON.stringify([set, b.reserve, b.learned_kwh]);
+    const a = this.shadowRoot.activeElement;
+    if (this._battShown === key || (a && a.closest && a.closest("#battset"))) return;
+    const open = el.querySelector("details")?.open;
+    this._battShown = key;
+    el.innerHTML = `<details style="margin-top:12px" ${open ? "open" : ""}><summary>Battery settings</summary>
+      <div class="field"><label for="b-cap">Battery size<span class="hint">${b.learned_kwh ? `measured ≈ ${b.learned_kwh} kWh – leave empty to use that` : "leave empty to measure it (needs a 15% drop)"}</span></label><span class="ctl"><input id="b-cap" type="number" min="0.5" step="0.1" placeholder="${b.learned_kwh ?? "auto"}" value="${set ?? ""}">kWh</span></div>
+      <div class="field"><label for="b-res">Keep in reserve<span class="hint">times are worked out down to this level</span></label><span class="ctl"><input id="b-res" type="number" min="0" max="90" step="1" value="${b.reserve}">%</span></div>
+      <div class="actions"><span class="msg" id="bmsg"></span><button class="btn primary" id="savebatt">Save</button></div>
+      <p class="muted small" style="margin:8px 0 0">Usable size, e.g. 3 × 5.12 kWh = 15.4 kWh. Times use the last minute's average, so they settle after a big load switches on or off.</p></details>`;
+  }
+
+  async _saveBattery() {
+    const $ = (id) => this.shadowRoot.getElementById(id);
+    const cap = $("b-cap").value.trim();
+    try {
+      const s = await this._hass.callWS({ type: `${DOMAIN}/battery_settings`, settings: { capacity_kwh: cap === "" ? null : Number(cap), reserve: Number($("b-res").value) } });
+      this.shadowRoot.activeElement?.blur?.();
+      this._battShown = null;
+      this._apply(s);
+      const m = $("bmsg"); if (m) { m.textContent = "Saved"; m.className = "msg ok"; }
+    } catch (e) { const m = $("bmsg"); m.textContent = e.message || "Could not save"; m.className = "msg err"; }
   }
 
   /* ------------------------------------------------------------- today */

@@ -34,6 +34,13 @@ For the geyser, add `https://github.com/wesselswynand2-prog/hamlet-geyser` the s
 - **Grid cost** = bought × price − sold × feed-in + fixed daily charge. **Saved by solar** = what the house used × price − grid cost. Changing the price recalculates past days.
 - Sensors (for any dashboard): solar / house / bought / sold / battery charged / battery used today (kWh), grid cost today, solar savings today, self-sufficiency today.
 
+## Battery: backup time and time to full
+The top of the **Today** card shows:
+- **If the power goes off** – how long the battery would carry the house at the current load (house minus what solar covers), down to the reserve level, with the time it would run out. During an outage it uses what the battery is actually giving.
+- **Full in** – how long until the battery is full at the current charge rate. (Charging slows near 100 %, so the last bit can take a little longer.)
+
+Battery size: leave it empty and it's measured from the history (needs one stretch where the battery drops at least 15 %, normally the first night), or type the usable size under **Battery settings** (admin). Sensors: `sensor.<name>_battery_backup_time`, `sensor.<name>_battery_full_in` (hours).
+
 ## Water & pump setup
 Settings → Devices & services → Hamlet Home → Configure → **Water & pump**. Everything is optional:
 pressure (bar / kPa / psi), set point, booster pump switch, power, Hz, amps, speed, pool pump switch and power, tank level.

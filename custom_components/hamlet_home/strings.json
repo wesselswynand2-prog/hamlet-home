@@ -136,6 +136,12 @@
       },
       "irrigation": {
         "name": "Irrigation"
+      },
+      "battery_backup": {
+        "name": "Battery backup time"
+      },
+      "battery_full_in": {
+        "name": "Battery full in"
       }
     }
   }

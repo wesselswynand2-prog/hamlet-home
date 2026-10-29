@@ -27,7 +27,7 @@ PLATFORMS = [Platform.SENSOR]
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     for handler in (ws_state, ws_subscribe, ws_set_tariff, ws_water_action, ws_water_settings, ws_solar_settings,
-                    ws_irrigation_action, ws_irrigation_settings, ws_irrigation_entities):
+                    ws_irrigation_action, ws_irrigation_settings, ws_irrigation_entities, ws_battery_settings):
         websocket_api.async_register_command(hass, handler)
     return True
 
@@ -249,3 +249,19 @@ def ws_irrigation_entities(hass, connection, msg):
     if _controller(hass, connection, msg) is None:
         return
     connection.send_result(msg["id"], hass.data[DOMAIN]["irrigation"].entity_options())
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): f"{DOMAIN}/battery_settings",
+    vol.Required("settings"): dict,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_battery_settings(hass, connection, msg):
+    if c := _controller(hass, connection, msg):
+        try:
+            await c.async_set_battery(msg["settings"])
+        except (ValueError, TypeError) as err:
+            connection.send_error(msg["id"], "invalid", str(err))
+            return
+        connection.send_result(msg["id"], c.snapshot(history=True))

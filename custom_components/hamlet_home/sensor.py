@@ -23,6 +23,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
             entities += [PumpToday(c, w, "pump", "hours", "mdi:pump"), PumpToday(c, w, "pump", "starts", "mdi:counter")]
         if any(w.conf.get(k) for k in (CONF_POOL_SWITCH, CONF_POOL_POWER)):
             entities.append(PumpToday(c, w, "pool", "hours", "mdi:pool"))
+    if c.conf.get("battery_soc") and c.conf.get("battery_power"):
+        entities += [BatteryTime(c, "backup_h", "battery_backup", "mdi:battery-clock"),
+                     BatteryTime(c, "full_h", "battery_full_in", "mdi:battery-charging-high")]
     irr = hass.data[DOMAIN].get("irrigation")
     if irr is not None and irr.zones:
         entities.append(IrrigationStatus(c, irr))
@@ -151,3 +154,32 @@ class IrrigationStatus(_Base):
         run = snap["run"] or {}
         return {"zone": run.get("name"), "remaining_seconds": run.get("remaining"), "next_program": snap["next_program"],
                 "watered_today_minutes": snap["today_minutes"], "note": snap["note"]}
+
+
+class BatteryTime(_Base):
+    """Hours the battery would carry the house now / hours until it's full."""
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = "h"
+    _attr_suggested_display_precision = 1
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, controller, field: str, key: str, icon: str):
+        super().__init__(controller, key)
+        self.field = field
+        self._attr_unique_id = f"{controller.entry.entry_id}_{key}"
+        self._attr_translation_key = key
+        self._attr_icon = icon
+
+    @property
+    def available(self) -> bool:
+        return bool(self.c.capacity_kwh)
+
+    @property
+    def native_value(self):
+        return self.c.outlook().get(self.field)
+
+    @property
+    def extra_state_attributes(self):
+        o = self.c.outlook()
+        return {k: o.get(k) for k in ("state", "drain_w", "charge_w", "usable_kwh", "capacity_kwh", "capacity_source", "reserve", "grid_off")}

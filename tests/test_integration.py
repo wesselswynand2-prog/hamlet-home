@@ -414,3 +414,31 @@ async def test_irrigation(enable_custom_integrations, hass: HomeAssistant, hass_
 
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_battery_backup_and_full_times(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    _states(hass, 0.5, 2000, 0, -1500, 70)
+    await _flow(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    c = hass.data[DOMAIN]["controller"]
+    snap = c.snapshot()
+    assert snap["battery"]["drain_w"] == 1500 and snap["battery"]["backup_h"] is None   # size not known yet
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": f"{DOMAIN}/battery_settings", "settings": {"capacity_kwh": 10, "reserve": 20}})
+    r = await ws.receive_json()
+    assert r["success"], r
+    assert abs(r["result"]["battery"]["backup_h"] - 3.33) < 0.01 and r["result"]["battery"]["capacity_source"] == "set"
+    await ws.send_json({"id": 2, "type": f"{DOMAIN}/battery_settings", "settings": {"capacity_kwh": 5000}})
+    assert not (await ws.receive_json())["success"]
+    c._notify(force=True)
+    await hass.async_block_till_done()
+    st = hass.states.get("sensor.wynand_huis_battery_backup_time")
+    assert st is not None and abs(float(st.state) - 3.33) < 0.01, st
+    # sun comes up: charging 3 kW from 70 % -> 1 h to full
+    _states(hass, 4.0, 1000, 0, 3000, 70)
+    await hass.async_block_till_done()
+    c._smooth.clear()
+    c._read_live()
+    o = c.outlook()
+    assert o["state"] == "charging" and o["full_h"] == 1 and o["backup_h"] is None
+    await hass.config_entries.async_unload(c.entry.entry_id)

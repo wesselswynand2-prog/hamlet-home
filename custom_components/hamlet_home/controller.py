@@ -74,6 +74,10 @@ class EnergyController:
         self.tariff: dict = dict(energy.DEFAULT_TARIFF)
         self.acc = energy.Accumulator(max_gap=600)
         self.live: dict[str, Any] = {}
+        self.battery: dict = dict(energy.DEFAULT_BATTERY)
+        self.learned_capacity: float | None = None
+        self._smooth: dict[str, float] = {}
+        self._smooth_t: float | None = None
         self.extras: list[dict] = []
         self.ready = False  # history backfill finished
         self.backfill_note: str | None = None
@@ -110,6 +114,8 @@ class EnergyController:
     async def async_start(self) -> None:
         data = await self.store.async_load() or {}
         self.tariff = {**energy.DEFAULT_TARIFF, **data.get("tariff", {})}
+        self.battery = {**energy.DEFAULT_BATTERY, **data.get("battery", {})}
+        self.learned_capacity = data.get("learned_capacity")
         self.acc.days = data.get("days", {})
         self.acc.load_buckets(data.get("buckets", {}))
         self._read_live()
@@ -131,7 +137,7 @@ class EnergyController:
         cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
         self.acc.days = {d: v for d, v in self.acc.days.items() if d >= cutoff}
         self.acc.buckets = {d: v for d, v in self.acc.buckets.items() if d in keep}
-        return {"tariff": self.tariff, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
+        return {"tariff": self.tariff, "battery": self.battery, "learned_capacity": self.learned_capacity, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
 
     def _save(self, delay: float = 30) -> None:
         self.store.async_delay_save(self._store_data, delay)
@@ -145,6 +151,7 @@ class EnergyController:
         now = dt_util.now()
         self.acc.set(now, energy.combine(self._raw_now(), self.mapping))
         self.ready = True
+        self._learn_capacity()
         ids = self.mapping.all_entities() + _list(self.conf.get(CONF_EXTRA_LOADS)) + _list(self.conf.get(CONF_GRID_STATUS))
         self._unsubs.append(async_track_state_change_event(self.hass, ids, self._on_change))
         self._unsubs.append(async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=TICK_SECONDS)))
@@ -260,7 +267,40 @@ class EnergyController:
             extras.append({"entity_id": entity_id, "name": name, "w": to_number(st, "power")})
         self.extras = extras
         self.live = {**values, "grid_available": self._grid_available()}
+        self._update_smooth(values)
         return values
+
+    def _update_smooth(self, values: dict) -> None:
+        """~1 minute average of load / solar / battery so the battery times don't jump around."""
+        now = time.monotonic()
+        k = 1.0 if self._smooth_t is None else min(max(now - self._smooth_t, 0) / 60, 1.0)
+        self._smooth_t = now
+        for key in ("load", "solar", "battery"):
+            v = values.get(key)
+            if v is None:
+                self._smooth.pop(key, None)
+            elif key not in self._smooth:
+                self._smooth[key] = v
+            else:
+                self._smooth[key] += (v - self._smooth[key]) * k
+
+    def _learn_capacity(self) -> None:
+        today = dt_util.now().date()
+        days = [self.acc.rows((today - timedelta(days=n)).isoformat()) for n in (1, 0)]
+        cap = energy.estimate_capacity(days)
+        if cap is not None:
+            self.learned_capacity = cap
+
+    @property
+    def capacity_kwh(self) -> float | None:
+        return self.battery.get("capacity_kwh") or self.learned_capacity
+
+    def outlook(self) -> dict:
+        live = {**self.live, **{k: round(v, 1) for k, v in self._smooth.items()}}
+        out = energy.battery_outlook(live, self.capacity_kwh, float(self.battery.get("reserve", 20)))
+        out["capacity_source"] = "set" if self.battery.get("capacity_kwh") else ("learned" if self.learned_capacity else None)
+        out["learned_kwh"] = self.learned_capacity
+        return out
 
     async def _on_change(self, event: Event) -> None:
         values = self._read_live()
@@ -272,6 +312,9 @@ class EnergyController:
         values = self._read_live()
         if self.ready:
             self.acc.set(dt_util.now(), values)
+            self._tick_count = getattr(self, "_tick_count", 0) + 1
+            if self._tick_count % 10 == 1:   # every ~5 minutes
+                self._learn_capacity()
             self._save()
         self._notify(force=True)
 
@@ -316,6 +359,26 @@ class EnergyController:
         self._save(1)
         self._notify(force=True)
 
+    async def async_set_battery(self, new: dict) -> None:
+        clean = {}
+        if "capacity_kwh" in new:
+            cap = new["capacity_kwh"]
+            if cap in (None, "", 0):
+                clean["capacity_kwh"] = None
+            else:
+                cap = float(cap)
+                if not 0.5 <= cap <= 1000:
+                    raise ValueError("Battery size must be between 0.5 and 1000 kWh")
+                clean["capacity_kwh"] = round(cap, 2)
+        if "reserve" in new:
+            r = float(new["reserve"])
+            if not 0 <= r <= 90:
+                raise ValueError("Reserve must be between 0 and 90 %")
+            clean["reserve"] = round(r)
+        self.battery.update(clean)
+        self._save(1)
+        self._notify(force=True)
+
     # ------------------------------------------------------------- snapshot
     def today(self) -> dict:
         if self.ready:
@@ -335,6 +398,7 @@ class EnergyController:
             "extras": self.extras,
             "today": self.today(),
             "tariff": self.tariff,
+            "battery": self.outlook() if (c.get(CONF_BATTERY_SOC) and c.get(CONF_BATTERY_POWER)) else None,
             "features": {
                 "battery": bool(c.get(CONF_BATTERY_POWER) or c.get(CONF_BATTERY_SOC)),
                 "soc": bool(c.get(CONF_BATTERY_SOC)),

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Any
 
 SERIES = ("solar", "load", "grid", "battery", "soc")
 BUCKET_MIN = 5
@@ -248,3 +249,91 @@ def money(day: dict[str, float], tariff: dict) -> dict[str, float]:
         "saved": round(max(without_system - cost, 0.0), 2),
         "self_sufficiency": round(max(min((load - imp) / load, 1.0), 0.0) * 100) if load > 0.05 else None,
     }
+
+
+# ------------------------------------------------------------------ battery
+DEFAULT_BATTERY = {"capacity_kwh": None, "reserve": 20}
+
+
+def estimate_capacity(days_rows: list[list[list]]) -> float | None:
+    """Battery size in kWh learnt from 5-minute rows ([slot, solar, load, grid, battery, soc]).
+
+    Looks for stretches where the battery steadily discharges (or charges) and
+    compares the energy moved with the drop (or rise) in state of charge.
+    days_rows: rows of consecutive days, oldest first.
+    """
+    flat = []
+    for n, rows in enumerate(days_rows):
+        for r in rows:
+            if len(r) > 5 and r[4] is not None and r[5] is not None:
+                flat.append((n * 1440 + r[0], r[4], r[5]))
+
+    def collect(sign: int) -> tuple[float, float]:
+        energy = drop = 0.0
+        seg: list[tuple[int, float, float]] = []
+
+        def close() -> None:
+            nonlocal energy, drop
+            if len(seg) >= 4:
+                d = (seg[0][2] - seg[-1][2]) * -sign   # % moved in the right direction
+                if d >= 10:
+                    kwh = sum(abs(w) for _, w, _ in seg) * (5 / 60) / 1000 * (len(seg) - 1) / len(seg)
+                    energy += kwh
+                    drop += d
+            seg.clear()
+
+        for item in flat:
+            t, w, _ = item
+            ok = (w * sign) > 100
+            if ok and seg and t - seg[-1][0] != 5:
+                close()
+            if ok:
+                seg.append(item)
+            else:
+                close()
+        close()
+        return energy, drop
+
+    e, d = collect(-1)                 # discharging is the most accurate
+    if d < 15:
+        ec, dc = collect(1)            # fall back to charging (includes charge losses)
+        e, d = e + ec * 0.95, d + dc
+    if d < 15 or e <= 0:
+        return None
+    cap = e / d * 100
+    return round(cap, 1) if 0.5 <= cap <= 1000 else None
+
+
+def battery_outlook(live: dict, capacity_kwh: float | None, reserve: float, full: float = 100) -> dict:
+    """How long the battery would carry the house, and how long until it's full."""
+    soc, batt = live.get("soc"), live.get("battery")
+    load, solar = live.get("load"), live.get("solar")
+    grid_off = live.get("grid_available") is False
+    out: dict[str, Any] = {"soc": soc, "capacity_kwh": capacity_kwh, "reserve": reserve, "grid_off": grid_off,
+                           "drain_w": None, "backup_h": None, "charge_w": None, "full_h": None, "state": "unknown"}
+    if grid_off and batt is not None:
+        drain = max(-batt, 0.0)
+    elif load is not None:
+        drain = max(load - (solar or 0), 0.0)
+    else:
+        drain = None
+    out["drain_w"] = None if drain is None else round(drain)
+    if batt is not None:
+        out["charge_w"] = round(max(batt, 0.0))
+        if soc is not None and soc >= full - 0.5:
+            out["state"] = "full"
+        elif batt > 50:
+            out["state"] = "charging"
+        elif batt < -50:
+            out["state"] = "discharging"
+        else:
+            out["state"] = "idle"
+    if soc is None or not capacity_kwh:
+        return out
+    usable = max(soc - reserve, 0.0) / 100 * capacity_kwh
+    out["usable_kwh"] = round(usable, 2)
+    if drain is not None and drain > 30:
+        out["backup_h"] = round(usable * 1000 / drain, 2)
+    if out["state"] == "charging":
+        out["full_h"] = round((full - soc) / 100 * capacity_kwh * 1000 / batt, 2)
+    return out

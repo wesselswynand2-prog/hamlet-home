@@ -102,3 +102,32 @@ def test_split_pv_and_inverter():
     acc.set(T0, v)
     acc.advance(T0 + timedelta(hours=1))
     assert acc.days["2026-10-29"]["solar_ac"] == 3 and acc.days["2026-10-29"]["solar_dc"] == 0
+
+
+def test_estimate_capacity_from_night_discharge():
+    # 10 kWh battery: 1 kW for 4 h at night drops 40 %
+    rows = []
+    for i in range(48):                          # 20:00 .. 24:00, 5-min rows
+        soc = 90 - (i + 0.5) * 40 / 48
+        rows.append([20 * 60 + i * 5, 0, 1000, 0, -1000, round(soc, 1)])
+    cap = energy.estimate_capacity([rows, []])
+    assert 9.5 <= cap <= 10.5
+    assert energy.estimate_capacity([[r[:5] + [None] for r in rows]]) is None   # no SoC -> nothing
+    assert energy.estimate_capacity([rows[:6]]) is None                        # too small a drop
+
+
+def test_battery_outlook():
+    live = {"soc": 70, "battery": -1500, "load": 2000, "solar": 500, "grid": 0, "grid_available": True}
+    o = energy.battery_outlook(live, 10, 20)
+    assert o["drain_w"] == 1500 and o["usable_kwh"] == 5 and abs(o["backup_h"] - 3.33) < 0.01
+    assert o["state"] == "discharging" and o["full_h"] is None
+    # charging from solar: 30 % of 10 kWh at 3 kW -> 1 h; solar covers the house -> no backup time
+    o = energy.battery_outlook({"soc": 70, "battery": 3000, "load": 1000, "solar": 4000}, 10, 20)
+    assert o["state"] == "charging" and o["full_h"] == 1 and o["backup_h"] is None
+    # grid off: uses what the battery actually gives
+    o = energy.battery_outlook({"soc": 60, "battery": -800, "load": 900, "solar": 0, "grid_available": False}, 10, 20)
+    assert o["grid_off"] and o["drain_w"] == 800 and o["backup_h"] == 5
+    # no size known yet
+    o = energy.battery_outlook({"soc": 60, "battery": -800, "load": 900}, None, 20)
+    assert o["backup_h"] is None and o["drain_w"] == 900
+    assert energy.battery_outlook({"soc": 99.8, "battery": 100}, 10, 20)["state"] == "full"
