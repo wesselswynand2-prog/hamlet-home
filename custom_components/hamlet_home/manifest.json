@@ -1,0 +1,25 @@
+{
+  "domain": "hamlet_home",
+  "name": "Hamlet Home",
+  "after_dependencies": [
+    "hamlet_geyser",
+    "recorder"
+  ],
+  "codeowners": [
+    "@wesselswynand2-prog"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "frontend",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/wesselswynand2-prog/hamlet-home",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/wesselswynand2-prog/hamlet-home/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.4.0"
+}

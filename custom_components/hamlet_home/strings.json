@@ -1,0 +1,142 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy",
+        "description": "Map the inverter's sensors. {prefill}\n\nVictron: put the MPPTs under MPPT PV (DC) and a grid-tie PV inverter under AC – the power flow then shows them where they connect. Otherwise use Solar production for all PV, load = AC consumption L1/L2/L3, grid = grid L1/L2/L3. Sunsynk/Deye: PV, load, grid and battery from Solar Assistant or Solarman. Leave house load empty to calculate it.",
+        "data": {
+          "name": "Name",
+          "preset": "Inverter type",
+          "solar_power": "Solar production (W) – all PV, if not split below",
+          "solar_ac_power": "Grid-tie PV inverter (AC) – e.g. Fronius / PV on AC output",
+          "solar_dc_power": "MPPT PV (DC) – pick each MPPT",
+          "load_power": "House load (W) – pick all phases",
+          "grid_power": "Grid power (W)",
+          "grid_status": "Grid available (binary sensor, grid voltage or grid-lost alarm)",
+          "battery_power": "Battery power (W)",
+          "battery_soc": "Battery state of charge (%)"
+        }
+      },
+      "extras": {
+        "title": "Extra loads and signs",
+        "description": "Optional: big loads to show around the house in the power flow (aircon, pool pump, freezer…). The app needs battery power positive while CHARGING and grid positive while IMPORTING.",
+        "data": {
+          "extra_loads": "Extra loads to show in the power flow (power sensors, up to 4)",
+          "battery_invert": "Battery sensor is positive when discharging (invert)",
+          "grid_invert": "Grid sensor is positive when exporting (invert)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Hamlet Home is already set up. Use Configure to change it."
+    },
+    "error": {
+      "solar_required": "Pick at least one solar sensor (total, AC or DC)."
+    }
+  },
+  "options": {
+    "step": {
+      "extras": {
+        "title": "Extra loads and signs",
+        "data": {
+          "extra_loads": "Extra loads to show in the power flow (power sensors, up to 4)",
+          "battery_invert": "Battery sensor is positive when discharging (invert)",
+          "grid_invert": "Grid sensor is positive when exporting (invert)"
+        }
+      },
+      "energy": {
+        "title": "Energy",
+        "data": {
+          "name": "Name",
+          "preset": "Inverter type",
+          "solar_power": "Solar production (W) – all PV, if not split below",
+          "solar_ac_power": "Grid-tie PV inverter (AC) – e.g. Fronius / PV on AC output",
+          "solar_dc_power": "MPPT PV (DC) – pick each MPPT",
+          "load_power": "House load (W) – pick all phases",
+          "grid_power": "Grid power (W)",
+          "grid_status": "Grid available (binary sensor, grid voltage or grid-lost alarm)",
+          "battery_power": "Battery power (W)",
+          "battery_soc": "Battery state of charge (%)"
+        }
+      },
+      "init": {
+        "title": "Hamlet Home",
+        "menu_options": {
+          "energy": "Energy (solar, battery, grid)",
+          "water": "Water & pump"
+        }
+      },
+      "water": {
+        "title": "Water & pump",
+        "description": "Everything is optional – pick what this house has. With a pump switch, the app can stop the booster pump if it runs dry, and run the pool pump on a timer.",
+        "data": {
+          "water_pressure": "Water pressure (bar, kPa or psi)",
+          "water_setpoint": "Pressure set point (optional)",
+          "pump_switch": "Booster pump switch (e.g. Druk Pomp)",
+          "pump_power": "Booster pump power (W)",
+          "pump_hz": "Pump frequency (Hz) – VSD pumps",
+          "pump_amps": "Pump current (A)",
+          "pump_speed": "Pump speed (% or rpm)",
+          "pool_switch": "Pool pump switch",
+          "pool_power": "Pool pump power (W)",
+          "tank_level": "Water tank level (%)"
+        }
+      }
+    },
+    "error": {
+      "solar_required": "Pick at least one solar sensor (total, AC or DC)."
+    }
+  },
+  "selector": {
+    "preset": {
+      "options": {
+        "victron": "Victron (GX / Modbus)",
+        "sunsynk": "Sunsynk / Deye",
+        "other": "Other"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "solar_today": {
+        "name": "Solar today"
+      },
+      "load_today": {
+        "name": "House used today"
+      },
+      "import_today": {
+        "name": "Bought from grid today"
+      },
+      "export_today": {
+        "name": "Sold to grid today"
+      },
+      "charge_today": {
+        "name": "Battery charged today"
+      },
+      "discharge_today": {
+        "name": "Battery discharged today"
+      },
+      "cost_today": {
+        "name": "Grid cost today"
+      },
+      "saved_today": {
+        "name": "Solar savings today"
+      },
+      "self_sufficiency_today": {
+        "name": "Self-sufficiency today"
+      },
+      "pump_hours_today": {
+        "name": "Booster pump run time today"
+      },
+      "pump_starts_today": {
+        "name": "Booster pump starts today"
+      },
+      "pool_hours_today": {
+        "name": "Pool pump run time today"
+      },
+      "irrigation": {
+        "name": "Irrigation"
+      }
+    }
+  }
+}

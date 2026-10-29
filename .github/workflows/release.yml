@@ -1,0 +1,29 @@
+name: Release
+
+# Push a tag like v1.4.0 (must match "version" in manifest.json).
+# HACS then offers the update on every Home Assistant that installed it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag matches manifest version
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('custom_components/hamlet_home/manifest.json'))['version'])")
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} but manifest says $v"; exit 1; }
+      - name: Build zip (for the upload + terminal-command install)
+        run: |
+          mkdir -p out/hamlet-home && cp -r custom_components README.md out/hamlet-home/
+          [ -f hamlet-update.sh ] && cp hamlet-update.sh out/hamlet-home/ || true
+          cd out && zip -qr ../hamlet-home.zip hamlet-home
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: hamlet-home.zip
+          generate_release_notes: true
