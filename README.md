@@ -1,6 +1,6 @@
 # Hamlet Home
 
-One app for the home: **Energy** (power flow, today in kWh and rand, power chart, 7/30-day history), **Water** (booster pump, pressure, dry-run protection, pool pump timer, irrigation) and **Geyser** (Hamlet Geyser). Controls follow.
+One app for the home: **Energy** (power flow, today in kWh and rand, power chart, 7/30-day history), **Water** (booster pump, pressure, dry-run protection, pool pump timer, irrigation) **Geyser** (Hamlet Geyser) and **Controls** (lights, gates, aircons, plugs by room).
 
 ## Install with HACS (recommended)
 1. HACS → ⋮ → **Custom repositories** → paste `https://github.com/wesselswynand2-prog/hamlet-home`, type **Integration** → Add.
@@ -40,6 +40,15 @@ The top of the **Today** card shows:
 - **Full in** – how long until the battery is full at the current charge rate. (Charging slows near 100 %, so the last bit can take a little longer.)
 
 Battery size: leave it empty and it's measured from the history (needs one stretch where the battery drops at least 15 %, normally the first night), or type the usable size under **Battery settings** (admin). Sensors: `sensor.<name>_battery_backup_time`, `sensor.<name>_battery_full_in` (hours).
+
+## Controls
+The **Controls** tab fills itself from Home Assistant: every light, switch, plug, aircon, fan, blind, lock, scene and script, grouped by the **area** it's in (Settings → Areas – give devices an area and they land in that room). Things the other tabs already run (booster pump, pool pump, irrigation valves, geysers) are left out so nobody fights the automation.
+
+- **Gates & doors** get big buttons. A relay (Shelly on the gate motor) gets *Open / close*: relay on, then off after the pulse length (1 s). A cover (garage door) gets *Open / Stop / Close*. They ask "Tap again to confirm" first so a pocket tap doesn't open the gate. Switches with gate / hek / garage in the name are picked up as gates automatically.
+- **Aircons**: on/off, − / + temperature and the modes the unit supports. **Lights**: tap to switch, slider for dimmable lights. **Plugs** show their watts when the Shelly has a power sensor.
+- **Quick actions** (scenes / scripts) and *All lights off* sit at the top; each room has *Lights off*.
+- During load-shedding, devices that lost power show **No power** instead of *Offline*.
+- **Edit page** (admin): tick what clients see, give shorter names, change the tile type (e.g. make a switch a gate), ★ favourites (shown at the top), room order and names, Confirm on / off, gate pulse length. Search helps when the inverter brings dozens of switches.
 
 ## Water & pump setup
 Settings → Devices & services → Hamlet Home → Configure → **Water & pump**. Everything is optional:

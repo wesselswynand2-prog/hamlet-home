@@ -1,5 +1,6 @@
-/* Hamlet Home – sidebar app. Tabs: Energy, Geyser (when Hamlet Geyser is installed). No build step. */
+/* Hamlet Home – sidebar app. Tabs: Energy, Water, Geyser, Controls. No build step. */
 const DOMAIN = "hamlet_home";
+const VERSION = new URL(import.meta.url).searchParams.get("v") || String(Date.now());
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v) => (v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
 const fmtW = (w, signed = false) => {
@@ -229,7 +230,7 @@ class HamletHomePanel extends HTMLElement {
     this._hass = hass;
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -296,6 +297,7 @@ class HamletHomePanel extends HTMLElement {
     const tabs = [["energy", "mdi:lightning-bolt", "Energy"]];
     if (this._water || this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:water-pump", "Water"]);
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
+    tabs.push(["controls", "mdi:light-switch", "Controls"]);
     if (!tabs.some((t) => t[0] === this._tab)) this._tab = "energy";
     this.shadowRoot.getElementById("tabs").innerHTML = tabs.length < 2 ? "" : tabs.map(([id, icon, label]) =>
       `<button role="tab" data-tab="${id}" aria-selected="${this._tab === id}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("");
@@ -307,6 +309,7 @@ class HamletHomePanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === this._tab));
     if (this._tab === "geyser") return this._buildGeyser();
     if (this._tab === "water") return this._buildWater();
+    if (this._tab === "controls") return this._buildControls();
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
       <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div></section>
@@ -331,6 +334,21 @@ class HamletHomePanel extends HTMLElement {
     this._ro = new ResizeObserver(() => { this._renderChart(); this._renderHistory(); });
     this._ro.observe(this.shadowRoot.getElementById("chart"));
     if (this._snap) { this._apply(this._snap); this._renderChart(); this._renderHistory(); this._renderRaw(); }
+  }
+
+  async _buildControls() {
+    this._main.innerHTML = `<div class="loading">Loading controls…</div>`;
+    if (!customElements.get("hamlet-home-controls")) {
+      try { await import(`/hamlet_home_static/hamlet-home-controls.js?v=${VERSION}`); }
+      catch (e) { this._main.innerHTML = `<div class="card loading">Controls couldn't load – restart Home Assistant after updating, then refresh.</div>`; return; }
+    }
+    if (this._tab !== "controls") return;
+    const el = document.createElement("hamlet-home-controls");
+    el.isAdmin = this._isAdmin;
+    el.gridAvailable = this._snap?.live?.grid_available;
+    el.hass = this._hass;
+    this._main.innerHTML = "";
+    this._main.appendChild(el);
   }
 
   async _buildGeyser() {
@@ -399,6 +417,11 @@ class HamletHomePanel extends HTMLElement {
     if (s.solar_loads !== undefined) this._solar = s.solar_loads;
     if (s.irrigation !== undefined) this._irr = s.irrigation;
     if (this._tab === "water") return this._renderWater();
+    if (this._tab === "controls") {
+      const c = this.shadowRoot.querySelector("hamlet-home-controls");
+      if (c) c.gridAvailable = s.live?.grid_available;
+      return;
+    }
     if (this._tab !== "energy" || !this.shadowRoot.getElementById("flow")) return;
     const note = this.shadowRoot.getElementById("note");
     if (!s.ready) { note.hidden = false; note.textContent = "Reading today's history from Home Assistant… this takes a few seconds after a restart."; }
