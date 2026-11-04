@@ -46,6 +46,9 @@ The top of the **Today** card shows:
 
 Battery size: leave it empty and it's measured from the history (needs one stretch where the battery drops at least 15 %, normally the first night), or type the usable size under **Battery settings** (admin). Sensors: `sensor.<name>_battery_backup_time`, `sensor.<name>_battery_full_in` (hours).
 
+## Name in the sidebar
+Configure → **Name & icon in the sidebar**: show the client's name (e.g. "Smith Huis") or your company's instead of *Hamlet Home*, with any icon.
+
 ## Help
 The **?** button at the top right opens the user guide in the app (`frontend/guide.md` – edit that file to change it), with contents and the installer's phone / email / WhatsApp. Admins enter those under *Contact your installer → Edit contact details*.
 

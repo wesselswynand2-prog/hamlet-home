@@ -57,7 +57,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await solar.async_start()
     await ctrl.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await _async_register_panel(hass)
+    await _async_register_panel(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
 
@@ -82,7 +82,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return ok
 
 
-async def _async_register_panel(hass: HomeAssistant) -> None:
+async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    from .const import CONF_APP_ICON, CONF_APP_TITLE, DEFAULT_APP_ICON, DEFAULT_APP_TITLE  # noqa: PLC0415
+    conf = {**entry.data, **entry.options}
+    title = (conf.get(CONF_APP_TITLE) or "").strip() or DEFAULT_APP_TITLE
+    icon = (conf.get(CONF_APP_ICON) or "").strip() or DEFAULT_APP_ICON
     data = hass.data[DOMAIN]
     if not data.get("_static"):
         await hass.http.async_register_static_paths(
@@ -95,10 +99,11 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         frontend_url_path=PANEL_URL_PATH,
         webcomponent_name=PANEL_COMPONENT,
         module_url=f"{STATIC_URL}/hamlet-home-panel.js?v={VERSION}",
-        sidebar_title="Hamlet Home",
-        sidebar_icon="mdi:home-lightning-bolt",
+        sidebar_title=title,
+        sidebar_icon=icon,
         require_admin=False,
         embed_iframe=False,
+        config={"title": title},
     )
     data["_panel"] = True
 

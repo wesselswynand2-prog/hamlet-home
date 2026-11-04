@@ -239,7 +239,7 @@ async def test_pool_respects_manual_switching(enable_custom_integrations, hass: 
 async def test_options_menu_water_keeps_energy(enable_custom_integrations, hass: HomeAssistant):
     entry, *_ = await _water_entry(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["type"] == "menu" and set(result["menu_options"]) == {"energy", "water", "weather", "costs"}
+    assert result["type"] == "menu" and set(result["menu_options"]) == {"energy", "water", "weather", "costs", "app"}
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "water"})
     assert result["step_id"] == "water"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"water_pressure": "sensor.water_druk"})

@@ -251,7 +251,11 @@ class HamletHomePanel extends HTMLElement {
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
-  set panel(v) { this._panel = v; }
+  set panel(v) {
+    this._panel = v;
+    const t = this.shadowRoot?.getElementById("apptitle");
+    if (t) t.textContent = v?.config?.title || "Hamlet Home";
+  }
   set route(v) { this._route = v; }
 
   connectedCallback() {
@@ -268,7 +272,7 @@ class HamletHomePanel extends HTMLElement {
   async _init() {
     const root = this.shadowRoot;
     root.innerHTML = `<style>${STYLE}</style>
-      <div class="toolbar"><span id="menu"></span><div class="title">Hamlet Home</div><div class="tabs" role="tablist" id="tabs"></div>
+      <div class="toolbar"><span id="menu"></span><div class="title" id="apptitle">${esc(this._panel?.config?.title || "Hamlet Home")}</div><div class="tabs" role="tablist" id="tabs"></div>
         <button class="helpbtn" id="helpbtn" aria-label="Help" title="Help"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button></div>
       <main id="main"><div class="loading">Loading…</div></main>`;
     const mb = document.createElement("ha-menu-button");

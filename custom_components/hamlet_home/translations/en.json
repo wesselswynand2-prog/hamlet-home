@@ -69,7 +69,8 @@
           "energy": "Energy (solar, battery, grid)",
           "water": "Water & pump",
           "weather": "Weather & solar forecast",
-          "costs": "Costs & load breakdown"
+          "costs": "Costs & load breakdown",
+          "app": "Name & icon in the sidebar"
         }
       },
       "water": {
@@ -104,6 +105,14 @@
         "description": "Power sensors (W) of the loads to show on the Costs tab, e.g. Swembad, heat pumps, Geyser 1, Geyser 2 – up to 10. The first 5 get their own colour; more are grouped as \"Other loads\" in the bar but still listed. The rest of the house is worked out. Empty = the extra loads, pool pump and geysers.",
         "data": {
           "cost_loads": "Loads (power sensors, W)"
+        }
+      },
+      "app": {
+        "title": "Name & icon in the sidebar",
+        "description": "What the app is called in the sidebar and at the top of the page – e.g. the client's name (\"Smith Huis\") or your company's. Default: Hamlet Home.",
+        "data": {
+          "app_title": "Name",
+          "app_icon": "Icon"
         }
       }
     },

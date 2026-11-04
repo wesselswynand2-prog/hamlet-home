@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.10.3"
+VERSION = "0.10.4"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"
@@ -61,3 +61,9 @@ MAX_COST_LOADS = 10
 # Info tiles under the power flow (sensor / number / input_number), e.g. Forecast SOC, Current DOD
 CONF_FLOW_INFO = "flow_info"
 CONF_FLOW_INFO_EDIT = "flow_info_clients_edit"
+
+# Name and icon in the sidebar / top of the page (e.g. the client's name)
+CONF_APP_TITLE = "app_title"
+CONF_APP_ICON = "app_icon"
+DEFAULT_APP_TITLE = "Hamlet Home"
+DEFAULT_APP_ICON = "mdi:home-lightning-bolt"

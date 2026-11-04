@@ -31,3 +31,31 @@ async def test_help_guide_and_contact(enable_custom_integrations, hass: HomeAssi
     await ws.send_json({"id": 3, "type": f"{DOMAIN}/state"})
     assert (await ws.receive_json())["result"]["help_contact"]["email"] == "info@example.co.za"
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_sidebar_name_and_icon(enable_custom_integrations, hass: HomeAssistant):
+    for mod in ("http", "frontend"):
+        assert await async_setup_component(hass, mod, {})
+    hass.states.async_set("sensor.pv", "1", {"unit_of_measurement": "kW"})
+    entry = MockConfigEntry(domain=DOMAIN, title="Huis", data={"name": "Huis", "preset": "victron", "solar_power": ["sensor.pv"]})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    panel = hass.data["frontend_panels"]["hamlet-home"]
+    assert panel.sidebar_title == "Hamlet Home" and panel.config["title"] == "Hamlet Home"
+
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "app" in flow["menu_options"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "app"})
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"app_title": "  Smith Huis ", "app_icon": "mdi:home-heart"})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    panel = hass.data["frontend_panels"]["hamlet-home"]
+    assert panel.sidebar_title == "Smith Huis" and panel.sidebar_icon == "mdi:home-heart"
+    assert panel.config["title"] == "Smith Huis"
+    # empty name falls back to Hamlet Home
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "app"})
+    await hass.config_entries.options.async_configure(flow["flow_id"], {"app_title": ""})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.data["frontend_panels"]["hamlet-home"].sidebar_title == "Hamlet Home"
+    await hass.config_entries.async_unload(entry.entry_id)

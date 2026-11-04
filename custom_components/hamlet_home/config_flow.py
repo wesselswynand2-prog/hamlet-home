@@ -150,7 +150,7 @@ class HamletHomeOptionsFlow(OptionsFlow):
         return {**self.config_entry.data, **self.config_entry.options}
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(step_id="init", menu_options=["energy", "water", "weather", "costs"])
+        return self.async_show_menu(step_id="init", menu_options=["energy", "water", "weather", "costs", "app"])
 
     async def async_step_energy(self, user_input: dict | None = None) -> ConfigFlowResult:
         if user_input is not None and _solar_errors(user_input):
@@ -190,6 +190,21 @@ class HamletHomeOptionsFlow(OptionsFlow):
         suggested = {CONF_COST_LOADS: self._current.get(CONF_COST_LOADS) or (current.cost_loads if current else [])}
         return self.async_show_form(step_id="costs", data_schema=self.add_suggested_values_to_schema(
             vol.Schema({vol.Optional(CONF_COST_LOADS): _sensor(multiple=True)}), suggested))
+
+    async def async_step_app(self, user_input: dict | None = None) -> ConfigFlowResult:
+        """Name and icon in the sidebar and at the top of the page (e.g. the client's name)."""
+        from .const import CONF_APP_ICON, CONF_APP_TITLE, DEFAULT_APP_ICON, DEFAULT_APP_TITLE  # noqa: PLC0415
+        schema = vol.Schema({
+            vol.Optional(CONF_APP_TITLE): selector.TextSelector(),
+            vol.Optional(CONF_APP_ICON): selector.IconSelector(),
+        })
+        if user_input is not None:
+            self._data[CONF_APP_TITLE] = (user_input.get(CONF_APP_TITLE) or "").strip()[:40] or DEFAULT_APP_TITLE
+            self._data[CONF_APP_ICON] = user_input.get(CONF_APP_ICON) or DEFAULT_APP_ICON
+            return self._save()
+        current = {CONF_APP_TITLE: self._current.get(CONF_APP_TITLE) or DEFAULT_APP_TITLE,
+                   CONF_APP_ICON: self._current.get(CONF_APP_ICON) or DEFAULT_APP_ICON}
+        return self.async_show_form(step_id="app", data_schema=self.add_suggested_values_to_schema(schema, current))
 
     def _save(self) -> ConfigFlowResult:
         return self.async_create_entry(title="", data={**self.config_entry.options, **self._data})
