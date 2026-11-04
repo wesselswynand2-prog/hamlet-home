@@ -30,17 +30,15 @@ def target_dir(hass: HomeAssistant, domain: str) -> Path:
     return config_dir(hass) / "custom_components" / domain
 
 
-def hacs_shows(hass: HomeAssistant, repo: str, latest: str) -> bool:
-    """True only when HACS has this repo downloaded AND already knows about `latest`
-    (then HACS shows that update and we stay quiet). If HACS is behind, we show it."""
-    try:
-        r = hass.data["hacs"].repositories.get_by_full_name(repo)
-        if not (r and r.data.installed):
-            return False
-        known = str(getattr(r.data, "last_version", None) or getattr(r, "display_available_version", "") or "").lstrip("v")
-        return known == latest.lstrip("v")
-    except Exception:  # noqa: BLE001 - HACS missing or a different version
-        return False
+def hacs_shows(hass: HomeAssistant, repo: str, own_entity_id: str | None) -> bool:
+    """True only when another update entity (HACS) is showing an update for this repo right now.
+    We look at what is actually on screen, so a stale or half-set-up HACS never hides our update."""
+    for st in hass.states.async_all("update"):
+        if st.entity_id == own_entity_id or st.state != "on":
+            continue
+        if repo.lower() in str(st.attributes.get("release_url", "")).lower():
+            return True
+    return False
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -109,7 +107,7 @@ class HamletUpdate(UpdateEntity):
             return
         self._error = None
         latest = str(rel.get("tag_name", "")).lstrip("v") or self.installed_version
-        self._managed = hacs_shows(self.hass, self.repo, latest)
+        self._managed = hacs_shows(self.hass, self.repo, self.entity_id)
         self._asset = updater.pick_asset(rel, self.domain)
         self._notes = rel.get("body") or ""
         self._attr_release_url = rel.get("html_url") or self._attr_release_url
@@ -117,6 +115,10 @@ class HamletUpdate(UpdateEntity):
         # when HACS already shows this version, don't show a second one
         self._attr_latest_version = self.installed_version if (self._managed or not self._asset) else latest
         self.async_write_ha_state()
+
+    async def async_update(self) -> None:
+        """'Check for updates' on Settings → Updates (and homeassistant.update_entity)."""
+        await self.async_check()
 
     async def async_release_notes(self) -> str | None:
         return self._notes
