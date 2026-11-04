@@ -101,7 +101,7 @@
       },
       "costs": {
         "title": "Costs & load breakdown",
-        "description": "Power sensors (W) of up to 5 loads to show on the Costs tab, e.g. Swembad, Heatpump, Geyser 1, Geyser 2. The rest of the house is worked out. Empty = the extra loads, pool pump and geyser meters.",
+        "description": "Power sensors (W) of the loads to show on the Costs tab, e.g. Swembad, heat pumps, Geyser 1, Geyser 2 – up to 10. The first 5 get their own colour; more are grouped as \"Other loads\" in the bar but still listed. The rest of the house is worked out. Empty = the extra loads, pool pump and geysers.",
         "data": {
           "cost_loads": "Loads (power sensors, W)"
         }
@@ -109,7 +109,7 @@
     },
     "error": {
       "solar_required": "Pick at least one solar sensor (total, AC or DC).",
-      "too_many_loads": "Pick at most 5 loads."
+      "too_many_loads": "Pick at most 10 loads."
     }
   },
   "selector": {

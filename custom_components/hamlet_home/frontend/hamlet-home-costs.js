@@ -11,8 +11,8 @@ const niceDate = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"
 const LOAD_COLORS = ["var(--c-l1)", "var(--c-l2)", "var(--c-l3)", "var(--c-l4)", "var(--c-l5)"];
 
 const STYLE = `
-:host { display: contents; --c-l1: #6250d6; --c-l2: #eb6834; --c-l3: #1baf7a; --c-l4: #2a78d6; --c-l5: #e34948; --c-rest: #a3a29b; }
-:host([dark]) { --c-l1: #9085e9; --c-l2: #d95926; --c-l3: #199e70; --c-l4: #3987e5; --c-l5: #e66767; --c-rest: #6f6e68; }
+:host { display: contents; --c-l1: #6250d6; --c-l2: #eb6834; --c-l3: #1baf7a; --c-l4: #2a78d6; --c-l5: #e34948; --c-rest: #a3a29b; --c-other: #6b6a64; }
+:host([dark]) { --c-l1: #9085e9; --c-l2: #d95926; --c-l3: #199e70; --c-l4: #3987e5; --c-l5: #e66767; --c-rest: #6f6e68; --c-other: #a3a29b; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--ha-card-border-color, var(--line));
@@ -182,10 +182,16 @@ class HamletHomeCosts extends HTMLElement {
     const month = this._split === "month";
     const p = month ? C.periods.month : C.periods.today, prev = month ? C.periods.last_month_same : C.periods.yesterday;
     const total = p.load || 0;
-    const parts = C.loads.map((l, i) => ({ name: l.name, v: p.loads[l.entity_id] || 0, was: prev.loads?.[l.entity_id], color: LOAD_COLORS[i] }));
+    // colour follows the load (its place in the setup list), never its rank; 6th and later share "Other loads"
+    const parts = C.loads.map((l, i) => ({ name: l.name, v: p.loads[l.entity_id] || 0, was: prev.loads?.[l.entity_id],
+      color: LOAD_COLORS[i] || "var(--c-other)", other: i >= LOAD_COLORS.length }));
     const known = parts.reduce((a, x) => a + x.v, 0);
     const restV = Math.max(total - known, 0);
     parts.push({ name: "Rest of the house", v: restV, was: prev.days ? Math.max((prev.load || 0) - Object.values(prev.loads || {}).reduce((a, b) => a + b, 0), 0) : null, color: "var(--c-rest)", rest: true });
+    const others = parts.filter((x) => x.other);
+    const barParts = [...parts.filter((x) => !x.other && !x.rest),
+      ...(others.length ? [{ name: "Other loads", v: others.reduce((a, x) => a + x.v, 0), color: "var(--c-other)" }] : []),
+      parts[parts.length - 1]];
     const pct = (v) => (total > 0 ? (v / total) * 100 : 0);
     const delta = (x) => {
       if (x.was === null || x.was === undefined || !prev.days) return "";
@@ -195,9 +201,9 @@ class HamletHomeCosts extends HTMLElement {
     };
     el.innerHTML = `<h2><ha-icon icon="mdi:chart-timeline-variant"></ha-icon>Where the power went
       <span class="sub"><span class="seg" id="splitseg"><button data-split="today" aria-pressed="${!month}">Today</button><button data-split="month" aria-pressed="${month}">This month</button></span></span></h2>
-      ${total > 0 ? `<div class="seg-bar" role="img" aria-label="House use split by load">${parts.filter((x) => x.v > 0).map((x) =>
+      ${total > 0 ? `<div class="seg-bar" role="img" aria-label="House use split by load">${barParts.filter((x) => x.v > 0).map((x) =>
         `<i style="flex:${x.v} 0 0;background:${x.color}" title="${esc(x.name)} ${x.v.toFixed(1)} kWh">${pct(x.v) >= 8 ? `${Math.round(pct(x.v))}%` : ""}</i>`).join("")}</div>` : `<div class="empty">No use measured yet</div>`}
-      <div class="loads">${parts.map((x) => `<span class="sw" style="background:${x.color}"></span><span class="n">${esc(x.name)}</span>
+      <div class="loads">${parts.map((x) => `<span class="sw" style="background:${x.color}"></span><span class="n">${esc(x.name)}${x.other ? ` <span class="muted small">· other loads</span>` : ""}</span>
         <span class="v">${kwh(x.v)}</span><span class="p">${total > 0 ? `${Math.round(pct(x.v))}%` : ""}</span><span class="d" title="vs ${month ? "same days last month" : "yesterday"}">${delta(x)}</span>`).join("")}
         <span class="tot"></span><span class="n tot">House total</span><span class="v tot">${kwh(total)}</span><span class="p tot">${this._cur(p.load_value, 0)}</span><span class="d tot"></span></div>
       <p class="muted small" style="margin:8px 0 0">▲▼ kWh compared with ${month ? "the same days last month" : "yesterday"}.</p>`;
