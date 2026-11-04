@@ -670,7 +670,21 @@ class HamletHomePanel extends HTMLElement {
       icon.setAttribute("icon", batt > 20 ? "mdi:battery-charging-high" : soc === null ? "mdi:battery" : `mdi:battery${soc >= 95 ? "" : "-" + Math.max(10, Math.round(soc / 10) * 10)}`);
       dash("w-batt", batt, "var(--c-batt)", (batt || 0) < 0);
     }
-    extras.forEach((e, i) => { setNode(`n-ex${i}`, fmtW(e.w)); dash(`w-ex${i}`, e.w, "var(--c-load)", true); });
+    // colour the lines by where the power comes from (same sharing as the Blocks view)
+    const fm = (() => {
+      const sol0 = Math.max(solar || 0, 0), bOut = Math.max(-(batt || 0), 0), bIn = Math.max(batt || 0, 0);
+      let gIn = L.grid_available === false ? 0 : Math.max(grid || 0, 0), sol = sol0;
+      const non = lsplit ? Math.max(noness || 0, 0) : 0, essL = Math.max(lsplit && ess !== null ? ess : load || 0, 0);
+      const g1 = Math.min(gIn, non); gIn -= g1; const s1 = Math.min(sol, non - g1); sol -= s1;
+      const s2 = Math.min(sol, essL); sol -= s2; const b2 = Math.min(bOut, essL - s2); const g2 = Math.min(gIn, essL - s2 - b2); gIn -= g2;
+      const s3 = Math.min(sol, bIn), g3 = Math.min(gIn, bIn - s3);
+      const top = (parts) => { const t = parts.sort((a, b) => b[1] - a[1])[0]; return t[1] > 0 ? t[0] : null; };
+      return { home: top([["var(--c-solar)", s2], ["var(--c-batt)", b2], ["var(--c-grid)", g2]]) || "var(--c-load)",
+               charge: top([["var(--c-solar)", s3], ["var(--c-grid)", g3]]) || "var(--c-batt)" };
+    })();
+    const srcColor = fm.home;
+    extras.forEach((e, i) => { setNode(`n-ex${i}`, fmtW(e.w)); dash(`w-ex${i}`, e.w, srcColor, true); });
+    if ($("w-batt") && (batt || 0) > 20) dash("w-batt", batt, fm.charge, false);   // what's charging it
     const sub = this.shadowRoot.getElementById("flowsub");
     if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }

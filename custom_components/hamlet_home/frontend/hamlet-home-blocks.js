@@ -10,6 +10,44 @@ const W = (w) => {
 const short = (name) => String(name || "").replace(/\s*(kwh\s*meter\s*)?power$/i, "").replace(/\s*kwh\s*meter$/i, "");
 const fmtH = (h) => { if (num(h) === null) return null; const m = Math.round(h * 60); return m < 60 ? `${m} min` : h >= 48 ? `${(h / 24).toFixed(1)} days` : `${Math.floor(m / 60)} h ${m % 60} min`; };
 
+// Where the power comes from right now, shared out like the wiring:
+// grid-side (AC-in) loads take grid first; essential loads take solar, then battery, then the grid that's left;
+// the battery charges from what solar is left over, then from the grid.
+export function flowMix(L, lsplit) {
+  const sol0 = Math.max(num(L.solar) || 0, 0), bOut = Math.max(-(num(L.battery) || 0), 0), bIn = Math.max(num(L.battery) || 0, 0);
+  const gIn0 = L.grid_available === false ? 0 : Math.max(num(L.grid) || 0, 0);
+  const non = lsplit ? Math.max(num(L.load_noness) || 0, 0) : 0;
+  const ess = Math.max(lsplit && num(L.load_ess) !== null ? num(L.load_ess) : num(L.load) || 0, 0);
+  let sol = sol0, gIn = gIn0;
+  const g1 = Math.min(gIn, non); gIn -= g1;
+  const s1 = Math.min(sol, non - g1); sol -= s1;
+  const s2 = Math.min(sol, ess); sol -= s2;
+  const b2 = Math.min(bOut, ess - s2);
+  const g2 = Math.min(gIn, ess - s2 - b2); gIn -= g2;
+  const s3 = Math.min(sol, bIn);
+  const g3 = Math.min(gIn, bIn - s3);
+  const mix = (parts) => { const t = parts.reduce((a, [, v]) => a + v, 0); return t < 1 ? [] : parts.filter(([, v]) => v / t > 0.02).map(([k, v]) => [k, v / t]); };
+  return {
+    noness: mix([["grid", g1], ["solar", s1]]),
+    home: mix([["solar", s2], ["battery", b2], ["grid", g2]]),
+    charge: bIn > 0 ? mix([["solar", s3], ["grid", g3]]) : [["battery", 1]],
+  };
+}
+const SRC = { solar: "var(--c-solar)", battery: "var(--c-batt)", grid: "var(--c-grid)" };
+const SRC_NAME = { solar: "Solar", battery: "Battery", grid: "Grid" };
+// six dot slots per pattern, shared out by share (every source that matters gets at least one)
+function slots(mix, n = 6) {
+  if (!mix.length) return [];
+  const out = [];
+  const counts = mix.map(([k, v]) => [k, Math.max(1, Math.round(v * n))]);
+  while (counts.reduce((a, [, c]) => a + c, 0) > n) { const i = counts.reduce((m, x, j) => (x[1] > counts[m][1] ? j : m), 0); counts[i][1]--; }
+  while (counts.reduce((a, [, c]) => a + c, 0) < n) counts[0][1]++;
+  // spread them out: S B S B S S rather than S S S S B B
+  const left = counts.map(([k, c]) => [k, c]);
+  for (let i = 0; i < n; i++) { left.sort((a, b) => b[1] - a[1]); const pick = left.find(([k, c]) => c > 0 && k !== out[out.length - 1]) || left[0]; out.push(pick[0]); pick[1]--; }
+  return out;
+}
+
 const STYLE = `
 :host { display: block; --gap: 14px; }
 * { box-sizing: border-box; }
@@ -21,6 +59,12 @@ svg.lines .flow { fill: none; stroke-width: 4; stroke-linecap: round; stroke-das
 svg.lines .flow.on { opacity: 1; animation: run var(--dur, 2s) linear infinite; }
 svg.lines .flow.rev { animation-direction: reverse; }
 @keyframes run { to { stroke-dashoffset: -28; } }
+svg.lines .flow.mix.on { animation-name: run6; }
+@keyframes run6 { to { stroke-dashoffset: -84; } }
+.mixbar { display: flex; height: 6px; margin: 6px 12px 2px; border-radius: 3px; overflow: hidden; gap: 2px; background: var(--line); }
+.mixbar i { display: block; height: 100%; transition: flex-grow .8s ease; }
+.mixtxt { padding: 0 12px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wrap.m .mixbar { margin: 4px 10px 2px; height: 5px; } .wrap.m .mixtxt { padding: 0 10px; font-size: 10.5px; }
 .row { display: flex; gap: var(--gap); position: relative; z-index: 1; }
 .row.top > .box { flex: 1 1 0; }
 .mid { display: flex; justify-content: center; margin: 46px 0; position: relative; z-index: 1; }
@@ -177,7 +221,9 @@ class HamletHomeBlocks extends HTMLElement {
     // house / essential loads, with the single loads listed like Victron's L1 rows
     const homeW = lsplit && ess !== null ? ess : load;
     big("home", homeW);
-    this._set("s-home", lsplit ? "" : this._spark(2, "var(--c-load)"));
+    const fm = flowMix(L, lsplit), mix = fm.home;
+    this._set("s-home", mix.length ? `<div class="mixbar" role="img" aria-label="Power comes from ${mix.map(([k, v]) => `${SRC_NAME[k]} ${Math.round(v * 100)}%`).join(", ")}">${mix.map(([k, v]) => `<i style="flex-grow:${v};background:${SRC[k]}"></i>`).join("")}</div>
+      <div class="mixtxt">${mix.map(([k, v]) => `${SRC_NAME[k]} ${Math.round(v * 100)}%`).join(" · ")}</div>` : (lsplit ? "" : this._spark(2, "var(--c-load)")));
     const ex = (d.extras || []).filter((e) => num(e.w) !== null && e.w >= 1);
     this._set("f-home", rows(ex.length ? ex.map((e) => [short(e.name), `${Math.round(e.w)} W`]) : [[lsplit ? "inverter output (AC-out)" : "house", homeW !== null ? `${Math.round(homeW)} W` : "–"]]));
 
@@ -216,9 +262,10 @@ class HamletHomeBlocks extends HTMLElement {
     this._flows = {
       grid: [down ? 0 : (lsplit && grid !== null && noness !== null ? grid - noness : grid), "var(--c-grid)"],
       pvac: [num(L.solar_ac), "var(--c-solar)"],
-      noness: [down ? 0 : noness, "var(--c-load)"],
-      home: [homeW, "var(--c-load)"],
-      batt: [batt, "var(--c-batt)"],
+      // the AC-in loads hang on the grid side: grid first (solar it passes through counts too)
+      noness: [down ? 0 : noness, down ? [] : fm.noness],
+      home: [homeW, mix],
+      batt: [batt, fm.charge],
       pvdc: [split ? num(L.solar_dc) : solar, "var(--c-solar)"],
     };
     this._animate();
@@ -275,21 +322,37 @@ class HamletHomeBlocks extends HTMLElement {
       }
     }
     svg.setAttribute("viewBox", `0 0 ${R.width} ${R.height}`);
-    svg.innerHTML = paths.map(([k, d]) => `<path class="base" d="${d}"/><path class="flow" id="fl-${k}" d="${d}"/>`).join("");
+    svg.innerHTML = paths.map(([k, d]) => `<path class="base" d="${d}"/><g id="fg-${k}" data-d="${d}"></g>`).join("");
     this._animate();
   }
 
   _animate() {
     if (!this._flows) return;
     for (const [k, [w, color]] of Object.entries(this._flows)) {
-      const el = this.shadowRoot.getElementById(`fl-${k}`); if (!el) continue;
+      const g = this.shadowRoot.getElementById(`fg-${k}`); if (!g) continue;
       const v = num(w) || 0, on = Math.abs(v) >= 20;
       // battery path is drawn inverter → battery: + (charging) runs forward; PV paths run toward the inverter
       const forward = k === "batt" ? v > 0 : k === "grid" ? v > 0 : true;
-      el.classList.toggle("on", on);
-      el.classList.toggle("rev", on && !forward);
-      el.style.stroke = color;
-      el.style.setProperty("--dur", `${Math.max(0.6, 3 - Math.log10(Math.abs(v) + 1) * 0.6).toFixed(2)}s`);
+      // one colour, or a mix of sources: dots alternate colours in proportion (6 slots per pattern)
+      const mixed = Array.isArray(color) && color.length > 1;
+      const pattern = Array.isArray(color) ? (color.length ? slots(color) : []) : null;
+      const sig = mixed ? pattern.join(",") : Array.isArray(color) ? (color[0]?.[0] || "load") : color;
+      if (g.dataset.sig !== sig) {
+        g.dataset.sig = sig;
+        const d = g.dataset.d;
+        if (mixed) {
+          g.innerHTML = [...new Set(pattern)].map((src) => `<path class="flow mix" d="${d}" style="stroke:${SRC[src]};stroke-dasharray:${pattern.map((p) => (p === src ? "1 13" : "0 14")).join(" ")}"/>`).join("");
+        } else {
+          const c = Array.isArray(color) ? (color.length ? SRC[color[0][0]] : "var(--c-load)") : color;
+          g.innerHTML = `<path class="flow" d="${d}" style="stroke:${c}"/>`;
+        }
+      }
+      const dur = Math.max(0.6, 3 - Math.log10(Math.abs(v) + 1) * 0.6);
+      g.querySelectorAll(".flow").forEach((el) => {
+        el.classList.toggle("on", on);
+        el.classList.toggle("rev", on && !forward);
+        el.style.setProperty("--dur", `${(mixed ? dur * 3 : dur).toFixed(2)}s`);   // 3× longer pattern, same speed
+      });
     }
   }
 }
