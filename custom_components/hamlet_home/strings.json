@@ -74,7 +74,8 @@
           "water": "Water & pump",
           "weather": "Weather & solar forecast",
           "costs": "Costs & load breakdown",
-          "app": "Name & icon in the sidebar"
+          "app": "Name & icon in the sidebar",
+          "details": "Power flow details (Victron style)"
         }
       },
       "water": {
@@ -117,6 +118,18 @@
         "data": {
           "app_title": "Name",
           "app_icon": "Icon"
+        }
+      },
+      "details": {
+        "title": "Power flow details",
+        "description": "Optional readings shown in the Blocks power flow, like the Victron VRM dashboard.",
+        "data": {
+          "grid_voltage": "Grid voltage (AC-in L1)",
+          "grid_current": "Grid current (AC-in L1)",
+          "battery_voltage": "Battery voltage",
+          "battery_current": "Battery current",
+          "battery_temp": "Battery temperature",
+          "inverter_state": "Inverter state (e.g. VE.Bus state)"
         }
       }
     },

@@ -152,7 +152,7 @@ class HamletHomeOptionsFlow(OptionsFlow):
         return {**self.config_entry.data, **self.config_entry.options}
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(step_id="init", menu_options=["energy", "water", "weather", "costs", "app"])
+        return self.async_show_menu(step_id="init", menu_options=["energy", "water", "weather", "costs", "details", "app"])
 
     async def async_step_energy(self, user_input: dict | None = None) -> ConfigFlowResult:
         if user_input is not None and _solar_errors(user_input):
@@ -192,6 +192,17 @@ class HamletHomeOptionsFlow(OptionsFlow):
         suggested = {CONF_COST_LOADS: self._current.get(CONF_COST_LOADS) or (current.cost_loads if current else [])}
         return self.async_show_form(step_id="costs", data_schema=self.add_suggested_values_to_schema(
             vol.Schema({vol.Optional(CONF_COST_LOADS): _sensor(multiple=True)}), suggested))
+
+    async def async_step_details(self, user_input: dict | None = None) -> ConfigFlowResult:
+        """Extra readings for the Victron-style Blocks power flow (all optional)."""
+        from .const import FLOW_DETAIL_KEYS  # noqa: PLC0415
+        any_sensor = selector.EntitySelector(selector.EntitySelectorConfig(domain=["sensor", "input_number", "input_select"]))
+        schema = vol.Schema({vol.Optional(k): any_sensor for k in FLOW_DETAIL_KEYS})
+        if user_input is not None:
+            self._data.update({k: None for k in FLOW_DETAIL_KEYS})
+            self._data.update(user_input)
+            return self._save()
+        return self.async_show_form(step_id="details", data_schema=self.add_suggested_values_to_schema(schema, self._current))
 
     async def async_step_app(self, user_input: dict | None = None) -> ConfigFlowResult:
         """Name and icon in the sidebar and at the top of the page (e.g. the client's name)."""

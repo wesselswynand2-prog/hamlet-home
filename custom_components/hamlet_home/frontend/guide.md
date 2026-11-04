@@ -31,7 +31,10 @@ The Energy tab shows where your power comes from right now, and how long the bat
 
 **Power flow**
 
-- The circles are your solar panels, the grid, the house, the battery and the inverter. Extra circles on the right are single loads such as a fridge or pump.
+Tap **Blocks** or **Circles** at the top right of the card to choose the look; your phone or computer remembers it.
+
+- **Blocks** (like the Victron dashboard): a box for the grid, your loads, the battery and the solar, each with a small chart of the last 3 hours, joined to the blue inverter block by moving dots. The inverter block says what it's doing, for example *Inverting*, *Charging* or *Passthru*.
+- **Circles:** the circles are your solar panels, the grid, the house, the battery and the inverter. Extra circles on the right are single loads such as a fridge or pump.
 - Moving dots show which way power flows. Faster dots mean more power.
 - The grid circle says **Down** when there's no grid power (load-shedding or an outage).
 - The battery circle shows its charge in %. "+" means charging, "−" means the battery is feeding the house.
