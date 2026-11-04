@@ -120,8 +120,9 @@ def _controller(hass, connection, msg) -> EnergyController | None:
 async def ws_state(hass, connection, msg):
     if c := _controller(hass, connection, msg):
         from homeassistant.loader import IntegrationNotFound, async_get_integration  # noqa: PLC0415
+        geyser_version = None
         try:
-            await async_get_integration(hass, "hamlet_geyser")
+            geyser_version = str((await async_get_integration(hass, "hamlet_geyser")).version or "")
             geyser_available = True
         except IntegrationNotFound:
             geyser_available = False
@@ -131,6 +132,7 @@ async def ws_state(hass, connection, msg):
                                            "devices": hass.data[DOMAIN]["devices"].snapshot(),
                                            "is_admin": connection.user.is_admin,
                                            "geyser_available": geyser_available,
+                                           "geyser_version": geyser_version,
                                            "geyser_count": len(hass.config_entries.async_entries("hamlet_geyser")),
                                            "geyser_installed": "hamlet_geyser" in hass.config.components,
                                            "help_contact": c.help_contact,

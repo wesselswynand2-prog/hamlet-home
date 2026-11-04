@@ -361,6 +361,7 @@ class HamletHomePanel extends HTMLElement {
       const s = await this._hass.callWS({ type: `${DOMAIN}/state` });
       this._isAdmin = s.is_admin;
       this._geyser = s.geyser_available || s.geyser_installed;
+      this._geyserVer = s.geyser_version || "";
       this._weather = !!s.weather_available;
       this._devices = s.devices || [];
       this._updates = s.updates || [];
@@ -499,7 +500,8 @@ class HamletHomePanel extends HTMLElement {
       return;
     }
     if (!customElements.get("hamlet-geyser-panel")) {
-      try { await import("/hamlet_geyser_static/hamlet-geyser-panel.js"); }
+      // versioned so an updated Hamlet Geyser page isn't served from the browser's cache
+      try { await import(`/hamlet_geyser_static/hamlet-geyser-panel.js?v=${encodeURIComponent(this._geyserVer || VERSION)}`); }
       catch (e) {
         this._main.innerHTML = `<div class="card loading">The geyser page couldn't load – restart Home Assistant after updating, then refresh.</div>`;
         return;
