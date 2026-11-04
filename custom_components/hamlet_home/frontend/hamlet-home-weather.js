@@ -61,6 +61,8 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .money .k { font-size: 13px; color: var(--muted); }
 .money .v { font-size: clamp(18px, 5vw, 24px); white-space: nowrap; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .money .s { font-size: 12px; color: var(--muted); }
+.solgrid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .solgrid { grid-template-columns: 1fr; } }
 .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 6px; }
 .bar i { display: block; height: 100%; background: var(--c-solar); border-radius: 4px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin: 0 0 6px; }
@@ -126,7 +128,7 @@ class HamletHomeWeather extends HTMLElement {
     catch (e) { this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card empty">Weather couldn't load: ${esc(e.message || e)}</div>`; return; }
     if (!refresh || !this._built) this._build();
     this._renderNow(); this._renderSolar(); this._renderExtras(); this._renderSettings();
-    if (!this._unsubs) this._subscribe();
+    if (!this._unsubs && !this._solarOnly) this._subscribe();
   }
 
   _subscribe() {
@@ -146,13 +148,23 @@ class HamletHomeWeather extends HTMLElement {
     this._hasDaily = !!(feats & 5);
   }
 
+  get _solarOnly() { return this.getAttribute("section") === "solar"; }
+
   _build() {
     this._built = true;
+    const solarCard = `<section class="card ${this._solarOnly ? "" : "s5"}" id="csolar"><h2><ha-icon icon="mdi:solar-power-variant"></ha-icon>Solar forecast <span class="sub" id="solsub"></span></h2>
+        <div class="${this._solarOnly ? "solgrid" : ""}"><div><div id="solar"></div><div id="extras" class="stats"></div></div><div>
+        <div class="legend" id="sollegend"><span class="key"><i style="border-color:var(--c-solar)"></i>Your solar</span><span class="key"><i class="dash" style="border-color:var(--muted)"></i>Forecast</span><span class="key"><i class="box" style="background:color-mix(in srgb, var(--muted) 22%, transparent)"></i>Likely range</span></div>
+        <div class="chartwrap" id="solchart"></div></div></div></section>`;
+    if (this._solarOnly) {
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style>${solarCard}`;
+      this._ro = new ResizeObserver(() => this._renderSolarChart());
+      this._ro.observe(this.shadowRoot.getElementById("csolar"));
+      return;
+    }
     this.shadowRoot.innerHTML = `<style>${STYLE}</style>
       <section class="card s7" id="cnow"><div id="now"></div><div id="nowstats" class="stats"></div></section>
-      <section class="card s5" id="csolar"><h2><ha-icon icon="mdi:solar-power-variant"></ha-icon>Solar forecast <span class="sub" id="solsub"></span></h2><div id="solar"></div>
-        <div class="legend" id="sollegend"><span class="key"><i style="border-color:var(--c-solar)"></i>Your solar</span><span class="key"><i class="dash" style="border-color:var(--muted)"></i>Forecast</span><span class="key"><i class="box" style="background:color-mix(in srgb, var(--muted) 22%, transparent)"></i>Likely range</span></div>
-        <div class="chartwrap" id="solchart"></div><div id="extras" class="stats"></div></section>
+      ${solarCard}
       <section class="card" id="cfc"><h2><ha-icon icon="mdi:calendar-week"></ha-icon>Forecast <span class="sub"><span class="seg" id="fcseg"></span></span></h2>
         <div class="fc" id="fc"><div class="empty">Loading forecast…</div></div>
         <div id="settings"></div></section>`;

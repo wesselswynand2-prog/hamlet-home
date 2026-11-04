@@ -51,6 +51,7 @@ The **Weather** tab appears when there's a weather entity or a solar forecast se
 - **Solar forecast** – Solcast (or Forecast.Solar) today and tomorrow in kWh, what's been made so far, what's still to come, and a chart of the forecast (with its likely range) against your actual solar today.
 - **Forecast** – 7 days (high / low and rain with chance) or the next 24 hours (temperature, rain, wind).
 - **Extra sensors** – any sensors you pick, e.g. Forecast SOC and DOD.
+- The solar forecast card (with the extra sensors) is also shown on the **Energy** tab, under the power flow.
 - **Weather settings** (admin, bottom of the page) – rain in mm or inches, wind in km/h, m/s, mph or knots.
 
 ## Controls

@@ -317,6 +317,7 @@ class HamletHomePanel extends HTMLElement {
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
       <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div></section>
       <section class="card s5"><h2>Today <span class="sub" id="todaysub"></span></h2><div id="batt"></div><div id="today"></div><div id="battset"></div></section>
+      <div id="solfc" style="display:contents"></div>
       <section class="card" id="prio" hidden><h2>Solar priority <span class="sub" id="priosub"></span></h2><div id="priobody"></div></section>
       <section class="card">
         <h2>Power <span class="sub"><span class="seg" id="dayseg"><button data-day="today" aria-pressed="${this._day === "today"}">Today</button><button data-day="yesterday" aria-pressed="${this._day === "yesterday"}">Yesterday</button></span></span></h2>
@@ -337,6 +338,21 @@ class HamletHomePanel extends HTMLElement {
     this._ro = new ResizeObserver(() => { this._renderChart(); this._renderHistory(); });
     this._ro.observe(this.shadowRoot.getElementById("chart"));
     if (this._snap) { this._apply(this._snap); this._renderChart(); this._renderHistory(); this._renderRaw(); }
+    this._addSolarForecast();
+  }
+
+  async _addSolarForecast() {
+    // the Weather tab's solar forecast card, also shown here (hides itself without a forecast sensor)
+    if (!this._weather) return;
+    if (!customElements.get("hamlet-home-weather")) {
+      try { await import(`/hamlet_home_static/hamlet-home-weather.js?v=${VERSION}`); } catch (e) { return; }
+    }
+    const holder = this.shadowRoot.getElementById("solfc");
+    if (!holder || this._tab !== "energy" || holder.firstChild) return;
+    const el = document.createElement("hamlet-home-weather");
+    el.setAttribute("section", "solar");
+    el.hass = this._hass;
+    holder.appendChild(el);
   }
 
   async _buildModule(name) {
@@ -565,7 +581,8 @@ class HamletHomePanel extends HTMLElement {
       v1 = "Solar covers it"; s1 = `Solar is carrying the house · ${fmtKwh(b.usable_kwh)} in the battery`;
     } else {
       v1 = fmtDur(b.backup_h);
-      s1 = `${b.backup_h < 48 ? `until ${clockIn(b.backup_h)} · ` : ""}${kw(b.drain_w)} load · ${reserve}`;
+      const sun = (num(this._snap.live?.solar) || 0) > 150;
+      s1 = `${b.backup_h < 48 ? `until ${clockIn(b.backup_h)} · ` : ""}${kw(b.drain_w)} ${sun ? "from the battery with the sun helping" : "load"} · ${reserve}`;
     }
     let k2 = "Full in", v2, s2;
     if (b.state === "full") { k2 = "Battery"; v2 = "Full"; s2 = `${Math.round(b.soc)}%`; }
