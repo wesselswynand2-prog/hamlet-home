@@ -1141,7 +1141,7 @@ Object.assign(HamletHomePanel.prototype, {
     const el = this.shadowRoot.getElementById("wpoolsolar"); if (!el) return;
     const st = this._water.settings;
     if (st.pool_mode !== "solar") { el.innerHTML = ""; this._wShown.psolar = null; return; }
-    const key = JSON.stringify([st.pool_solar_start_w, st.pool_solar_keep_w, st.pool_hours]);
+    const key = JSON.stringify([st.pool_solar_start_w, st.pool_solar_keep_w, st.pool_hours, st.pool_stop_deficit_min, st.pool_stop_discharge_min, st.pool_discharge_w]);
     const a = this.shadowRoot.activeElement;
     if ((a && a.closest && a.closest("#wpoolsolar")) || this._wShown.psolar === key) return;
     this._wShown.psolar = key;
@@ -1149,6 +1149,8 @@ Object.assign(HamletHomePanel.prototype, {
       <div class="field"><label for="ps-start">Start when spare solar is above<span class="hint">not counting the pump itself</span></label><span class="ctl"><input id="ps-start" type="number" data-ps="pool_solar_start_w" value="${st.pool_solar_start_w}" min="0" step="50">W</span></div>
       <div class="field"><label for="ps-keep">Keep running while above</label><span class="ctl"><input id="ps-keep" type="number" data-ps="pool_solar_keep_w" value="${st.pool_solar_keep_w}" min="0" step="50">W</span></div>
       <div class="field"><label for="ps-hours">Run hours per day<span class="hint">stops once reached · 0 = no limit</span></label><span class="ctl"><input id="ps-hours" type="number" data-ps="pool_hours" value="${st.pool_hours}" min="0" max="24" step="0.5">h</span></div>
+      <div class="field"><label for="ps-def">Stop when solar is below the house load for<span class="hint">the house is then running on battery or grid · 0 = off</span></label><span class="ctl"><input id="ps-def" type="number" data-ps="pool_stop_deficit_min" value="${st.pool_stop_deficit_min ?? 10}" min="0" max="240" step="1">min</span></div>
+      <div class="field"><label for="ps-dis">Stop when the battery gives more than<span class="hint">ignores small blips below this</span></label><span class="ctl"><input id="ps-disw" type="number" data-ps="pool_discharge_w" value="${st.pool_discharge_w ?? 200}" min="0" step="50" style="width:72px">W for<input id="ps-dis" type="number" data-ps="pool_stop_discharge_min" value="${st.pool_stop_discharge_min ?? 5}" min="0" max="240" step="1" style="width:64px">min</span></div>
       <div class="actions"><span class="msg" id="psmsg"></span><button class="btn primary" data-w="psolarsave">Save</button></div>
       <p class="muted small" style="margin:4px 0 0">Shares solar with the geyser by the order under Energy → Solar priority.</p></div>`;
   },

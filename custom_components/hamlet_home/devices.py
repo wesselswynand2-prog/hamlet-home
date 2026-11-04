@@ -33,9 +33,12 @@ DEFAULT_DEVICE: dict[str, Any] = {
     "solar_keep_w": 800,      # keeps running while spare solar stays above this
     "hours": 0,               # stop once it ran this long today (0 = no limit)
     "min_switch_s": 300,      # compressor protection: no on/off more often than this
+    "stop_deficit_min": 10,   # stop when solar stays below the house load this long (0 = off)
+    "stop_discharge_min": 5,  # stop when the battery gives more than discharge_w this long (0 = off)
+    "discharge_w": 200,
 }
 # what clients (non-admins) may change
-USER_KEYS = {"mode", "schedules", "solar_start_w", "solar_keep_w", "hours"}
+USER_KEYS = {"mode", "schedules", "solar_start_w", "solar_keep_w", "hours", "stop_deficit_min", "stop_discharge_min", "discharge_w"}
 
 
 def new_id(name: str, taken: set[str]) -> str:
@@ -94,6 +97,14 @@ def validate(new: dict, admin: bool, current: dict | None = None) -> dict:
             value = float(value)
             if not 0 <= value <= 24:
                 raise ValueError("Run hours must be 0–24")
+        elif key in ("stop_deficit_min", "stop_discharge_min"):
+            value = float(value)
+            if not 0 <= value <= 240:
+                raise ValueError("Stop times must be 0–240 min")
+        elif key == "discharge_w":
+            value = float(value)
+            if not 0 <= value <= 30000:
+                raise ValueError("Battery limit must be 0–30 000 W")
         elif key == "min_switch_s":
             value = float(value)
             if not 0 <= value <= 3600:

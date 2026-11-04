@@ -124,7 +124,7 @@ class HamletHomeDevices extends HTMLElement {
   _renderSolar(d, force) {
     const id = d.id, elId = `sol-${id}`;
     if (d.mode !== "solar") { this._set(elId, ""); this._shown[elId] = null; return; }
-    const key = JSON.stringify([d.solar_start_w, d.solar_keep_w, d.hours]);
+    const key = JSON.stringify([d.solar_start_w, d.solar_keep_w, d.hours, d.stop_deficit_min, d.stop_discharge_min, d.discharge_w]);
     if (!force && (this._focusIn(elId) || this._shown[elId] === key)) return;
     this._shown[elId] = key;
     this._html[elId] = null;
@@ -132,6 +132,8 @@ class HamletHomeDevices extends HTMLElement {
       <div class="field"><label>Start when spare solar is above<span class="hint">not counting this device</span></label><span class="ctl"><input type="number" data-s="solar_start_w" value="${d.solar_start_w}" min="0" step="50">W</span></div>
       <div class="field"><label>Keep running while above</label><span class="ctl"><input type="number" data-s="solar_keep_w" value="${d.solar_keep_w}" min="0" step="50">W</span></div>
       <div class="field"><label>Run hours per day<span class="hint">stops once reached · 0 = no limit</span></label><span class="ctl"><input type="number" data-s="hours" value="${d.hours}" min="0" max="24" step="0.5">h</span></div>
+      <div class="field"><label>Stop when solar is below the house load for<span class="hint">the house is then running on battery or grid · 0 = off</span></label><span class="ctl"><input type="number" data-s="stop_deficit_min" value="${d.stop_deficit_min ?? 10}" min="0" max="240" step="1">min</span></div>
+      <div class="field"><label>Stop when the battery gives more than<span class="hint">ignores small blips below this</span></label><span class="ctl"><input type="number" data-s="discharge_w" value="${d.discharge_w ?? 200}" min="0" step="50" style="width:72px">W for<input type="number" data-s="stop_discharge_min" value="${d.stop_discharge_min ?? 5}" min="0" max="240" step="1" style="width:64px">min</span></div>
       <div class="actions"><span class="msg" id="sm-${esc(id)}"></span><button class="btn primary" data-a="solarsave" data-d="${esc(id)}">Save</button></div>
       <p class="note">Shares solar with the pool and geysers in the order under Energy → Solar priority.</p></div>`;
   }
@@ -208,7 +210,8 @@ class HamletHomeDevices extends HTMLElement {
       case "mode": return this._send(id, { mode: b.dataset.m }, `sm-${id}`);
       case "solarsave": {
         const box = this.shadowRoot.getElementById(`sol-${id}`), v = (k) => Number(box.querySelector(`[data-s=${k}]`).value);
-        const r = await this._send(id, { solar_start_w: v("solar_start_w"), solar_keep_w: v("solar_keep_w"), hours: v("hours") }, `sm-${id}`);
+        const r = await this._send(id, { solar_start_w: v("solar_start_w"), solar_keep_w: v("solar_keep_w"), hours: v("hours"),
+          stop_deficit_min: v("stop_deficit_min"), stop_discharge_min: v("stop_discharge_min"), discharge_w: v("discharge_w") }, `sm-${id}`);
         if (r) { this.shadowRoot.activeElement?.blur?.(); this._renderSolar(this._devs.find((x) => x.id === id), true); const m = this.shadowRoot.getElementById(`sm-${id}`); if (m) { m.textContent = "Saved"; m.className = "msg ok"; } }
         return;
       }

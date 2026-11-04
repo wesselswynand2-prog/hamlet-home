@@ -272,6 +272,8 @@ class WaterController:
             "draw": (measured if measured is not None else rated) if running else 0.0,
             "start_w": float(s["pool_solar_start_w"]), "keep_w": float(s["pool_solar_keep_w"]),
             "via_full": self.pool_via_full,
+            "stop_deficit_min": float(s["pool_stop_deficit_min"]), "stop_discharge_min": float(s["pool_stop_discharge_min"]),
+            "discharge_w": float(s["pool_discharge_w"]),
         }
 
     async def async_set_solar_grant(self, grant: bool | None, why: str = "", via_full: bool = False) -> None:

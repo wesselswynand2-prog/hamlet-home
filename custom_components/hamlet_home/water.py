@@ -19,6 +19,9 @@ DEFAULT_WATER_SETTINGS: dict = {
     "pool_hours": 6,             # stop once it ran this long today (0 = no limit)
     "pool_rated_w": 750,         # pump power when there's no power sensor
     "pool_min_switch_s": 300,    # protect the pump: no on/off more often than this
+    "pool_stop_deficit_min": 10,   # stop when solar stays below the house load this long (0 = off)
+    "pool_stop_discharge_min": 5,  # stop when the battery gives more than pool_discharge_w this long (0 = off)
+    "pool_discharge_w": 200,
     # booster pump protection
     "dry_run_enabled": False,
     "dry_run_bar": 0.5,          # running below this pressure …
@@ -28,7 +31,8 @@ DEFAULT_WATER_SETTINGS: dict = {
     "notify_service": "",        # e.g. notify.mobile_app_wynand – persistent notification always
     "running_watts": 20,         # power above this counts as running
 }
-USER_KEYS = {"pool_mode", "pool_schedules", "pool_solar_start_w", "pool_solar_keep_w", "pool_hours"}
+USER_KEYS = {"pool_mode", "pool_schedules", "pool_solar_start_w", "pool_solar_keep_w", "pool_hours",
+             "pool_stop_deficit_min", "pool_stop_discharge_min", "pool_discharge_w"}
 
 
 def parse_hm(value: str) -> int:

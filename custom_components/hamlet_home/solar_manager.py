@@ -26,6 +26,7 @@ class SolarManager:
         self.spare_w: float | None = None
         self._unsub: CALLBACK_TYPE | None = None
         self._running = False
+        self._timers: dict[str, dict] = {}   # per load: timed stop rules
 
     async def async_start(self) -> None:
         data = await self.store.async_load() or {}
@@ -87,6 +88,9 @@ class SolarManager:
         else:
             # every load on its own: each sees all the spare solar
             result = {l["id"]: solar_loads.allocate([l], self.spare_w, live.get("soc"), live.get("battery"), s)[l["id"]] for l in order}
+
+        from homeassistant.util import dt as dt_util  # noqa: PLC0415
+        result = solar_loads.apply_stop_rules(order, result, self._timers, dt_util.utcnow(), solar, load, live.get("battery"))
 
         status = []
         for rank, l in enumerate(order, 1):

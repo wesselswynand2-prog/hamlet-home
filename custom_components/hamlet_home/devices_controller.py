@@ -159,7 +159,9 @@ class DevicesController:
                         "wants": wants, "running": running,
                         "power": (measured or rated) if running else rated,
                         "draw": (measured if measured is not None else rated) if running else 0.0,
-                        "start_w": float(d["solar_start_w"]), "keep_w": float(d["solar_keep_w"]), "via_full": st.via_full})
+                        "start_w": float(d["solar_start_w"]), "keep_w": float(d["solar_keep_w"]), "via_full": st.via_full,
+                        "stop_deficit_min": float(d.get("stop_deficit_min", 10)), "stop_discharge_min": float(d.get("stop_discharge_min", 5)),
+                        "discharge_w": float(d.get("discharge_w", 200))})
         return out
 
     def grant_target(self, load_id: str):

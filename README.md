@@ -51,6 +51,7 @@ The **Devices** tab (admins: **+ Add a device**): name, type, the Shelly switch,
 - **Timer** (run times), **Solar** (start when spare solar is above X W, keep running while above Y W, run hours per day, only inside the solar hours), **On**, **Off**.
 - In Solar mode it takes part in **Energy → Solar priority** with the pool pump and geysers – put them in the order you want.
 - **Wait between switches** (default 5 min) protects heat-pump / aircon compressors.
+- **Timed stops (Solar mode, pool pump too):** stop when solar stays below the whole house load for X min (default 10), and when the battery gives more than Y W (default 200) for X min (default 5). After such a stop it stays off for the same time. 0 = rule off. The battery rule doesn't apply while a load runs on "battery full".
 - Devices with a power sensor are counted in the Costs breakdown; their switches are left off the Controls tab so nobody fights the timer.
 - Clients can change the mode, run times and solar levels; adding, removing and the switch are admin only.
 

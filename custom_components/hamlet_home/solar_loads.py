@@ -72,3 +72,53 @@ def ordered(loads: dict[str, dict], order: list[str]) -> list[dict]:
     """Loads sorted by the saved order; new loads go to the end."""
     rank = {lid: i for i, lid in enumerate(order)}
     return sorted(loads.values(), key=lambda l: (rank.get(l["id"], 10_000), l["id"]))
+
+
+def apply_stop_rules(loads: list[dict], result: dict[str, dict], timers: dict[str, dict], now,
+                     solar_w: float | None, load_w: float | None, battery_w: float | None) -> dict[str, dict]:
+    """Per-load timed stops (Solar mode), applied after `allocate`.
+
+    - stop_deficit_min: solar below the whole house load (this load included) for that long -> stop
+    - stop_discharge_min: battery giving more than discharge_w for that long -> stop
+      (not while the load runs on "battery full", which is meant to use the battery)
+    After a stop the load stays off for the same time, so it can't flap. timers is kept by the caller.
+    """
+    deficit = solar_w is not None and load_w is not None and solar_w < load_w
+    for l in loads:
+        t = timers.setdefault(l["id"], {})
+        r = result.get(l["id"])
+        if r is None:
+            continue
+        dmin, xmin = float(l.get("stop_deficit_min") or 0), float(l.get("stop_discharge_min") or 0)
+        thr = float(l.get("discharge_w", 200) or 0)
+        discharging = battery_w is not None and battery_w < -thr
+        # count only while it runs
+        for key, cond in (("deficit", deficit), ("discharge", discharging)):
+            if l["running"] and cond:
+                t.setdefault(key, now)
+            else:
+                t.pop(key, None)
+        block = t.get("block_until")
+        if block is not None and now < block and not l["running"]:
+            if r["grant"]:
+                mins = max((block - now).total_seconds() / 60, 0)
+                result[l["id"]] = {"grant": False, "via_full": False, "why": f"{t.get('block_why', 'stopped')} – may start again in {mins:.0f} min"}
+            continue
+        if block is not None and now >= block:
+            t.pop("block_until", None)
+            t.pop("block_why", None)
+        if not (r["grant"] and l["running"]):
+            continue
+        stop = None
+        if dmin and "deficit" in t and (now - t["deficit"]).total_seconds() >= dmin * 60:
+            stop = (dmin, f"solar below the house load for {dmin:g} min")
+        elif xmin and not r.get("via_full") and "discharge" in t and (now - t["discharge"]).total_seconds() >= xmin * 60:
+            stop = (xmin, f"battery giving {abs(battery_w) / 1000:.1f} kW for {xmin:g} min")
+        if stop:
+            from datetime import timedelta  # noqa: PLC0415
+            result[l["id"]] = {"grant": False, "via_full": False, "why": f"stopped: {stop[1]}"}
+            t["block_until"] = now + timedelta(minutes=stop[0])
+            t["block_why"] = f"stopped: {stop[1]}"
+            t.pop("deficit", None)
+            t.pop("discharge", None)
+    return result
