@@ -274,6 +274,8 @@ async def test_solar_priority_pool_and_geyser(enable_custom_integrations, hass: 
 
     water, solar = hass.data[DOMAIN]["water"], hass.data[DOMAIN]["solar"]
     geyser = hass.data["hamlet_geyser"][g_entry.entry_id]
+    # geyser without a meter: the Costs breakdown uses Hamlet Geyser's estimated "Geyser power"
+    assert "sensor.geyser_geyser_power" in hass.data[DOMAIN]["controller"].cost_loads
     gid = f"geyser:{g_entry.entry_id}"
     await water.async_save_settings({"pool_mode": "solar", "pool_hours": 6,
                                      "pool_schedules": [{"enabled": True, "days": [0, 1, 2, 3, 4, 5, 6], "start": "08:00", "end": "17:00"}]}, admin=True)

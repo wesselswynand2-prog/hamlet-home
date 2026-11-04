@@ -121,8 +121,13 @@ class EnergyController:
         chosen = _list(c.get(CONF_COST_LOADS))
         if not chosen:
             chosen = _list(c.get(CONF_EXTRA_LOADS)) + _list(c.get(CONF_POOL_POWER))
+            from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
+            reg = er.async_get(self.hass)
             for g in self.hass.config_entries.async_entries("hamlet_geyser"):
-                chosen += _list({**g.data, **g.options}.get("geyser_power"))
+                meter = _list({**g.data, **g.options}.get("geyser_power"))
+                # no meter (Geyserwise / plain relay): Hamlet Geyser's own estimated "Geyser power" sensor
+                est = reg.async_get_entity_id("sensor", "hamlet_geyser", f"{g.entry_id}_geyser_power")
+                chosen += [est] if est else meter
         return list(dict.fromkeys(chosen))[:MAX_COST_LOADS]
 
     def _kind(self, entity_id: str) -> str:

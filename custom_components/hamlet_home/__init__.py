@@ -392,6 +392,7 @@ def ws_costs(hass, connection, msg):
     if (c := _controller(hass, connection, msg)) is None:
         return
     from homeassistant.util import dt as dt_util  # noqa: PLC0415
+    from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
     from . import costs  # noqa: PLC0415
     if c.ready:
         c.acc.advance(dt_util.now())
@@ -401,6 +402,9 @@ def ws_costs(hass, connection, msg):
     for eid in c.cost_loads:
         st = hass.states.get(eid)
         name = (st.attributes.get("friendly_name") if st else None) or eid.split(".")[-1].replace("_", " ").title()
+        reg_entry = er.async_get(hass).async_get(eid)
+        if reg_entry and reg_entry.platform == "hamlet_geyser" and (g := hass.config_entries.async_get_entry(reg_entry.config_entry_id)):
+            name = {**g.data, **g.options}.get("name") or g.title     # "Geyser", not "Geyser Geyser power"
         for suffix in (" power", " Power", " Krag", " krag"):
             if name.endswith(suffix) and len(name) > len(suffix) + 1:
                 name = name[: -len(suffix)]
