@@ -14,7 +14,8 @@ Hamlet Home runs your solar, battery, geyser, pumps and devices from one page in
 | Energy | Live power flow, today's totals, battery time left |
 | Costs | What the house used and what solar saved, in kWh and rand |
 | Weather | Weather and the solar forecast |
-| Water | Booster pump, pool pump and garden irrigation |
+| Irrigation | Booster pump and garden irrigation |
+| Pool | Pool pump, pool temperature and pool devices (heat pump, lights …) |
 | Geyser | Heating times, solar heating, temperature |
 | Devices | Heat pumps, heaters and other devices on a timer or solar |
 | Controls | Lights, gates, garage doors, aircons and plugs by room |
@@ -107,9 +108,9 @@ The Weather tab shows the weather now, the coming days, and how much solar to ex
 
 Rain in mm or inches and wind in km/h or m/s are set by your installer under *Weather settings*.
 
-## Water tab
+## Irrigation tab
 
-The Water tab runs the booster pump, the pool pump and the garden irrigation.
+The Irrigation tab runs the booster pump and the garden irrigation.
 
 **Booster pump**
 
@@ -117,6 +118,17 @@ The Water tab runs the booster pump, the pool pump and the garden irrigation.
 - The picture under it shows the water moving live: from the tank or supply, through the pump (the blades turn while it runs), to the house and to each irrigation valve. An open valve lights up blue and sprays. When the pump runs with no valve open, the water goes to **House**, meaning a tap or shower is open.
 - **Dry-run protection:** if the pump runs without building pressure (for example the tank is empty), the app switches it off to protect it and sends you a message. Fix the water supply first, then tap **Reset** to switch it back on.
 - You may also get a message if the pump runs non-stop for a long time – check for a leak or a tap left open.
+
+**Irrigation**
+
+- The valves water one after another; the next one opens just before the previous one closes.
+- Run all valves, one valve, or a program by hand, and tap **Stop** to end it.
+- **Rain delay** skips watering for the hours you choose. If a rain sensor is fitted, watering is skipped after rain by itself.
+- A valve you open by hand closes again by itself after its set time, so it can't be left running.
+
+## Pool tab
+
+Everything for the swimming pool: the pool pump, the water temperature and any other pool devices.
 
 **Pool pump – the four modes**
 
@@ -143,12 +155,13 @@ The line next to the status always says why the pump is on or off, for example *
 
 Tap **+ Add run time**, set the start and end, tap the days, then tap **Save**. Switch a run time off with its slider without deleting it.
 
-**Irrigation**
+**Pool water**
 
-- The valves water one after another; the next one opens just before the previous one closes.
-- Run all valves, one valve, or a program by hand, and tap **Stop** to end it.
-- **Rain delay** skips watering for the hours you choose. If a rain sensor is fitted, watering is skipped after rain by itself.
-- A valve you open by hand closes again by itself after its set time, so it can't be left running.
+Shows the pool temperature when a pool temperature sensor (for example a floating pool sensor) is set up.
+
+**Pool devices**
+
+The pool heat pump, pool lights, a chlorinator or a pool cleaner on a smart switch get their own card on this tab, with the same four modes – **Timer, Solar, On, Off**. Your installer adds them with **+ Add a pool device**; *Show on* moves a device between the Pool and Devices tabs.
 
 ## Geyser tab
 
@@ -187,7 +200,7 @@ Heat pumps, heaters, aircons and other devices on a smart switch work just like 
 
 **Devices tab**
 
-Each device has its own card with the same four modes as the pool pump – **Timer, Solar, On, Off** – and the same solar settings, run times and stop rules (see *Water tab*). The card also shows its power, run time today and how many times it started.
+Each device has its own card with the same four modes as the pool pump – **Timer, Solar, On, Off** – and the same solar settings, run times and stop rules (see *Pool tab*). The card also shows its power, run time today and how many times it started.
 
 Heat pumps and aircons wait a few minutes between switching on and off to protect the compressor. If the card says *waiting a few minutes to protect it*, that's normal.
 
@@ -223,7 +236,7 @@ When the grid goes off, the app keeps running on the battery and saves it for wh
 - The grid circle on the Energy tab shows **Down**.
 - The battery box on the Today card turns red and says **Power is off – battery lasts**, with the time left at your current use. Switching off big loads makes this number go up straight away.
 - The geyser only heats from the battery if it's full enough. Solar heating still works.
-- Pool pump and devices in Solar mode stop if the battery starts feeding the house (see the stop rules under *Water tab*).
+- Pool pump and devices in Solar mode stop if the battery starts feeding the house (see the stop rules under *Pool tab*).
 - Devices that lost power show **No power** on the Controls tab. They come back by themselves when the grid returns.
 
 **Tip:** before a long outage, check *If the power goes off* on the Energy tab, and switch the pool and heat pumps to **Off** if the battery time looks short.
@@ -239,7 +252,7 @@ Most problems are fixed by refreshing the page or checking the device's own swit
 | The pool pump or a device won't start in Solar mode | Read the line next to the status: it says why, e.g. not enough spare solar, outside the solar hours, or run hours done for today |
 | It stopped and says *may start again in … min* | A stop rule switched it off (low solar or the battery feeding the house). It tries again after that time |
 | I switched something by hand and the app switched it back | In Auto, Timer or Solar mode the app is in charge. Use **On** or **Off** instead |
-| The booster pump is off and says dry run | Check the water supply or tank, then tap **Reset** on the Water tab |
+| The booster pump is off and says dry run | Check the water supply or tank, then tap **Reset** on the Irrigation tab |
 | The geyser isn't heating | Check the mode (Auto?), the heating times and the temperature. With a low battery or during load-shedding it may wait |
 | The battery time looks wrong | It uses the last minute's usage. A kettle or geyser makes it jump; it settles again within a minute |
 | Rand figures look wrong | Check the electricity price on the Energy tab |

@@ -15,6 +15,9 @@ KINDS = {
     "aircon": ("Aircon", "mdi:air-conditioner"),
     "pump": ("Pump", "mdi:pump"),
     "charger": ("EV / charger", "mdi:ev-station"),
+    "light": ("Lights", "mdi:lightbulb-outline"),
+    "chlorinator": ("Chlorinator / salt cell", "mdi:flask-outline"),
+    "cleaner": ("Pool cleaner", "mdi:robot-vacuum"),
     "other": ("Other", "mdi:power-plug"),
 }
 MODES = ("auto", "solar", "on", "off")
@@ -23,6 +26,7 @@ SWITCH_DOMAINS = ("switch", "input_boolean", "light", "fan", "climate")
 
 DEFAULT_DEVICE: dict[str, Any] = {
     "name": "",
+    "area": "",               # "" = Devices tab, "pool" = Pool tab
     "kind": "heatpump",
     "switch": "",
     "power": "",              # power sensor (W), optional
@@ -73,6 +77,9 @@ def validate(new: dict, admin: bool, current: dict | None = None) -> dict:
             value = str(value).strip()[:40]
             if not value:
                 raise ValueError("Give the device a name")
+        elif key == "area":
+            if value not in ("", "pool"):
+                raise ValueError("Unknown area")
         elif key == "kind":
             if value not in KINDS:
                 raise ValueError("Unknown device type")

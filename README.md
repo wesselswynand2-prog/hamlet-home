@@ -1,6 +1,6 @@
 # Hamlet Home
 
-One app for the home: **Energy** (power flow, today in kWh and rand, power chart, 7/30-day history), **Water** (booster pump, pressure, dry-run protection, pool pump timer, irrigation) **Geyser** (Hamlet Geyser) and **Controls** (lights, gates, aircons, plugs by room).
+One app for the home: **Energy** (power flow, today in kWh and rand, power chart, 7/30-day history), **Irrigation** (booster pump with a live water diagram, pressure, dry-run protection, irrigation valves), **Pool** (pool pump timer/solar, pool temperature, pool devices such as a heat pump, lights or chlorinator), **Geyser** (Hamlet Geyser) and **Controls** (lights, gates, aircons, plugs by room).
 
 ## Install with HACS (recommended)
 1. HACS → ⋮ → **Custom repositories** → paste `https://github.com/wesselswynand2-prog/hamlet-home`, type **Integration** → Add.
@@ -57,7 +57,7 @@ A small "Installed and supported by" footer with the Hamlet Elektries logo (`fro
 The **?** button at the top right opens the user guide in the app (`frontend/guide.md` – edit that file to change it), with contents and the installer's phone / email / WhatsApp. Admins enter those under *Contact your installer → Edit contact details*.
 
 ## Devices (heat pumps, heaters, aircons … on a Shelly)
-The **Devices** tab (admins: **+ Add a device**): name, type, the Shelly switch, its power sensor (optional) and rated watts. Each device then works like the pool pump:
+The **Devices** tab (admins: **+ Add a device**; pool devices go on the **Pool** tab via *Show on*): name, type, the Shelly switch, its power sensor (optional) and rated watts. Each device then works like the pool pump:
 - **Timer** (run times), **Solar** (start when spare solar is above X W, keep running while above Y W, run hours per day, only inside the solar hours), **On**, **Off**.
 - In Solar mode it takes part in **Energy → Solar priority** with the pool pump and geysers – put them in the order you want.
 - **Wait between switches** (default 5 min) protects heat-pump / aircon compressors.

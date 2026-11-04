@@ -161,10 +161,11 @@ async def _water_entry(hass):
     hass.states.async_set("sensor.druk_hz", "48", {"unit_of_measurement": "Hz"})
     hass.states.async_set("sensor.water_druk", "20", {"unit_of_measurement": "kPa"})  # 0.2 bar
     hass.states.async_set("switch.swembad", "off")
+    hass.states.async_set("sensor.pool_float", "24.6", {"unit_of_measurement": "°C"})
     entry = MockConfigEntry(domain=DOMAIN, title="Huis", data={
         "name": "Huis", "preset": "victron", "solar_power": ["sensor.pv"], "load_power": ["sensor.load"]},
         options={"pump_switch": "switch.druk_pomp", "pump_power": "sensor.druk_power", "pump_hz": "sensor.druk_hz",
-                 "water_pressure": "sensor.water_druk", "pool_switch": "switch.swembad"})
+                 "water_pressure": "sensor.water_druk", "pool_switch": "switch.swembad", "pool_temp": "sensor.pool_float"})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -200,6 +201,7 @@ async def test_water_dry_run_pool_and_ws(enable_custom_integrations, hass: HomeA
     msg = await client.receive_json()
     ws = msg["result"]["water"]
     assert ws["tripped"] is True and ws["features"]["pool_switch"] and ws["pump_today"]["seconds"] >= 60
+    assert ws["features"]["pool_temp"] and ws["live"]["pool_temp"] == 24.6
     assert ws["rows"]["today"]
 
     # reset turns the pump back on

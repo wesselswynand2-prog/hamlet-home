@@ -33,6 +33,14 @@ def test_validate():
         except ValueError:
             pass
     assert dv.new_id("Pool Heat-Pump", {"pool_heat_pump"}) == "pool_heat_pump_2"
+    # devices linked to the pool show on the Pool tab; only an admin can move them
+    assert dv.validate({"area": "pool", "kind": "light"}, admin=True) == {"area": "pool", "kind": "light"}
+    for bad, admin in (({"area": "garage"}, True), ({"area": "pool"}, False)):
+        try:
+            dv.validate(bad, admin)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
 
 
 async def test_devices_in_home_assistant(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user, freezer):

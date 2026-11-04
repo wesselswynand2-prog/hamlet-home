@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.12.6"
+VERSION = "0.13.0"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"
@@ -43,8 +43,9 @@ CONF_PUMP_SPEED = "pump_speed"
 CONF_POOL_SWITCH = "pool_switch"
 CONF_POOL_POWER = "pool_power"
 CONF_TANK_LEVEL = "tank_level"
+CONF_POOL_TEMP = "pool_temp"
 WATER_KEYS = (CONF_WATER_PRESSURE, CONF_WATER_SETPOINT, CONF_PUMP_SWITCH, CONF_PUMP_POWER, CONF_PUMP_HZ,
-              CONF_PUMP_AMPS, CONF_PUMP_SPEED, CONF_POOL_SWITCH, CONF_POOL_POWER, CONF_TANK_LEVEL)
+              CONF_PUMP_AMPS, CONF_PUMP_SPEED, CONF_POOL_SWITCH, CONF_POOL_POWER, CONF_TANK_LEVEL, CONF_POOL_TEMP)
 
 # Weather & solar forecast (all optional; found automatically when empty)
 CONF_WEATHER = "weather_entity"

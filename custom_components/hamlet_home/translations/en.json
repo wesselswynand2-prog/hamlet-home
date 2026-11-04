@@ -73,7 +73,7 @@
         "title": "Hamlet Home",
         "menu_options": {
           "energy": "Energy (solar, battery, grid)",
-          "water": "Water & pump",
+          "water": "Water, pump & pool",
           "weather": "Weather & solar forecast",
           "costs": "Costs & load breakdown",
           "app": "Name & icon in the sidebar",
@@ -81,7 +81,7 @@
         }
       },
       "water": {
-        "title": "Water & pump",
+        "title": "Water, pump & pool",
         "description": "Everything is optional – pick what this house has. With a pump switch, the app can stop the booster pump if it runs dry, and run the pool pump on a timer.",
         "data": {
           "water_pressure": "Water pressure (bar, kPa or psi)",
@@ -93,6 +93,7 @@
           "pump_speed": "Pump speed (% or rpm)",
           "pool_switch": "Pool pump switch",
           "pool_power": "Pool pump power (W)",
+          "pool_temp": "Pool water temperature (optional, e.g. a pool float sensor)",
           "tank_level": "Water tank level (%)"
         }
       },

@@ -22,6 +22,7 @@ from .const import (
     CONF_PUMP_SPEED,
     CONF_PUMP_SWITCH,
     CONF_TANK_LEVEL,
+    CONF_POOL_TEMP,
     CONF_WATER_PRESSURE,
     CONF_WATER_SETPOINT,
     DOMAIN,
@@ -150,7 +151,7 @@ class WaterController:
             "pressure": self._num(CONF_WATER_PRESSURE), "setpoint": self._num(CONF_WATER_SETPOINT),
             "pump_switch": pump_sw, "pump_w": pump_w, "pump_hz": hz, "pump_a": self._num(CONF_PUMP_AMPS),
             "pump_speed": self._num(CONF_PUMP_SPEED), "pool_switch": pool_sw, "pool_w": pool_w,
-            "tank": self._num(CONF_TANK_LEVEL),
+            "tank": self._num(CONF_TANK_LEVEL), "pool_temp": self._num(CONF_POOL_TEMP),
         }
         live["pump_running"] = water.is_running(pump_sw, pump_w, hz, s["running_watts"]) if (pump_sw is not None or pump_w is not None or hz is not None) else None
         live["pool_running"] = water.is_running(pool_sw, pool_w, None, s["running_watts"]) if (pool_sw is not None or pool_w is not None) else None

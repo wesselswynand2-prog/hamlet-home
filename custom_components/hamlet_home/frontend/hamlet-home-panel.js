@@ -360,9 +360,12 @@ class HamletHomePanel extends HTMLElement {
   _renderTabs() {
     const tabs = [["energy", "mdi:lightning-bolt", "Energy"], ["costs", "mdi:cash-multiple", "Costs"]];
     if (this._weather) tabs.push(["weather", "mdi:weather-partly-cloudy", "Weather"]);
-    if (this._water || this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:water-pump", "Water"]);
+    const wf = this._water?.features || {};
+    const poolDevs = (this._devices || []).filter((d) => d.area === "pool");
+    if (wf.pump_switch || wf.pump_power || wf.pump_hz || wf.water_pressure || this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:sprinkler-variant", "Irrigation"]);
+    if (wf.pool_switch || wf.pool_power || wf.pool_temp || poolDevs.length || this._isAdmin) tabs.push(["pool", "mdi:pool", "Pool"]);
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
-    if (this._devices?.length || this._isAdmin) tabs.push(["devices", "mdi:power-plug", "Devices"]);
+    if ((this._devices || []).some((d) => d.area !== "pool") || this._isAdmin) tabs.push(["devices", "mdi:power-plug", "Devices"]);
     tabs.push(["controls", "mdi:light-switch", "Controls"]);
     if (!tabs.some((t) => t[0] === this._tab) && this._tab !== "help") this._tab = "energy";
     this.shadowRoot.getElementById("tabs").innerHTML = tabs.length < 2 ? "" : tabs.map(([id, icon, label]) =>
@@ -376,6 +379,7 @@ class HamletHomePanel extends HTMLElement {
     this.shadowRoot.getElementById("helpbtn")?.setAttribute("aria-pressed", this._tab === "help");
     if (this._tab === "geyser") return this._buildGeyser();
     if (this._tab === "water") return this._buildWater();
+    if (this._tab === "pool") return this._buildPool();
     if (this._tab === "controls") return this._buildControls();
     if (this._tab === "weather") return this._buildModule("weather");
     if (this._tab === "costs") return this._buildModule("costs");
@@ -530,8 +534,9 @@ class HamletHomePanel extends HTMLElement {
     if (s.water !== undefined) this._water = s.water;
     if (s.solar_loads !== undefined) this._solar = s.solar_loads;
     if (s.irrigation !== undefined) this._irr = s.irrigation;
-    if (this._tab === "water") return this._renderWater();
     if (s.devices !== undefined) this._devices = s.devices;
+    if (this._tab === "water") return this._renderWater();
+    if (this._tab === "pool") { this._renderWater(); const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
     if (this._tab === "devices") { const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
     if (this._tab === "weather" || this._tab === "costs" || this._tab === "help") return;
     if (this._tab === "controls") {
@@ -1185,14 +1190,12 @@ Object.assign(HamletHomePanel.prototype, {
   _buildWater() {
     this._main.innerHTML = `
       <div class="card alarm" id="walarm" hidden></div>
-      <section class="card s7" id="wpump"><h2>Booster pump <span class="sub" id="wpumpsub"></span></h2><div id="wpumpbody"></div><div id="wpumpdia"></div></section>
-      <section class="card s5" id="wpool"><h2>Pool pump</h2><div id="wpoolbody"></div><div id="wpoolsched"></div>
-        <div class="actions" id="wpoolact" hidden><span class="msg" id="wpoolmsg"></span><button class="btn" data-w="poolreset">Discard</button><button class="btn primary" data-w="poolsave">Save times</button></div></section>
+      <section class="card" id="wpump"><h2>Booster pump <span class="sub" id="wpumpsub"></span></h2><div id="wpumpbody"></div><div id="wpumpdia"></div></section>
       <section class="card" id="wirr"><h2><ha-icon icon="mdi:sprinkler-variant"></ha-icon>Irrigation <span class="sub" id="wirrsub"></span></h2>
         <div id="irrlive"></div><div id="irrform"></div>
         <div class="actions" id="irract" hidden><span class="msg" id="irrmsg"></span><button class="btn" data-irr="discard">Discard</button><button class="btn primary" data-irr="save">Save changes</button></div></section>
       <section class="card" id="wchartcard"><h2>Water pressure <span class="sub"><span class="seg"><button data-wday="today" aria-pressed="${(this._wday || "today") === "today"}">Today</button><button data-wday="yesterday" aria-pressed="${this._wday === "yesterday"}">Yesterday</button></span></span></h2>
-        <div class="legend" style="margin:0 0 6px"><span class="key"><i style="background:var(--c-load)"></i>Pressure (bar)</span><span class="key"><i style="background:var(--accent);opacity:.25"></i>Booster pump running</span><span class="key" id="wpoolkey"><i style="background:var(--c-solar);opacity:.5"></i>Pool pump running</span></div>
+        <div class="legend" style="margin:0 0 6px"><span class="key"><i style="background:var(--c-load)"></i>Pressure (bar)</span><span class="key"><i style="background:var(--accent);opacity:.25"></i>Booster pump running</span></div>
         <div class="chartwrap" id="wchart"></div></section>
       <section class="card" id="wprot" hidden><h2>Protection &amp; alerts <span class="sub">admin only</span></h2><div id="wprotbody"></div>
         <div class="actions"><span class="msg" id="wprotmsg"></span><button class="btn primary" data-w="protsave">Save</button></div></section>`;
@@ -1204,23 +1207,58 @@ Object.assign(HamletHomePanel.prototype, {
     this._renderWater(); this._renderPressure();
   },
 
+  /* Pool tab: the pool pump, the water temperature and any devices linked to the pool (heat pump, lights …) */
+  async _buildPool() {
+    this._main.innerHTML = `
+      <section class="card s7" id="wpool"><h2><ha-icon icon="mdi:pump"></ha-icon>Pool pump</h2><div id="wpoolbody"></div><div id="wpoolsched"></div>
+        <div class="actions" id="wpoolact" hidden><span class="msg" id="wpoolmsg"></span><button class="btn" data-w="poolreset">Discard</button><button class="btn primary" data-w="poolsave">Save times</button></div></section>
+      <section class="card s5" id="wpooltemp" style="align-self:start"><h2><ha-icon icon="mdi:pool-thermometer"></ha-icon>Pool water</h2><div id="wpooltempbody"></div></section>
+      <div id="pooldevs" style="display:contents"></div>`;
+    this._wShown = {}; this._poolDirty = false;
+    this._renderWater();
+    if (!customElements.get("hamlet-home-devices")) {
+      try { await import(`/hamlet_home_static/hamlet-home-devices.js?v=${VERSION}`); } catch (e) { return; }
+    }
+    const holder = this.shadowRoot.getElementById("pooldevs");
+    if (this._tab !== "pool" || !holder) return;
+    const el = document.createElement("hamlet-home-devices");
+    el.area = "pool";
+    el.hass = this._hass;
+    holder.appendChild(el);
+    el.update({ ...(this._snap || {}), devices: this._devices || [], solar_loads: this._solar, is_admin: this._isAdmin });
+  },
+
   _renderWater() {
     const w = this._water; const $ = (id) => this.shadowRoot.getElementById(id);
-    if (!$("wpump")) return;
-    this._renderIrr();
-    if (!w) { ["wpump", "wpool", "wchartcard", "wprot", "walarm"].forEach((id) => { $(id).hidden = true; }); return; }
+    const hide = (id, v) => { const e = $(id); if (e) e.hidden = v; };
+    if (!$("wpump") && !$("wpool")) return;
+    if ($("wpump")) this._renderIrr();
+    const f0 = w?.features || {};
+    const hasPool = f0.pool_switch || f0.pool_power;
+    if ($("wpool")) {
+      hide("wpool", !hasPool);
+      hide("wpooltemp", !f0.pool_temp);
+      if (!hasPool && !f0.pool_temp) {
+        const holder = $("wpooltemp");
+        if (holder) { holder.hidden = false; this._setHTML($("wpooltempbody"), `<div class="muted small">${this._isAdmin ? "No pool pump set up yet. Add the pool pump switch, its power and a pool temperature sensor under Settings → Devices &amp; services → Hamlet Home → Configure → Water, pump &amp; pool. Add a pool heat pump, lights or a chlorinator below." : "Nothing set up for the pool yet."}</div>`); }
+      }
+    }
+    if (!w) { ["wpump", "wpool", "wchartcard", "wprot", "walarm"].forEach((id) => hide(id, true)); return; }
     const L = w.live || {}, f = w.features || {}, st = w.settings || {};
-    const hasPump = f.pump_switch || f.pump_power || f.pump_hz || f.water_pressure;
-    $("wpump").hidden = !hasPump;
-    $("wpool").hidden = !(f.pool_switch || f.pool_power);
-    $("wchartcard").hidden = !f.water_pressure;
-    $("wpoolkey").hidden = !(f.pool_switch || f.pool_power);
-    $("wprot").hidden = !this._isAdmin || !hasPump;
+    const hasPump = !!$("wpump") && (f.pump_switch || f.pump_power || f.pump_hz || f.water_pressure);
+    hide("wpump", !hasPump);
+    hide("wchartcard", !f.water_pressure);
+    hide("wprot", !this._isAdmin || !hasPump);
+    if (f.pool_temp && $("wpooltempbody")) {
+      const t = num(L.pool_temp);
+      this._setHTML($("wpooltempbody"), `<div class="row2"><div class="big" style="font-size:38px;font-weight:300">${t === null ? "–" : t.toFixed(1)}<small style="font-size:16px"> °C</small></div>
+        <span class="muted small">${t === null ? "The sensor isn't reporting" : t >= 28 ? "Warm" : t >= 24 ? "Nice for swimming" : t >= 20 ? "Fresh" : "Cold"}</span></div>`);
+    }
 
     // alarm
     const al = $("walarm");
-    al.hidden = !w.tripped;
-    if (w.tripped) this._setHTML(al, `<ha-icon icon="mdi:water-alert"></ha-icon><div><div class="t">Booster pump stopped – no water?</div>
+    if (al) al.hidden = !w.tripped;
+    if (al && w.tripped) this._setHTML(al, `<ha-icon icon="mdi:water-alert"></ha-icon><div><div class="t">Booster pump stopped – no water?</div>
       <div class="d">It ran below ${st.dry_run_bar} bar for ${Math.round(st.dry_run_seconds)} s${w.tripped_at ? ` at ${new Date(w.tripped_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}. Check the supply, then reset.</div></div>
       <button class="btn primary big" data-w="reset"><ha-icon icon="mdi:restart" style="--mdc-icon-size:18px;color:inherit"></ha-icon>Reset &amp; start pump</button>`);
 
@@ -1266,8 +1304,8 @@ Object.assign(HamletHomePanel.prototype, {
 
     if (hasPump) this._renderWaterDiagram();
 
-    // pool pump
-    if (f.pool_switch || f.pool_power) {
+    // pool pump (Pool tab)
+    if ((f.pool_switch || f.pool_power) && $("wpoolbody")) {
       const pr = L.pool_running, t = w.pool_today || {};
       const runMin = Math.round((t.seconds || 0) / 60);
       this._setHTML($("wpoolbody"), `
@@ -1424,7 +1462,7 @@ Object.assign(HamletHomePanel.prototype, {
     const ticks = []; for (let v = 0; v <= ymax + 1e-9; v += step) ticks.push(+v.toFixed(2));
     const xt = iw < 420 ? [0, 360, 720, 1080, 1440] : [0, 180, 360, 540, 720, 900, 1080, 1260, 1440];
     wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Water pressure and pump running time">
-      ${band(3, "var(--accent)", 0.22)}${band(4, "var(--c-solar)", 0.28)}
+      ${band(3, "var(--accent)", 0.22)}
       <g class="grid">${ticks.map((v) => `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/>`).join("")}</g>
       <g class="axis">${ticks.map((v) => `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join("")}
         ${xt.map((t) => `<text x="${x(t)}" y="${H - 5}" text-anchor="${t === 0 ? "start" : t === 1440 ? "end" : "middle"}">${hhmm(t)}</text>`).join("")}</g>
@@ -1524,7 +1562,7 @@ Object.assign(HamletHomePanel.prototype, {
     // icons on top of the drops (HTML so ha-icon works)
     let icons = `<div class="ic ${house ? "on" : ""}" style="${pct(...icon(0))}"><ha-icon icon="mdi:home-variant"></ha-icon></div>`;
     zones.forEach((z, i) => { icons += `<div class="ic ${zOn[i] ? "on" : ""} ${z.available === false ? "bad" : ""}" style="${pct(...icon(i + 1))}" title="${esc(z.name)}"><ha-icon icon="mdi:sprinkler-variant"></ha-icon></div>`; });
-    el.innerHTML = `<div class="wdia" role="img" aria-label="${esc(pumpRun ? "Pump running" : "Pump standing by")}${anyZone ? ", watering " + zones.filter((_, i) => zOn[i]).map((z) => z.name).join(", ") : house ? ", water to the house" : ""}">
+    el.innerHTML = `<div class="wdia" style="max-width:${Math.round(Wd * 1.25)}px" role="img" aria-label="${esc(pumpRun ? "Pump running" : "Pump standing by")}${anyZone ? ", watering " + zones.filter((_, i) => zOn[i]).map((z) => z.name).join(", ") : house ? ", water to the house" : ""}">
       <svg viewBox="0 0 ${Wd} ${H}">${svg}</svg>${icons}</div>`;
   },
 

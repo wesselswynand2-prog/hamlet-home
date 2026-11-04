@@ -5,7 +5,7 @@ const num = (v) => (v === null || v === undefined || v === "" || Number.isNaN(Nu
 const fmtW = (w) => (num(w) === null ? "–" : Math.abs(w) >= 1000 ? `${(w / 1000).toFixed(1)} kW` : `${Math.round(w)} W`);
 const WDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 const MODES = [["auto", "Timer"], ["solar", "Solar"], ["on", "On"], ["off", "Off"]];
-const KINDS = [["heatpump", "Heat pump"], ["heater", "Heater"], ["aircon", "Aircon"], ["pump", "Pump"], ["charger", "EV / charger"], ["other", "Other"]];
+const KINDS = [["heatpump", "Heat pump"], ["heater", "Heater"], ["aircon", "Aircon"], ["pump", "Pump"], ["light", "Lights"], ["chlorinator", "Chlorinator / salt cell"], ["cleaner", "Pool cleaner"], ["charger", "EV / charger"], ["other", "Other"]];
 
 const STYLE = `
 :host { display: contents; }
@@ -69,9 +69,11 @@ class HamletHomeDevices extends HTMLElement {
   }
   set hass(h) { this._hass = h; }
   set isAdmin(v) { this._admin = v; }
+  // "" = Devices tab, "pool" = Pool tab: each tab shows only its own devices
+  set area(v) { this._area = v || ""; }
 
   update(s) {
-    if (s.devices !== undefined) this._devs = s.devices || [];
+    if (s.devices !== undefined) { this._all = s.devices || []; this._devs = this._all.filter((d) => (d.area || "") === (this._area || "")); }
     if (s.solar_loads !== undefined) this._solar = s.solar_loads;
     if (s.is_admin !== undefined) this._admin = s.is_admin;
     this._render();
@@ -90,8 +92,8 @@ class HamletHomeDevices extends HTMLElement {
         ${this._devs.map((d) => `<section class="card s6" data-d="${esc(d.id)}">
           <h2 id="h-${esc(d.id)}"></h2><div id="b-${esc(d.id)}"></div><div id="sol-${esc(d.id)}"></div>
           <h3 id="sh-${esc(d.id)}"></h3><div id="sc-${esc(d.id)}"></div><div id="ad-${esc(d.id)}"></div></section>`).join("")}
-        ${!this._devs.length ? `<section class="card empty">No devices yet.${this._admin ? " Add a heat pump, heater, aircon or anything on a Shelly below – it then works like the pool pump: Timer, Solar, On or Off." : ""}</section>` : ""}
-        ${this._admin ? `<section class="card ${this._devs.length % 2 ? "s6" : ""}" id="addcard"><details id="adddet" ${this._devs.length ? "" : "open"}><summary>+ Add a device</summary><div id="addform"></div></details></section>` : ""}`;
+        ${!this._devs.length ? `<section class="card empty">${this._area === "pool" ? `No pool devices yet.${this._admin ? " Add the pool heat pump, lights, a chlorinator or cleaner on a Shelly below – each gets Timer, Solar, On or Off." : ""}` : `No devices yet.${this._admin ? " Add a heat pump, heater, aircon or anything on a Shelly below – it then works like the pool pump: Timer, Solar, On or Off." : ""}`}</section>` : ""}
+        ${this._admin ? `<section class="card ${this._devs.length % 2 ? "s6" : ""}" id="addcard"><details id="adddet" ${this._devs.length ? "" : "open"}><summary>+ Add a ${this._area === "pool" ? "pool device" : "device"}</summary><div id="addform"></div></details></section>` : ""}`;
       if (!this._listening) {
         this._listening = true;
         this.shadowRoot.addEventListener("click", (ev) => this._click(ev));
@@ -167,14 +169,15 @@ class HamletHomeDevices extends HTMLElement {
       try { this._opts = await this._hass.callWS({ type: `${DOMAIN}/devices_entities` }); }
       catch (e) { holder.innerHTML = `<div class="msg err">${esc(e.message || e)}</div>`; return; }
     }
-    const d = id ? this._devs.find((x) => x.id === id) : { name: "", kind: "heatpump", switch: "", power: "", rated_w: 1500, min_switch_s: 300 };
-    const used = new Set(this._devs.filter((x) => x.id !== id).map((x) => x.switch));
+    const d = id ? this._devs.find((x) => x.id === id) : { name: "", area: this._area || "", kind: "heatpump", switch: "", power: "", rated_w: 1500, min_switch_s: 300 };
+    const used = new Set((this._all || this._devs).filter((x) => x.id !== id).map((x) => x.switch));
     const opt = (list, cur, empty) => (empty ? `<option value="">${empty}</option>` : "") + list.filter((o) => !used.has(o.id) || o.id === cur)
       .map((o) => `<option value="${esc(o.id)}" ${o.id === cur ? "selected" : ""}>${esc(o.name)} (${esc(o.id)})</option>`).join("");
     const p = id ? `e-${id}` : "n";
     holder.innerHTML = `<div style="${id ? "margin-top:16px;border-top:1px solid var(--line);padding-top:8px" : "margin-top:8px"}">
       ${id ? `<div class="small muted" style="margin-bottom:4px">Device settings (admin)</div>` : ""}
-      <div class="field"><label for="${p}-name">Name</label><input type="text" id="${p}-name" maxlength="40" value="${esc(d.name)}" placeholder="e.g. Pool heat pump"></div>
+      <div class="field"><label for="${p}-name">Name</label><input type="text" id="${p}-name" maxlength="40" value="${esc(d.name)}" placeholder="${this._area === "pool" ? "e.g. Pool heat pump" : "e.g. Office aircon"}"></div>
+      <div class="field"><label for="${p}-area">Show on</label><select id="${p}-area"><option value="" ${(d.area || "") === "" ? "selected" : ""}>Devices tab</option><option value="pool" ${d.area === "pool" ? "selected" : ""}>Pool tab</option></select></div>
       <div class="field"><label for="${p}-kind">Type</label><select id="${p}-kind">${KINDS.map(([k, l]) => `<option value="${k}" ${k === d.kind ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="field"><label for="${p}-switch">Switch<span class="hint">the Shelly relay that runs it</span></label><select id="${p}-switch">${opt(this._opts.switches, d.switch, "– pick –")}</select></div>
       <div class="field"><label for="${p}-power">Power sensor<span class="hint">optional – the Shelly's W</span></label><select id="${p}-power">${opt(this._opts.power, d.power, "none (use rated power)")}</select></div>
@@ -186,7 +189,7 @@ class HamletHomeDevices extends HTMLElement {
 
   _formValues(id) {
     const p = id ? `e-${id}` : "n", $ = (x) => this.shadowRoot.getElementById(`${p}-${x}`);
-    return { name: $("name").value, kind: $("kind").value, switch: $("switch").value, power: $("power").value,
+    return { name: $("name").value, area: $("area").value, kind: $("kind").value, switch: $("switch").value, power: $("power").value,
       rated_w: Number($("rated").value), min_switch_s: Number($("min").value) };
   }
 
