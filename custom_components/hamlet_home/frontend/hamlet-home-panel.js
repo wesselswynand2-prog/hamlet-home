@@ -78,6 +78,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .node.mid { width: 21%; aspect-ratio: 1; }
 .node.xs { width: 13%; aspect-ratio: 1; border-style: dashed; } .node.xs .v { font-size: 12px; } .node.xs ha-icon { --mdc-icon-size: 16px; } .node.xs .s { font-size: 10px; }
 .node.sm { width: 15%; aspect-ratio: 1; } .node.sm .v { font-size: 12px; } .node.sm ha-icon { --mdc-icon-size: 16px; }
+.finfo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+.ftile { font: inherit; text-align: left; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 10px; min-width: 0; }
+.ftile ha-icon { --mdc-icon-size: 22px; color: var(--c-batt); grid-row: span 2; }
+.ftile .n { font-size: 13px; color: var(--muted); line-height: 1.2; overflow-wrap: anywhere; }
+.ftile .v { font-size: 20px; font-variant-numeric: tabular-nums; }
+.ftile .pen { --mdc-icon-size: 16px; color: var(--muted); grid-row: span 2; }
+button.ftile { cursor: pointer; } button.ftile:hover { border-color: var(--accent); }
+.fedit { border: 1px solid var(--accent); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.fedit .row { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; }
+.fedit input[type=range] { flex: 1; accent-color: var(--accent); }
+.fedit .val { font-size: 22px; min-width: 70px; text-align: center; font-variant-numeric: tabular-nums; }
+.fedit .ib { font: inherit; width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--primary-text-color); cursor: pointer; font-size: 18px; }
 .lab { position: absolute; transform: translate(-50%, 0); font-size: 12px; color: var(--muted); white-space: nowrap; max-width: 30%; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 480px) { .node.xs .s { display: none; } .node.xs .v { font-size: 10px; } .node.xs ha-icon { --mdc-icon-size: 13px; } .node.mid .s { font-size: 9px; } .node .v { font-size: 13px; } .node.big .v { font-size: 15px; } .node .s { font-size: 10px; } .node.sm .v { font-size: 10px; } }
 
@@ -230,6 +243,7 @@ class HamletHomePanel extends HTMLElement {
     this._hass = hass;
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
+    if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
     this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
@@ -316,7 +330,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._tab === "costs") return this._buildModule("costs");
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
-      <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div></section>
+      <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div><div id="flowinfo"></div></section>
       <section class="card s5"><h2>Today <span class="sub" id="todaysub"></span></h2><div id="batt"></div><div id="today"></div><div id="battset"></div></section>
       <div id="solfc" style="display:contents"></div>
       <section class="card" id="prio" hidden><h2>Solar priority <span class="sub" id="priosub"></span></h2><div id="priobody"></div></section>
@@ -438,6 +452,8 @@ class HamletHomePanel extends HTMLElement {
     }
     if (ev.target.closest("#savetariff")) return this._saveTariff();
     if (ev.target.closest("#savebatt")) return this._saveBattery();
+    const fi = ev.target.closest("[data-fi]");
+    if (fi) return this._flowInfoClick(fi);
     const pr = ev.target.closest("[data-prio]");
     if (pr) return this._prioClick(pr);
     return this._waterClick(ev);
@@ -462,6 +478,7 @@ class HamletHomePanel extends HTMLElement {
     else if (s.note && this._isAdmin) { note.hidden = false; note.textContent = s.note; }
     else note.hidden = true;
     this._renderFlow();
+    this._renderFlowInfo();
     this._renderBattery();
     this._renderToday();
     this._renderTariff();
@@ -484,7 +501,9 @@ class HamletHomePanel extends HTMLElement {
     const P = split
       ? { pvac: [200, 44], grid: [58, 158], home, bus: [200, 265], pvdc: [58, 265], batt: [200, 343] }
       : { solar: [200, 48], grid: [62, 160], home, batt: [200, 272] };
-    const exTop = split ? 82 : 70, exSpan = split ? 170 : 180;
+    // spread the extra loads over the whole height when there are several, so names don't run into circles
+    const exTop = extras.length > 2 ? (split ? 40 : 36) : (split ? 82 : 70);
+    const exSpan = extras.length > 2 ? (split ? 300 : 236) : (split ? 170 : 180);
     const ex = extras.map((_, i, a) => [340, a.length === 1 ? home[1] : exTop + i * (exSpan / Math.max(a.length - 1, 1))]);
     const showBus = split && (f.battery || f.pv_dc);
     if (this._flowBuilt !== shape) {
@@ -513,7 +532,7 @@ class HamletHomePanel extends HTMLElement {
       ex.forEach((p, i) => {
         svg += wire(`w-ex${i}`, curve(P.home, p));
         nodes += node(`n-ex${i}`, "sm", p, "var(--muted)", "mdi:flash", null)
-          + `<div class="lab" style="left:${(p[0] / 400) * 100}%;top:calc(${(p[1] / H) * 100}% + ${(10.5 * 320 / H).toFixed(1)}%)">${esc(extras[i].name)}</div>`;
+          + `<div class="lab" style="left:${(p[0] / 400) * 100}%;top:calc(${(p[1] / H) * 100}% + ${(10.5 * 320 / H).toFixed(1)}%)">${esc(String(extras[i].name).replace(/\s*(kwh\s*meter\s*)?power$/i, "").replace(/\s*kwh\s*meter$/i, ""))}</div>`;
       });
       nodes += node("n-home", "big", P.home, "var(--c-load)", "mdi:home", "house");
       box.innerHTML = `<div class="flow" style="aspect-ratio:400 / ${H}" role="img" aria-label="Power flow"><svg viewBox="0 0 400 ${H}" preserveAspectRatio="none">${svg}</svg>${nodes}</div>`;
@@ -563,6 +582,84 @@ class HamletHomePanel extends HTMLElement {
     extras.forEach((e, i) => { setNode(`n-ex${i}`, fmtW(e.w)); dash(`w-ex${i}`, e.w, "var(--c-load)", true); });
     const sub = this.shadowRoot.getElementById("flowsub");
     if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  /* ------------------------------------------- info under the power flow */
+  _fiEditable(eid) {
+    const d = eid.split(".")[0];
+    return (d === "number" || d === "input_number") && (this._isAdmin || this._snap?.flow_info_edit);
+  }
+
+  _renderFlowInfo() {
+    const el = this.shadowRoot.getElementById("flowinfo"); if (!el || !this._snap) return;
+    const ids = this._snap.flow_info || [];
+    if (!ids.length) { this._setHTML(el, ""); return; }
+    if (this._fiEdit && el.querySelector(".fedit")) return;   // don't redraw under the user's finger
+    const tiles = ids.map((eid) => {
+      const st = this._hass.states[eid];
+      if (!st) return "";
+      const a = st.attributes, u = a.unit_of_measurement || "";
+      const n = num(st.state);
+      const v = n === null ? st.state : `${n.toFixed(Math.abs(n) < 10 && n % 1 ? 1 : 0)}${u === "%" ? "%" : u ? ` ${u}` : ""}`;
+      const icon = a.icon || (u === "%" ? "mdi:battery-50" : "mdi:information-outline");
+      const edit = this._fiEditable(eid) && !["unavailable", "unknown"].includes(st.state);
+      const inner = `<ha-icon icon="${esc(icon)}"></ha-icon><span class="n">${esc(a.friendly_name || eid)}</span>${edit ? `<ha-icon class="pen" icon="mdi:pencil"></ha-icon>` : "<span></span>"}<span class="v">${esc(v)}</span>`;
+      return edit ? `<button class="ftile" data-fi="open" data-e="${esc(eid)}" aria-label="Change ${esc(a.friendly_name || eid)}">${inner}</button>` : `<div class="ftile">${inner}</div>`;
+    }).join("");
+    let editor = "";
+    if (this._fiEdit) {
+      const st = this._hass.states[this._fiEdit.eid], a = st?.attributes || {};
+      const min = num(a.min) ?? 0, max = num(a.max) ?? 100, step = num(a.step) ?? 1, u = a.unit_of_measurement || "";
+      const v = this._fiEdit.value;
+      editor = `<div class="fedit"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-weight:500">${esc(a.friendly_name || this._fiEdit.eid)}</b>
+          <span class="muted small">now ${esc(st?.state ?? "–")}${esc(u === "%" ? "%" : u ? ` ${u}` : "")}</span></div>
+        <div class="row"><button class="ib" data-fi="minus" aria-label="Lower">−</button>
+          <input type="range" id="fi-range" min="${min}" max="${max}" step="${step}" value="${v}" aria-label="New value">
+          <button class="ib" data-fi="plus" aria-label="Higher">+</button><span class="val" id="fi-val">${v}${esc(u === "%" ? "%" : u ? ` ${u}` : "")}</span></div>
+        <div class="actions" style="margin-top:6px"><span class="msg" id="fi-msg"></span><button class="btn" data-fi="cancel">Cancel</button><button class="btn primary" data-fi="save">Save</button></div></div>`;
+    }
+    const html = `<div class="finfo">${tiles}</div>${editor}`;
+    if (!editor) { this._setHTML(el, html); return; }
+    el.innerHTML = html;
+    el._html = null;
+    const r = el.querySelector("#fi-range");
+    if (r) r.addEventListener("input", () => this._fiSet(Number(r.value)));
+  }
+
+  _fiSet(v) {
+    const st = this._hass.states[this._fiEdit.eid], a = st?.attributes || {};
+    const min = num(a.min) ?? 0, max = num(a.max) ?? 100, step = num(a.step) ?? 1, u = a.unit_of_measurement || "";
+    v = Math.min(max, Math.max(min, Math.round(v / step) * step));
+    v = Number(v.toFixed(String(step).split(".")[1]?.length || 0));
+    this._fiEdit.value = v;
+    const r = this.shadowRoot.getElementById("fi-range"), t = this.shadowRoot.getElementById("fi-val");
+    if (r) r.value = v;
+    if (t) t.textContent = `${v}${u === "%" ? "%" : u ? ` ${u}` : ""}`;
+  }
+
+  async _flowInfoClick(b) {
+    const act = b.dataset.fi;
+    if (act === "open") {
+      const eid = b.dataset.e, st = this._hass.states[eid];
+      this._fiEdit = { eid, value: num(st?.state) ?? 0 };
+      return this._renderFlowInfo();
+    }
+    if (!this._fiEdit) return;
+    const step = num(this._hass.states[this._fiEdit.eid]?.attributes?.step) ?? 1;
+    if (act === "minus") return this._fiSet(this._fiEdit.value - step);
+    if (act === "plus") return this._fiSet(this._fiEdit.value + step);
+    if (act === "cancel") { this._fiEdit = null; return this._renderFlowInfo(); }
+    if (act === "save") {
+      const { eid, value } = this._fiEdit;
+      try {
+        await this._hass.callService(eid.split(".")[0], "set_value", { entity_id: eid, value });
+        this._fiEdit = null;
+        this._renderFlowInfo();
+      } catch (e) {
+        const m = this.shadowRoot.getElementById("fi-msg");
+        if (m) { m.textContent = e.message || "Could not change it"; m.className = "msg err"; }
+      }
+    }
   }
 
   /* ----------------------------------------------------------- battery */

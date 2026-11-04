@@ -131,6 +131,11 @@ async def test_works_without_recorder(enable_custom_integrations, hass: HomeAssi
     await hass.async_block_till_done(wait_background_tasks=True)
     assert c.ready and "Recorder is off" in (c.backfill_note or "")
     assert c.live["solar"] == 2000
+    # info tiles under the power flow
+    hass.config_entries.async_update_entry(c.entry, options={**c.entry.options, "flow_info": ["sensor.soc", "number.dod"], "flow_info_clients_edit": True})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    snap = hass.data[DOMAIN]["controller"].snapshot()
+    assert snap["flow_info"] == ["sensor.soc", "number.dod"] and snap["flow_info_edit"] is True
 
 
 async def _water_entry(hass):

@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.9.2"
+VERSION = "0.9.3"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"
@@ -57,3 +57,7 @@ WEATHER_KEYS = (CONF_WEATHER, CONF_PV_TODAY, CONF_PV_TOMORROW, CONF_PV_REMAINING
 # Costs tab
 CONF_COST_LOADS = "cost_loads"   # power sensors (W) for the load breakdown, max 5
 MAX_COST_LOADS = 5
+
+# Info tiles under the power flow (sensor / number / input_number), e.g. Forecast SOC, Current DOD
+CONF_FLOW_INFO = "flow_info"
+CONF_FLOW_INFO_EDIT = "flow_info_clients_edit"

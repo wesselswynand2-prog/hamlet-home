@@ -23,7 +23,9 @@
         "data": {
           "extra_loads": "Extra loads to show in the power flow (power sensors, up to 4)",
           "battery_invert": "Battery sensor is positive when discharging (invert)",
-          "grid_invert": "Grid sensor is positive when exporting (invert)"
+          "grid_invert": "Grid sensor is positive when exporting (invert)",
+          "flow_info": "Info under the power flow (e.g. Forecast SOC, Current DOD) – number / input_number ones can be changed by tapping",
+          "flow_info_clients_edit": "Clients may change those values (otherwise admins only)"
         }
       }
     },
@@ -41,7 +43,9 @@
         "data": {
           "extra_loads": "Extra loads to show in the power flow (power sensors, up to 4)",
           "battery_invert": "Battery sensor is positive when discharging (invert)",
-          "grid_invert": "Grid sensor is positive when exporting (invert)"
+          "grid_invert": "Grid sensor is positive when exporting (invert)",
+          "flow_info": "Info under the power flow (e.g. Forecast SOC, Current DOD) – number / input_number ones can be changed by tapping",
+          "flow_info_clients_edit": "Clients may change those values (otherwise admins only)"
         }
       },
       "energy": {

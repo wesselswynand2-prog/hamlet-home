@@ -31,6 +31,7 @@ When HACS already shows a version, Hamlet Home stays quiet (no double notices); 
 - **Grid available** – AC-in voltage, a grid-connected sensor or Victron's grid-lost alarm.
 - **Battery** – power (+ while charging; Sunsynk/Deye usually need invert) and state of charge.
 - **Extra loads** – up to 4 power sensors shown around the house in the power flow.
+- **Info under the power flow** – any sensors (e.g. Forecast SOC) or number / input_number entities (e.g. Current DOD). Tap a number to change it with a slider and − / +. Admins only, unless "Clients may change those values" is ticked.
 
 ## How it works
 - On start it reads today's and yesterday's history from the recorder, so the charts and today's totals are complete straight away. Older days (up to 30) come from long-term statistics when your sensors have them, otherwise history builds up day by day.

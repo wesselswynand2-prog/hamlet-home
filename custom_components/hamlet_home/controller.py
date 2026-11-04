@@ -503,6 +503,8 @@ class EnergyController:
             "today": self.today(),
             "tariff": self.tariff,
             "battery": self.outlook() if (c.get(CONF_BATTERY_SOC) and c.get(CONF_BATTERY_POWER)) else None,
+            "flow_info": [e for e in _list(c.get("flow_info")) if e][:6],
+            "flow_info_edit": bool(c.get("flow_info_clients_edit")),
             "features": {
                 "battery": bool(c.get(CONF_BATTERY_POWER) or c.get(CONF_BATTERY_SOC)),
                 "soc": bool(c.get(CONF_BATTERY_SOC)),
