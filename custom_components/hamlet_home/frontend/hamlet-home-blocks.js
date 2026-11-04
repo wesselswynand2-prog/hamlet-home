@@ -216,7 +216,11 @@ class HamletHomeBlocks extends HTMLElement {
       box.classList.toggle("dead", down);
       this._set("v-noness", down ? "No power" : (() => { const [v, u] = W(noness); return `${v}<small>${u}</small>`; })());
       const exN = (d.extras || []).filter((e) => e.side === "noness" && num(e.w) !== null && e.w >= 1);
-      this._set("f-noness", rows(exN.length && !down ? exN.map((e) => [short(e.name), `${Math.round(e.w)} W`])
+      // each grid-side load (e.g. Geyser 1, Geyser 2) on its own row, then whatever is left as "Other"
+      const listed = exN.reduce((t, e) => t + e.w, 0), rest = noness !== null ? noness - listed : null;
+      const rowsN = exN.map((e) => [short(e.name), `${Math.round(e.w)} W`]);
+      if (rowsN.length && rest !== null && rest >= 20) rowsN.push(["Other", `${Math.round(rest)} W`]);
+      this._set("f-noness", rows(rowsN.length && !down ? rowsN
         : [["grid side (AC-in)", down ? "off" : noness !== null ? `${Math.round(noness)} W` : "–"]]));
       this._set("s-noness", "");
     }

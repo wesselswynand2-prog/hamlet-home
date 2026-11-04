@@ -21,6 +21,8 @@ from .const import (
     CONF_BATTERY_POWER,
     CONF_BATTERY_SOC,
     CONF_EXTRA_LOADS,
+    CONF_LOAD_ESSENTIAL,
+    CONF_LOAD_NONESSENTIAL,
     CONF_GRID_INVERT,
     CONF_GRID_POWER,
     CONF_GRID_STATUS,
@@ -86,6 +88,7 @@ class EnergyController:
         self._smooth: dict[str, float] = {}
         self._smooth_t: float | None = None
         self.extras: list[dict] = []
+        self._geyser_names: dict[str, str] = {}
         self.ready = False  # history backfill finished
         self.backfill_note: str | None = None
         self._units: dict[str, str] = {}
@@ -123,17 +126,33 @@ class EnergyController:
         chosen = _list(c.get(CONF_COST_LOADS))
         if not chosen:
             chosen = _list(c.get(CONF_EXTRA_LOADS)) + _list(c.get(CONF_POOL_POWER))
-            from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
-            reg = er.async_get(self.hass)
-            for g in self.hass.config_entries.async_entries("hamlet_geyser"):
-                meter = _list({**g.data, **g.options}.get("geyser_power"))
-                # no meter (Geyserwise / plain relay): Hamlet Geyser's own estimated "Geyser power" sensor
-                est = reg.async_get_entity_id("sensor", "hamlet_geyser", f"{g.entry_id}_geyser_power")
-                chosen += [est] if est else meter
+            chosen += self.geyser_sensors()
             devs = self.hass.data.get(DOMAIN, {}).get("devices")
             if devs is not None:
                 chosen += devs.power_sensors()
         return list(dict.fromkeys(chosen))[:MAX_COST_LOADS]
+
+    def geyser_sensors(self) -> list[str]:
+        """One power sensor per Hamlet Geyser: its meter, else its own estimated "Geyser power" sensor."""
+        from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
+        reg = er.async_get(self.hass)
+        out: list[str] = []
+        for g in self.hass.config_entries.async_entries("hamlet_geyser"):
+            meter = _list({**g.data, **g.options}.get("geyser_power"))
+            est = reg.async_get_entity_id("sensor", "hamlet_geyser", f"{g.entry_id}_geyser_power")
+            for eid in [est] if est else meter[:1]:
+                out.append(eid)
+                self._geyser_names[eid] = g.title    # "Geyser 1", not "Geyser 1 Geyser power"
+        return out
+
+    def _grid_side_loads(self) -> list[str]:
+        """Loads on the grid side (AC Loads): the chosen ones; with the essential / non-essential split
+        set up, the geysers go there too unless they were put in the essential extra loads."""
+        chosen = _list(self.conf.get("extra_loads_nonessential"))
+        if self.conf.get(CONF_LOAD_NONESSENTIAL) or self.conf.get(CONF_LOAD_ESSENTIAL):
+            ess = set(_list(self.conf.get(CONF_EXTRA_LOADS)))
+            chosen += [g for g in self.geyser_sensors() if g not in ess]
+        return list(dict.fromkeys(chosen))
 
     def _kind(self, entity_id: str) -> str:
         return "soc" if entity_id in self.mapping.soc else "power"
@@ -184,7 +203,7 @@ class EnergyController:
         self.acc.set(now, energy.combine(self._raw_now(), self.mapping))
         self.ready = True
         self._learn_capacity()
-        ids = self.mapping.all_entities() + _list(self.conf.get(CONF_EXTRA_LOADS)) + _list(self.conf.get("extra_loads_nonessential")) + _list(self.conf.get(CONF_GRID_STATUS))
+        ids = self.mapping.all_entities() + _list(self.conf.get(CONF_EXTRA_LOADS)) + self._grid_side_loads() + _list(self.conf.get(CONF_GRID_STATUS))
         self._unsubs.append(async_track_state_change_event(self.hass, ids, self._on_change))
         self._unsubs.append(async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=TICK_SECONDS)))
         self._save(5)
@@ -355,11 +374,12 @@ class EnergyController:
     def _read_live(self) -> dict:
         values = energy.combine(self._raw_now(), self.mapping)
         extras = []
-        grid_side = set(_list(self.conf.get("extra_loads_nonessential")))
-        ids = list(dict.fromkeys(_list(self.conf.get(CONF_EXTRA_LOADS)) + list(grid_side)))
+        side_list = self._grid_side_loads()
+        grid_side = set(side_list)
+        ids = list(dict.fromkeys(_list(self.conf.get(CONF_EXTRA_LOADS)) + side_list))
         for entity_id in ids:
             st = self.hass.states.get(entity_id)
-            name = (st.attributes.get("friendly_name") if st else None) or entity_id.split(".")[-1].replace("_", " ").title()
+            name = self._geyser_names.get(entity_id) or (st.attributes.get("friendly_name") if st else None) or entity_id.split(".")[-1].replace("_", " ").title()
             extras.append({"entity_id": entity_id, "name": name, "w": to_number(st, "power"),
                            "side": "noness" if entity_id in grid_side else "ess"})
         self.extras = extras
