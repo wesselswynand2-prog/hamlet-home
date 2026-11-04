@@ -213,6 +213,33 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .tile { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; }
 .tile .k { font-size: 12px; color: var(--muted); } .tile .v { font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* water diagram: supply -> booster pump -> house + irrigation valves */
+.wdia { position: relative; width: 100%; max-width: 760px; margin: 16px auto 0; --c-water: #1f8fd0; }
+.wdia svg { display: block; width: 100%; height: auto; overflow: visible; }
+.wdia .pipe { fill: none; stroke: var(--line); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.wdia .wet { fill: none; stroke: color-mix(in srgb, var(--c-water) 35%, transparent); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .4s; }
+.wdia .drops { fill: none; stroke: var(--c-water); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 1 11; opacity: 0; }
+.wdia .on .wet, .wdia .on .drops { opacity: 1; }
+.wdia .on .drops { animation: wrun 1.1s linear infinite; }
+@keyframes wrun { to { stroke-dashoffset: -24; } }
+.wdia .imp { transform-box: fill-box; transform-origin: center; }
+.wdia .spin .imp { animation: wspin .7s linear infinite; }
+@keyframes wspin { to { transform: rotate(360deg); } }
+.wdia .wave { animation: wwave 3s ease-in-out infinite alternate; }
+@keyframes wwave { to { transform: translateX(-12px); } }
+.wdia .spray circle { fill: var(--c-water); opacity: 0; }
+.wdia .on .spray circle { animation: wspray 1.2s ease-out infinite; }
+.wdia .on .spray circle:nth-child(2) { animation-delay: .4s; } .wdia .on .spray circle:nth-child(3) { animation-delay: .8s; }
+@keyframes wspray { 0% { opacity: .9; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(var(--dx), -16px); } }
+.wdia .lbl { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+.wdia .lbl.on { fill: var(--primary-text-color); font-weight: 500; }
+.wdia .val { fill: var(--primary-text-color); font-size: 12px; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.wdia .ic { position: absolute; transform: translate(-50%, -50%); width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--card); border: 2px solid var(--line); color: var(--muted); transition: border-color .3s, color .3s; }
+.wdia .ic ha-icon { --mdc-icon-size: 19px; }
+.wdia .ic.on { border-color: var(--c-water); color: var(--c-water); }
+.wdia .ic.bad { border-color: var(--c-bad); color: var(--c-bad); }
+@media (prefers-reduced-motion: reduce) { .wdia .on .drops, .wdia .spin .imp, .wdia .wave, .wdia .on .spray circle { animation: none; } .wdia .on .drops { stroke-dasharray: none; opacity: .5; } }
 .modes3 { display: inline-grid; grid-template-columns: repeat(4, auto); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .modes3 button { font: inherit; font-size: 14px; padding: 8px 18px; border: 0; background: transparent; color: var(--primary-text-color); cursor: pointer; }
 .modes3 button[aria-pressed="true"] { background: var(--accent); color: var(--text-primary-color, #fff); }
@@ -1158,7 +1185,7 @@ Object.assign(HamletHomePanel.prototype, {
   _buildWater() {
     this._main.innerHTML = `
       <div class="card alarm" id="walarm" hidden></div>
-      <section class="card s7" id="wpump"><h2>Booster pump <span class="sub" id="wpumpsub"></span></h2><div id="wpumpbody"></div></section>
+      <section class="card s7" id="wpump"><h2>Booster pump <span class="sub" id="wpumpsub"></span></h2><div id="wpumpbody"></div><div id="wpumpdia"></div></section>
       <section class="card s5" id="wpool"><h2>Pool pump</h2><div id="wpoolbody"></div><div id="wpoolsched"></div>
         <div class="actions" id="wpoolact" hidden><span class="msg" id="wpoolmsg"></span><button class="btn" data-w="poolreset">Discard</button><button class="btn primary" data-w="poolsave">Save times</button></div></section>
       <section class="card" id="wirr"><h2><ha-icon icon="mdi:sprinkler-variant"></ha-icon>Irrigation <span class="sub" id="wirrsub"></span></h2>
@@ -1236,6 +1263,8 @@ Object.assign(HamletHomePanel.prototype, {
           ${startsPerHour > 12 ? `<div class="note" style="margin-top:10px">The pump is starting about ${Math.round(startsPerHour)} times an hour – check the pressure tank pre-charge or for a dripping tap.</div>` : ""}
           <div class="tiles">${tiles.map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("")}</div></div></div>`);
     }
+
+    if (hasPump) this._renderWaterDiagram();
 
     // pool pump
     if (f.pool_switch || f.pool_power) {
@@ -1413,6 +1442,92 @@ Object.assign(HamletHomePanel.prototype, {
     }, m, iw);
   },
 
+  /* ------------------------------------------------------- water diagram */
+  // Supply (tank) -> booster pump -> main line -> house taps + one drop per irrigation valve.
+  // Water dots run in every pipe that has water moving; the impeller spins while the pump runs.
+  _renderWaterDiagram() {
+    const el = this.shadowRoot.getElementById("wpumpdia"); if (!el) return;
+    const w = this._water || {}, L = w.live || {}, f = w.features || {};
+    const ir = this._irr || { zones: [] };
+    const zones = (ir.zones || []).filter((z) => z.enabled !== false || z.on).slice(0, 8);
+    const runId = ir.run && ir.run.zone;
+    const zOn = zones.map((z) => !!z.on || z.id === runId);
+    const pumpRun = !!L.pump_running && !w.tripped;
+    const anyZone = zOn.some(Boolean);
+    const moving = pumpRun || anyZone;                  // water moves when the pump runs or a valve is open
+    const house = moving && !anyZone;                  // pump running with no valve open: someone opened a tap
+    const tank = num(L.tank), bar = num(L.pressure);
+    const narrow = (this.shadowRoot.host.clientWidth || 800) < 560;
+    const n = zones.length + 1;                          // branch 0 = house, 1.. = valves
+    const lastOn = moving ? Math.max(0, ...[house ? 0 : -1, ...zOn.map((o, i) => (o ? i + 1 : -1))]) : 0;
+    const name = (t, max = 11) => { t = String(t || ""); return t.length > max ? t.slice(0, max - 1) + "…" : t; };
+    // geometry: wide = a row of drops off a horizontal main line; narrow (phone) = branches off a vertical riser
+    let Wd, H, yMain, tank0, pump, pipeIn, trunk, branch, icon, label, spray;
+    if (!narrow) {
+      const step = 76, x0 = 210, yTop = 46; yMain = 112;
+      Wd = Math.max(420, x0 + n * step - step / 2 + 30); H = 150;
+      tank0 = { x: 16, y: 34, w: 58, h: 92, lx: 45, ly: 142, la: "middle" };
+      pump = { x: 130, y: yMain, vx: 130, vy: yMain - 32, va: "middle", lx: 130, ly: yMain + 38 };
+      pipeIn = `M74 ${yMain} H 108`;
+      const bx = (i) => x0 + i * step;
+      trunk = (i, j) => `M${i < 0 ? 152 : bx(i)} ${yMain} H ${bx(j)}`;
+      branch = (i) => `M${bx(i)} ${yMain} V ${yTop}`;
+      icon = (i) => [bx(i), yTop];
+      label = (i) => [bx(i), yMain + 22, "middle", 11];
+      spray = (i) => [bx(i), yTop - 22];
+    } else {
+      const xr = 170, y0 = 112, step = 46;
+      Wd = 340; H = y0 + (n - 1) * step + 26; yMain = 40;
+      tank0 = { x: 16, y: 8, w: 58, h: 64, lx: 45, ly: 88, la: "middle" };
+      pump = { x: 120, y: yMain, vx: 120, vy: yMain - 28, va: "middle", lx: 120, ly: yMain + 36 };
+      pipeIn = `M74 ${yMain} H 98`;
+      const by = (i) => y0 + i * step;
+      trunk = (i, j) => (i < 0 ? `M142 ${yMain} H ${xr} V ${by(j)}` : `M${xr} ${by(i)} V ${by(j)}`);
+      branch = (i) => `M${xr} ${by(i)} H 228`;
+      icon = (i) => [228, by(i)];
+      label = (i) => [252, by(i) + 4, "start", 13];
+      spray = (i) => [228, by(i) - 22];
+    }
+    const key = JSON.stringify([narrow, Wd, zones.map((z, i) => [z.name, zOn[i], z.available]), pumpRun, house, w.tripped, tank === null ? null : Math.round(tank / 5), bar === null ? null : bar.toFixed(1), f.tank_level]);
+    if (el._key === key) return;
+    el._key = key;
+    const seg = (d, on, cls = "") => `<g class="${on ? "on" : ""} ${cls}"><path class="pipe" d="${d}"/><path class="wet" d="${d}"/><path class="drops" d="${d}"/></g>`;
+    const pct = (x, y) => `left:${(x / Wd) * 100}%;top:${(y / H) * 100}%`;
+    // tank with its water level (or a plain supply when there's no level sensor)
+    const lvl = tank === null ? 0.7 : Math.max(0.04, Math.min(1, tank / 100));
+    const T = tank0, wy = T.y + T.h * (1 - lvl);
+    let svg = `<defs><clipPath id="wtclip"><rect x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" rx="8"/></clipPath></defs>
+      <g clip-path="url(#wtclip)"><rect x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" fill="color-mix(in srgb, var(--c-water) 6%, var(--card))"/>
+        <path class="wave" d="M4 ${wy} q 8 -4 16 0 t 16 0 t 16 0 t 16 0 t 16 0 V ${T.y + T.h} H 4 Z" fill="color-mix(in srgb, var(--c-water) ${tank !== null && tank < 20 ? "55" : "40"}%, transparent)"/></g>
+      <rect x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <text class="val" x="${T.x + T.w / 2}" y="${T.y + T.h / 2 + 4}">${tank === null ? "" : `${Math.round(tank)}%`}</text>
+      <text class="lbl" x="${T.lx}" y="${T.ly}">${f.tank_level ? "Tank" : "Supply"}</text>`;
+    // pipes: supply -> pump -> main line -> branches
+    svg += seg(pipeIn, moving);
+    svg += seg(trunk(-1, lastOn), moving);
+    if (lastOn < n - 1) svg += seg(trunk(lastOn, n - 1), false);
+    svg += seg(branch(0), house);
+    zones.forEach((z, i) => { svg += seg(branch(i + 1), zOn[i], "valve"); });
+    // spray over open valves
+    zones.forEach((z, i) => { if (zOn[i]) { const [sx, sy] = spray(i + 1); svg += `<g class="on"><g class="spray" transform="translate(${sx} ${sy})"><circle r="2.2" style="--dx:-9px"/><circle r="2.2" style="--dx:0px"/><circle r="2.2" style="--dx:9px"/></g></g>`; } });
+    // pump body with impeller
+    const px = pump.x, py = pump.y;
+    svg += `<g class="${pumpRun ? "spin" : ""}"><circle cx="${px}" cy="${py}" r="22" fill="var(--card)" stroke="${w.tripped ? "var(--c-bad)" : pumpRun ? "var(--c-water)" : "var(--line)"}" stroke-width="2.5"/>
+      <g class="imp"><path d="M${px} ${py} l0 -14 a14 14 0 0 1 10 4 Z M${px} ${py} l12.1 7 a14 14 0 0 1 -4.9 9.5 Z M${px} ${py} l-12.1 7 a14 14 0 0 1 -5.3 -9.5 Z" fill="${pumpRun ? "var(--c-water)" : "var(--muted)"}" opacity=".85"/></g>
+      <circle cx="${px}" cy="${py}" r="3" fill="var(--card)"/></g>
+      <text class="lbl ${pumpRun ? "on" : ""}" x="${pump.lx}" y="${pump.ly}">${w.tripped ? "Stopped" : pumpRun ? "Pump running" : "Pump"}</text>`;
+    if (bar !== null) svg += `<text class="val" x="${pump.vx}" y="${pump.vy}">${bar.toFixed(1)} bar</text>`;
+    // labels
+    const lab = (i, text, on) => { const [lx, ly, la, mx] = label(i); return `<text class="lbl ${on ? "on" : ""}" x="${lx}" y="${ly}" style="text-anchor:${la}">${esc(name(text, mx))}</text>`; };
+    svg += lab(0, "House", house);
+    zones.forEach((z, i) => { svg += lab(i + 1, z.name, zOn[i]); });
+    // icons on top of the drops (HTML so ha-icon works)
+    let icons = `<div class="ic ${house ? "on" : ""}" style="${pct(...icon(0))}"><ha-icon icon="mdi:home-variant"></ha-icon></div>`;
+    zones.forEach((z, i) => { icons += `<div class="ic ${zOn[i] ? "on" : ""} ${z.available === false ? "bad" : ""}" style="${pct(...icon(i + 1))}" title="${esc(z.name)}"><ha-icon icon="mdi:sprinkler-variant"></ha-icon></div>`; });
+    el.innerHTML = `<div class="wdia" role="img" aria-label="${esc(pumpRun ? "Pump running" : "Pump standing by")}${anyZone ? ", watering " + zones.filter((_, i) => zOn[i]).map((z) => z.name).join(", ") : house ? ", water to the house" : ""}">
+      <svg viewBox="0 0 ${Wd} ${H}">${svg}</svg>${icons}</div>`;
+  },
+
   /* ------------------------------------------------------------ irrigation */
   _irrFresh() {
     const ir = this._irr || { zones: [], settings: {} };
@@ -1443,6 +1558,7 @@ Object.assign(HamletHomePanel.prototype, {
 
   _renderIrrLive() {
     const $ = (id) => this.shadowRoot.getElementById(id);
+    if (this._water && $("wpumpdia")) this._renderWaterDiagram();
     const ir = this._irr; if (!ir) return;
     const st = ir.settings || {};
     const fmtT = (iso) => { if (!iso) return ""; const d = new Date(iso); const today = new Date().toDateString() === d.toDateString();

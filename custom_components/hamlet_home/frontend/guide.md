@@ -114,6 +114,7 @@ The Water tab runs the booster pump, the pool pump and the garden irrigation.
 **Booster pump**
 
 - Shows whether the pump is running, the water pressure, and (if fitted) its speed, Hz and power.
+- The picture under it shows the water moving live: from the tank or supply, through the pump (the blades turn while it runs), to the house and to each irrigation valve. An open valve lights up blue and sprays. When the pump runs with no valve open, the water goes to **House**, meaning a tap or shower is open.
 - **Dry-run protection:** if the pump runs without building pressure (for example the tank is empty), the app switches it off to protect it and sends you a message. Fix the water supply first, then tap **Reset** to switch it back on.
 - You may also get a message if the pump runs non-stop for a long time – check for a leak or a tap left open.
 
