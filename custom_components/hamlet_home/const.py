@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.8.2"
+VERSION = "0.9.0"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"
@@ -30,7 +30,7 @@ PRESET_INVERT = {
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 TICK_SECONDS = 30
 PUSH_MIN_SECONDS = 2
-KEEP_DAYS = 400
+KEEP_DAYS = 4000   # daily totals (about 11 years; a few hundred kB)
 
 # Water & pump (all optional)
 CONF_WATER_PRESSURE = "water_pressure"
@@ -53,3 +53,7 @@ CONF_PV_TOMORROW = "pv_forecast_tomorrow"
 CONF_PV_REMAINING = "pv_forecast_remaining"
 CONF_WEATHER_EXTRAS = "weather_extras"
 WEATHER_KEYS = (CONF_WEATHER, CONF_PV_TODAY, CONF_PV_TOMORROW, CONF_PV_REMAINING, CONF_WEATHER_EXTRAS)
+
+# Costs tab
+CONF_COST_LOADS = "cost_loads"   # power sensors (W) for the load breakdown, max 5
+MAX_COST_LOADS = 5

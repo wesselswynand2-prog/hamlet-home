@@ -45,6 +45,16 @@ The top of the **Today** card shows:
 
 Battery size: leave it empty and it's measured from the history (needs one stretch where the battery drops at least 15 %, normally the first night), or type the usable size under **Battery settings** (admin). Sensors: `sensor.<name>_battery_backup_time`, `sensor.<name>_battery_full_in` (hours).
 
+## Costs
+The **Costs** tab:
+- **Today / This month / This year / Since <start date>** – grid cost and savings in rand, and per line kWh and rand: house used (at the grid price), solar, bought, sold, battery used and charged.
+- **Where the power went** – today or this month, split into up to 5 loads (Swembad, Heatpump, Geyser 1 and 2 …) and the rest of the house, with ▲▼ against yesterday / the same days last month. Pick the loads under Configure → **Costs & load breakdown** (power sensors in W; empty = extra loads, pool pump and geyser meters).
+- **Daily** (last 14 days) and **Monthly** (last 12 months) bar charts – kWh or rand.
+- **Battery cost & life** – enter the price, how many kWh it's good for (cycles × usable kWh) and the install date: cost per kWh cycled, life used, kWh and rand left, years left at the current use.
+- **Costs settings** (admin) – *Count totals from* (e.g. 2024-04-01) and earlier electricity prices with the day each ended, so old months use the price of the time.
+
+History: daily totals are kept for years. On first start (and when the start date or loads change) the app reads Home Assistant's **long-term statistics** back to the start date (default 2 years), so the totals go back as far as your sensors were recorded. Days the app measured itself are never overwritten.
+
 ## Weather
 The **Weather** tab appears when there's a weather entity or a solar forecast sensor (found automatically; change under Configure → **Weather & solar forecast**):
 - **Now** – condition, temperature, today's high / low, feels-like, cloud cover, wind (with direction and gusts), humidity, rain today, UV, pressure.

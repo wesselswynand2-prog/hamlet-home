@@ -64,7 +64,8 @@
         "menu_options": {
           "energy": "Energy (solar, battery, grid)",
           "water": "Water & pump",
-          "weather": "Weather & solar forecast"
+          "weather": "Weather & solar forecast",
+          "costs": "Costs & load breakdown"
         }
       },
       "water": {
@@ -93,10 +94,18 @@
           "pv_forecast_remaining": "Solar forecast remaining today (optional)",
           "weather_extras": "Extra sensors to show (e.g. Forecast SOC, DOD, rain gauge)"
         }
+      },
+      "costs": {
+        "title": "Costs & load breakdown",
+        "description": "Power sensors (W) of up to 5 loads to show on the Costs tab, e.g. Swembad, Heatpump, Geyser 1, Geyser 2. The rest of the house is worked out. Empty = the extra loads, pool pump and geyser meters.",
+        "data": {
+          "cost_loads": "Loads (power sensors, W)"
+        }
       }
     },
     "error": {
-      "solar_required": "Pick at least one solar sensor (total, AC or DC)."
+      "solar_required": "Pick at least one solar sensor (total, AC or DC).",
+      "too_many_loads": "Pick at most 5 loads."
     }
   },
   "selector": {

@@ -1,4 +1,4 @@
-/* Hamlet Home – sidebar app. Tabs: Energy, Weather, Water, Geyser, Controls. No build step. */
+/* Hamlet Home – sidebar app. Tabs: Energy, Costs, Weather, Water, Geyser, Controls. No build step. */
 const DOMAIN = "hamlet_home";
 const VERSION = new URL(import.meta.url).searchParams.get("v") || String(Date.now());
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -230,7 +230,7 @@ class HamletHomePanel extends HTMLElement {
     this._hass = hass;
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -295,7 +295,7 @@ class HamletHomePanel extends HTMLElement {
   }
 
   _renderTabs() {
-    const tabs = [["energy", "mdi:lightning-bolt", "Energy"]];
+    const tabs = [["energy", "mdi:lightning-bolt", "Energy"], ["costs", "mdi:cash-multiple", "Costs"]];
     if (this._weather) tabs.push(["weather", "mdi:weather-partly-cloudy", "Weather"]);
     if (this._water || this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:water-pump", "Water"]);
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
@@ -313,6 +313,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._tab === "water") return this._buildWater();
     if (this._tab === "controls") return this._buildControls();
     if (this._tab === "weather") return this._buildModule("weather");
+    if (this._tab === "costs") return this._buildModule("costs");
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
       <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div></section>
@@ -449,7 +450,7 @@ class HamletHomePanel extends HTMLElement {
     if (s.solar_loads !== undefined) this._solar = s.solar_loads;
     if (s.irrigation !== undefined) this._irr = s.irrigation;
     if (this._tab === "water") return this._renderWater();
-    if (this._tab === "weather") return;
+    if (this._tab === "weather" || this._tab === "costs") return;
     if (this._tab === "controls") {
       const c = this.shadowRoot.querySelector("hamlet-home-controls");
       if (c) c.gridAvailable = s.live?.grid_available;

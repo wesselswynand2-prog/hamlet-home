@@ -1,6 +1,7 @@
 """Energy controller: live power, history backfill, daily kWh and cost."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
@@ -76,6 +77,10 @@ class EnergyController:
         self.live: dict[str, Any] = {}
         self.battery: dict = dict(energy.DEFAULT_BATTERY)
         self.weather_prefs: dict = {"rain_unit": "auto", "wind_unit": "auto"}
+        from .costs import DEFAULT_COSTS  # noqa: PLC0415
+        self.costs: dict = dict(DEFAULT_COSTS)
+        self.deep: dict = {}              # what the long history read covered
+        self.deep_note: str | None = None
         self.learned_capacity: float | None = None
         self._smooth: dict[str, float] = {}
         self._smooth_t: float | None = None
@@ -104,9 +109,21 @@ class EnergyController:
             solar=_list(c.get(CONF_SOLAR_POWER)), load=_list(c.get(CONF_LOAD_POWER)),
             solar_ac=_list(c.get(CONF_SOLAR_AC)), solar_dc=_list(c.get(CONF_SOLAR_DC)),
             grid=_list(c.get(CONF_GRID_POWER)), battery=_list(c.get(CONF_BATTERY_POWER)),
-            soc=_list(c.get(CONF_BATTERY_SOC)),
+            soc=_list(c.get(CONF_BATTERY_SOC)), loads=self.cost_loads,
             battery_invert=bool(c.get(CONF_BATTERY_INVERT)), grid_invert=bool(c.get(CONF_GRID_INVERT)),
         )
+
+    @property
+    def cost_loads(self) -> list[str]:
+        """Loads for the Costs breakdown: chosen ones, else extra loads + pool + geyser meters."""
+        from .const import CONF_COST_LOADS, CONF_POOL_POWER, MAX_COST_LOADS  # noqa: PLC0415
+        c = self.conf
+        chosen = _list(c.get(CONF_COST_LOADS))
+        if not chosen:
+            chosen = _list(c.get(CONF_EXTRA_LOADS)) + _list(c.get(CONF_POOL_POWER))
+            for g in self.hass.config_entries.async_entries("hamlet_geyser"):
+                chosen += _list({**g.data, **g.options}.get("geyser_power"))
+        return list(dict.fromkeys(chosen))[:MAX_COST_LOADS]
 
     def _kind(self, entity_id: str) -> str:
         return "soc" if entity_id in self.mapping.soc else "power"
@@ -117,6 +134,8 @@ class EnergyController:
         self.tariff = {**energy.DEFAULT_TARIFF, **data.get("tariff", {})}
         self.battery = {**energy.DEFAULT_BATTERY, **data.get("battery", {})}
         self.weather_prefs = {**self.weather_prefs, **data.get("weather_prefs", {})}
+        self.costs = {**self.costs, **data.get("costs", {})}
+        self.deep = data.get("deep", {})
         self.learned_capacity = data.get("learned_capacity")
         self.acc.days = data.get("days", {})
         self.acc.load_buckets(data.get("buckets", {}))
@@ -139,7 +158,7 @@ class EnergyController:
         cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
         self.acc.days = {d: v for d, v in self.acc.days.items() if d >= cutoff}
         self.acc.buckets = {d: v for d, v in self.acc.buckets.items() if d in keep}
-        return {"tariff": self.tariff, "battery": self.battery, "weather_prefs": self.weather_prefs, "learned_capacity": self.learned_capacity, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
+        return {"tariff": self.tariff, "battery": self.battery, "weather_prefs": self.weather_prefs, "costs": self.costs, "deep": self.deep, "learned_capacity": self.learned_capacity, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
 
     def _save(self, delay: float = 30) -> None:
         self.store.async_delay_save(self._store_data, delay)
@@ -159,6 +178,68 @@ class EnergyController:
         self._unsubs.append(async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=TICK_SECONDS)))
         self._save(5)
         self._notify(force=True)
+        self.entry.async_create_background_task(self.hass, self._async_deep_history(), f"{DOMAIN}_deep_history")
+
+    # ------------------------------------------------------- long history
+    def _deep_wanted(self) -> dict:
+        today = dt_util.now().date()
+        start = self.costs.get("history_start") or (today - timedelta(days=730)).isoformat()
+        return {"start": start, "ids": sorted(self.mapping.all_entities())}
+
+    async def _async_deep_history(self) -> None:
+        """Daily kWh from long-term statistics back to the start date, for days (or loads) we don't have.
+        Runs once per start date / sensor set, in 30-day chunks so a Pi doesn't choke."""
+        if "recorder" not in self.hass.config.components:
+            return
+        want = self._deep_wanted()
+        if self.deep == want:
+            return
+        from homeassistant.components.recorder import get_instance, statistics  # noqa: PLC0415
+        m = self.mapping
+        ids = set(m.all_entities())
+        if not ids:
+            return
+        rec = get_instance(self.hass)
+        tz = dt_util.get_default_time_zone()
+        start = datetime.fromisoformat(want["start"]).replace(tzinfo=tz)
+        end = dt_util.start_of_local_day(dt_util.now()) - timedelta(days=1)   # yesterday + today come from history
+        filled = 0
+        try:
+            chunk = start
+            while chunk < end:
+                nxt = min(chunk + timedelta(days=30), end)
+                self.deep_note = f"Reading history … {chunk.date().isoformat()}"
+
+                def _stats(a=chunk, b=nxt) -> dict:
+                    return statistics.statistics_during_period(
+                        self.hass, a.astimezone(dt_util.UTC), b.astimezone(dt_util.UTC), ids, "hour", {"power": "W"}, {"mean"})
+
+                stats = await rec.async_add_executor_job(_stats)
+                hours: dict[datetime, dict[str, float | None]] = {}
+                for entity_id, rows in stats.items():
+                    for row in rows:
+                        t = row["start"]
+                        t = dt_util.as_local(dt_util.utc_from_timestamp(t) if isinstance(t, (int, float)) else t)
+                        hours.setdefault(t, {})[entity_id] = row.get("mean")
+                for day, totals in energy.hourly_energy(hours, m).items():
+                    have = self.acc.days.get(day)
+                    if have is None:
+                        self.acc.days[day] = totals
+                        filled += 1
+                    else:   # keep what we measured; only add loads that weren't tracked then
+                        for k, v in totals.items():
+                            if k.startswith(energy.LOAD_PREFIX) and k not in have:
+                                have[k] = v
+                chunk = nxt
+                await asyncio.sleep(0)
+            self.deep = want
+            self.deep_note = None
+            self._save(5)
+            if filled:
+                self._notify(force=True)
+        except Exception:  # noqa: BLE001 - nice to have
+            _LOGGER.exception("Hamlet Home: reading long-term statistics failed")
+            self.deep_note = "Older history could not be read."
 
     # --------------------------------------------------------------- history
     async def _async_backfill(self) -> None:
@@ -381,6 +462,17 @@ class EnergyController:
         self._save(1)
         self._notify(force=True)
 
+    async def async_set_costs(self, new: dict) -> None:
+        from . import costs  # noqa: PLC0415
+        clean = costs.validate(new)
+        if "tariff_history" in new:
+            self.tariff["history"] = costs.validate_history(new["tariff_history"])
+        self.costs.update(clean)
+        self._save(1)
+        if "history_start" in clean:
+            self.entry.async_create_background_task(self.hass, self._async_deep_history(), f"{DOMAIN}_deep_history")
+        self._notify(force=True)
+
     async def async_set_weather_prefs(self, new: dict) -> None:
         from .weather import validate_prefs  # noqa: PLC0415
         self.weather_prefs.update(validate_prefs(new))
@@ -392,7 +484,7 @@ class EnergyController:
             self.acc.advance(dt_util.now())
         day = dt_util.now().date().isoformat()
         totals = {k: round(v, 3) for k, v in self.acc.days.get(day, {}).items()}
-        return {**totals, **energy.money(totals, self.tariff)} if totals else {}
+        return {**totals, **energy.money(totals, self.tariff, day)} if totals else {}
 
     def snapshot(self, history: bool = False) -> dict:
         c = self.conf
@@ -425,7 +517,8 @@ class EnergyController:
                 d = (today - timedelta(days=n)).isoformat()
                 totals = self.acc.days.get(d)
                 if totals:
-                    days.append({"day": d, **{k: round(v, 2) for k, v in totals.items()}, **energy.money(totals, self.tariff)})
+                    days.append({"day": d, **{k: round(v, 2) for k, v in totals.items() if not k.startswith(energy.LOAD_PREFIX)},
+                                 **energy.money(totals, self.tariff, d)})
                 else:
                     days.append({"day": d})
             snap["days"] = days

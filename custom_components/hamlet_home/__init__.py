@@ -29,7 +29,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     for handler in (ws_state, ws_subscribe, ws_set_tariff, ws_water_action, ws_water_settings, ws_solar_settings,
                     ws_irrigation_action, ws_irrigation_settings, ws_irrigation_entities, ws_battery_settings,
-                    ws_controls, ws_controls_settings, ws_controls_pulse, ws_weather, ws_weather_settings):
+                    ws_controls, ws_controls_settings, ws_controls_pulse, ws_weather, ws_weather_settings,
+                    ws_costs, ws_costs_settings):
         websocket_api.async_register_command(hass, handler)
     return True
 
@@ -383,3 +384,54 @@ async def ws_weather_settings(hass, connection, msg):
         connection.send_error(msg["id"], "invalid", str(err))
         return
     connection.send_result(msg["id"], c.weather_prefs)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/costs"})
+@callback
+def ws_costs(hass, connection, msg):
+    if (c := _controller(hass, connection, msg)) is None:
+        return
+    from homeassistant.util import dt as dt_util  # noqa: PLC0415
+    from . import costs  # noqa: PLC0415
+    if c.ready:
+        c.acc.advance(dt_util.now())
+    today = dt_util.now().date()
+    days = c.acc.days
+    loads = []
+    for eid in c.cost_loads:
+        st = hass.states.get(eid)
+        name = (st.attributes.get("friendly_name") if st else None) or eid.split(".")[-1].replace("_", " ").title()
+        for suffix in (" power", " Power", " Krag", " krag"):
+            if name.endswith(suffix) and len(name) > len(suffix) + 1:
+                name = name[: -len(suffix)]
+        loads.append({"entity_id": eid, "name": name})
+    connection.send_result(msg["id"], {
+        "periods": costs.periods(days, c.tariff, today, c.costs.get("history_start")),
+        "daily": costs.daily(days, c.tariff, today, 31),
+        "monthly": costs.monthly(days, c.tariff, today, 24),
+        "battery": costs.battery_life(days, c.costs, c.tariff, today),
+        "loads": loads,
+        "settings": c.costs,
+        "tariff": c.tariff,
+        "first_day": min(days) if days else None,
+        "note": c.deep_note,
+        "ready": c.ready,
+        "is_admin": connection.user.is_admin,
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): f"{DOMAIN}/costs_settings",
+    vol.Required("settings"): dict,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_costs_settings(hass, connection, msg):
+    if (c := _controller(hass, connection, msg)) is None:
+        return
+    try:
+        await c.async_set_costs(msg["settings"])
+    except (ValueError, TypeError) as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], {"settings": c.costs, "tariff": c.tariff})

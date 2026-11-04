@@ -147,7 +147,7 @@ class HamletHomeOptionsFlow(OptionsFlow):
         return {**self.config_entry.data, **self.config_entry.options}
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(step_id="init", menu_options=["energy", "water", "weather"])
+        return self.async_show_menu(step_id="init", menu_options=["energy", "water", "weather", "costs"])
 
     async def async_step_energy(self, user_input: dict | None = None) -> ConfigFlowResult:
         if user_input is not None and _solar_errors(user_input):
@@ -174,6 +174,19 @@ class HamletHomeOptionsFlow(OptionsFlow):
         found = {k: v for k, v in autodetect(self.hass.states.async_entity_ids()).items() if v}
         current = {k: v for k, v in self._current.items() if k in WEATHER_KEYS and v}
         return self.async_show_form(step_id="weather", data_schema=self.add_suggested_values_to_schema(_weather_schema(), {**found, **current}))
+
+    async def async_step_costs(self, user_input: dict | None = None) -> ConfigFlowResult:
+        from .const import CONF_COST_LOADS, MAX_COST_LOADS  # noqa: PLC0415
+        if user_input is not None:
+            if len(user_input.get(CONF_COST_LOADS) or []) > MAX_COST_LOADS:
+                return self.async_show_form(step_id="costs", data_schema=self.add_suggested_values_to_schema(
+                    vol.Schema({vol.Optional(CONF_COST_LOADS): _sensor(multiple=True)}), user_input), errors={"base": "too_many_loads"})
+            self._data[CONF_COST_LOADS] = user_input.get(CONF_COST_LOADS) or []
+            return self._save()
+        current = self.hass.data.get(DOMAIN, {}).get("controller")
+        suggested = {CONF_COST_LOADS: self._current.get(CONF_COST_LOADS) or (current.cost_loads if current else [])}
+        return self.async_show_form(step_id="costs", data_schema=self.add_suggested_values_to_schema(
+            vol.Schema({vol.Optional(CONF_COST_LOADS): _sensor(multiple=True)}), suggested))
 
     def _save(self) -> ConfigFlowResult:
         return self.async_create_entry(title="", data={**self.config_entry.options, **self._data})

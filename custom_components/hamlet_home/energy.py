@@ -15,6 +15,7 @@ from typing import Any
 
 SERIES = ("solar", "load", "grid", "battery", "soc")
 BUCKET_MIN = 5
+LOAD_PREFIX = "x:"   # per-load kWh keys: "x:sensor.swembad_power"
 ENERGY_KEYS = ("solar", "load", "import", "export", "charge", "discharge", "solar_ac", "solar_dc")
 
 
@@ -27,11 +28,13 @@ class Mapping:
     soc: list[str] = field(default_factory=list)
     solar_ac: list[str] = field(default_factory=list)  # grid-tie / AC-coupled PV inverter
     solar_dc: list[str] = field(default_factory=list)  # MPPTs on the DC bus
+    loads: list[str] = field(default_factory=list)     # single loads for the cost breakdown (W)
     battery_invert: bool = False
     grid_invert: bool = False
 
     def all_entities(self) -> list[str]:
-        return [*self.solar, *self.solar_ac, *self.solar_dc, *self.load, *self.grid, *self.battery, *self.soc]
+        return [*self.solar, *self.solar_ac, *self.solar_dc, *self.load, *self.grid, *self.battery, *self.soc,
+                *[e for e in self.loads if e not in (*self.solar, *self.load, *self.grid, *self.battery)]]
 
     @property
     def split_pv(self) -> bool:
@@ -68,6 +71,9 @@ def combine(raw: dict[str, float | None], m: Mapping) -> dict[str, float | None]
     if solar is not None:
         solar = max(solar, 0.0)
     out = {"solar": solar, "load": load, "grid": grid, "battery": battery, "soc": soc}
+    for eid in m.loads:
+        v = raw.get(eid)
+        out[LOAD_PREFIX + eid] = None if v is None else max(v, 0.0)
     if m.split_pv:
         out["solar_ac"] = None if solar_ac is None else max(solar_ac, 0.0)
         out["solar_dc"] = None if solar_dc is None else max(solar_dc, 0.0)
@@ -155,6 +161,9 @@ class Accumulator:
         if v.get("battery") is not None:
             e["charge"] += max(v["battery"], 0) * hours / 1000
             e["discharge"] += max(-v["battery"], 0) * hours / 1000
+        for k, val in v.items():
+            if k.startswith(LOAD_PREFIX) and val is not None:
+                e[k] = e.get(k, 0.0) + val * hours / 1000
 
     # -------------------------------------------------------------- reading
     def rows(self, day: str) -> list[list]:
@@ -232,14 +241,29 @@ def hourly_energy(hours: dict[datetime, dict[str, float | None]], m: Mapping) ->
         if v["battery"] is not None:
             e["charge"] += max(v["battery"], 0) / 1000
             e["discharge"] += max(-v["battery"], 0) / 1000
+        for k, val in v.items():
+            if k.startswith(LOAD_PREFIX) and val is not None:
+                e[k] = e.get(k, 0.0) + val / 1000
     return days
 
 
 DEFAULT_TARIFF = {"import": 3.50, "export": 0.0, "daily_fixed": 0.0, "currency": "R"}
 
 
-def money(day: dict[str, float], tariff: dict) -> dict[str, float]:
+def tariff_for(tariff: dict, day: str | None) -> dict:
+    """The prices in force on `day` (YYYY-MM-DD). tariff["history"] holds earlier prices:
+    [{"until": "2025-06-30", "import": 3.1, "export": 0, "daily_fixed": 0}, …]."""
+    hist = tariff.get("history") or []
+    if day:
+        for h in sorted(hist, key=lambda h: h.get("until", "")):
+            if day <= h.get("until", ""):
+                return {**tariff, **{k: h[k] for k in ("import", "export", "daily_fixed") if k in h}}
+    return tariff
+
+
+def money(day: dict[str, float], tariff: dict, day_key: str | None = None) -> dict[str, float]:
     """Grid cost and solar savings for one day's kWh."""
+    tariff = tariff_for(tariff, day_key)
     imp, exp = day.get("import", 0.0), day.get("export", 0.0)
     load = day.get("load", 0.0)
     cost = imp * tariff["import"] - exp * tariff["export"] + tariff.get("daily_fixed", 0.0)
