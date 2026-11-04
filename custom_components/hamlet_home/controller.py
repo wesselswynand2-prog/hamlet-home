@@ -80,6 +80,7 @@ class EnergyController:
         from .costs import DEFAULT_COSTS  # noqa: PLC0415
         self.costs: dict = dict(DEFAULT_COSTS)
         self.deep: dict = {}              # what the long history read covered
+        self.help_contact: dict = {"name": "Hamlet Elektries", "phone": "", "email": "", "note": ""}
         self.deep_note: str | None = None
         self.learned_capacity: float | None = None
         self._smooth: dict[str, float] = {}
@@ -144,6 +145,7 @@ class EnergyController:
         self.weather_prefs = {**self.weather_prefs, **data.get("weather_prefs", {})}
         self.costs = {**self.costs, **data.get("costs", {})}
         self.deep = data.get("deep", {})
+        self.help_contact = {**self.help_contact, **data.get("help_contact", {})}
         self.learned_capacity = data.get("learned_capacity")
         self.acc.days = data.get("days", {})
         self.acc.load_buckets(data.get("buckets", {}))
@@ -166,7 +168,7 @@ class EnergyController:
         cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
         self.acc.days = {d: v for d, v in self.acc.days.items() if d >= cutoff}
         self.acc.buckets = {d: v for d, v in self.acc.buckets.items() if d in keep}
-        return {"tariff": self.tariff, "battery": self.battery, "weather_prefs": self.weather_prefs, "costs": self.costs, "deep": self.deep, "learned_capacity": self.learned_capacity, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
+        return {"tariff": self.tariff, "battery": self.battery, "weather_prefs": self.weather_prefs, "costs": self.costs, "deep": self.deep, "help_contact": self.help_contact, "learned_capacity": self.learned_capacity, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
 
     def _save(self, delay: float = 30) -> None:
         self.store.async_delay_save(self._store_data, delay)
@@ -480,6 +482,16 @@ class EnergyController:
         if "history_start" in clean:
             self.entry.async_create_background_task(self.hass, self._async_deep_history(), f"{DOMAIN}_deep_history")
         self._notify(force=True)
+
+    async def async_set_help_contact(self, new: dict) -> None:
+        clean = {}
+        for key, limit in (("name", 60), ("phone", 30), ("email", 80), ("note", 200)):
+            if key in new:
+                clean[key] = str(new[key] or "").strip()[:limit]
+        if clean.get("email") and "@" not in clean["email"]:
+            raise ValueError("That email address doesn't look right")
+        self.help_contact.update(clean)
+        self._save(1)
 
     async def async_set_weather_prefs(self, new: dict) -> None:
         from .weather import validate_prefs  # noqa: PLC0415

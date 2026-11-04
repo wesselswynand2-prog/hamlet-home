@@ -425,25 +425,24 @@ class HamletHomeControls extends HTMLElement {
 
   _renderEdit() {
     const D = this._draft, all = this._lay.all || [];
-    const f = D.filter.trim().toLowerCase();
-    const match = (i) => (!f || i.full_name.toLowerCase().includes(f) || i.entity_id.includes(f)) && (!D.onlyShown || D.items[i.entity_id].shown);
     const kinds = Object.keys(KIND_LABEL);
+    // every row is drawn once; the search only hides rows (redrawing while typing made the cursor jump)
     const groups = D.rooms.map((r) => {
-      const items = all.filter((i) => (i.area_id ?? null) === r.id && match(i));
+      const items = all.filter((i) => (i.area_id ?? null) === r.id);
       if (!items.length) return "";
       const rid = r.id ?? "_other";
-      return `<div class="ehd"><span style="flex:1">${esc(D.roomNames[r.id] || r.name)}</span>
+      return `<div class="egrp"><div class="ehd"><span style="flex:1">${esc(D.roomNames[r.id] || r.name)}</span>
         <button class="btn sm" data-a="roomall" data-r="${esc(rid)}" data-v="1">Show all</button><button class="btn sm" data-a="roomall" data-r="${esc(rid)}" data-v="0">Hide all</button></div>
         ${items.map((i) => {
           const d = D.items[i.entity_id], e = esc(i.entity_id);
-          return `<div class="erow ${d.shown ? "" : "off"}">
+          return `<div class="erow ${d.shown ? "" : "off"}" data-q="${esc((i.full_name + " " + i.entity_id + " " + (d.name || "")).toLowerCase())}" data-row="${e}">
             <input type="checkbox" data-f="shown" data-e="${e}" ${d.shown ? "checked" : ""} aria-label="Show ${esc(i.full_name)}">
             <div class="nm" style="min-width:0"><input type="text" data-f="name" data-e="${e}" value="${esc(d.name)}" placeholder="${esc(i.name)}" maxlength="40"><div class="id">${e}</div></div>
             <select data-f="kind" data-e="${e}">${kinds.map((k) => `<option value="${k}" ${k === d.kind ? "selected" : ""}>${KIND_LABEL[k]}</option>`).join("")}</select>
             <label class="cf" style="${["gate", "garage", "lock"].includes(d.kind) ? "" : "visibility:hidden"}"><input type="checkbox" data-f="confirm" data-e="${e}" ${d.confirm ? "checked" : ""}>Confirm</label>
             <button class="star" data-a="fav" data-e="${e}" aria-pressed="${d.fav}" aria-label="Favourite"><ha-icon icon="${d.fav ? "mdi:star" : "mdi:star-outline"}"></ha-icon></button>
           </div>`;
-        }).join("")}`;
+        }).join("")}</div>`;
     }).join("");
     const shownCount = Object.values(D.items).filter((d) => d.shown).length;
     this._root.innerHTML = `
@@ -452,7 +451,7 @@ class HamletHomeControls extends HTMLElement {
           <input type="search" id="efilter" data-f="filter" placeholder="Search devices…" value="${esc(D.filter)}" style="flex:1;min-width:180px">
           <label class="cf"><input type="checkbox" data-f="onlyShown" ${D.onlyShown ? "checked" : ""}>Only shown</label></div>
         <p class="muted small" style="margin:8px 0 0">Tick to show, type a shorter name, pick the tile type, ★ for Favourites. Gates, garages and locks ask "tap again" before they move, unless you untick Confirm.</p>
-        ${groups || `<div class="empty">No devices match.</div>`}
+        ${groups}<div class="empty" id="enone" hidden>No devices match.</div>
         <div class="sticky"><div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
           <span class="msg" id="emsg"></span><button class="btn" data-a="cancel">Cancel</button><button class="btn primary" data-a="save">Save</button></div></div>
       </section>
@@ -465,14 +464,30 @@ class HamletHomeControls extends HTMLElement {
         <div style="display:flex;align-items:center;gap:8px;font-size:14px"><span style="flex:1">Pulse length<div class="muted small">relay on, then off after this</div></span>
           <input type="number" data-f="pulse" min="0.2" max="10" step="0.1" value="${D.pulse}"> s</div>
       </section>`;
-    const fi = this.shadowRoot.getElementById("efilter");
-    if (this._refocus) { fi.focus(); fi.setSelectionRange(fi.value.length, fi.value.length); this._refocus = false; }
+    this._applyFilter();
+  }
+
+  _applyFilter() {
+    const D = this._draft, f = D.filter.trim().toLowerCase();
+    let any = false;
+    this.shadowRoot.querySelectorAll(".egrp").forEach((g) => {
+      let vis = 0;
+      g.querySelectorAll(".erow").forEach((row) => {
+        const ok = (!f || row.dataset.q.includes(f)) && (!D.onlyShown || D.items[row.dataset.row]?.shown);
+        row.hidden = !ok;
+        if (ok) vis++;
+      });
+      g.hidden = !vis;
+      if (vis) any = true;
+    });
+    const none = this.shadowRoot.getElementById("enone");
+    if (none) none.hidden = any;
   }
 
   _editInput(t) {
     const D = this._draft, f = t.dataset.f; if (!f) return;
-    if (f === "filter") { D.filter = t.value; this._refocus = true; return this._renderEdit(); }
-    if (f === "onlyShown") { D.onlyShown = t.checked; return this._renderEdit(); }
+    if (f === "filter") { D.filter = t.value; return this._applyFilter(); }
+    if (f === "onlyShown") { D.onlyShown = t.checked; return this._applyFilter(); }
     if (f === "pulse") { D.pulse = Number(t.value); return; }
     if (f === "roomname") { D.roomNames[t.dataset.r] = t.value; return; }
     const d = D.items[t.dataset.e]; if (!d) return;

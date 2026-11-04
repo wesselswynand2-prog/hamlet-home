@@ -45,6 +45,9 @@ const STYLE = `
   border-bottom: 2px solid transparent; display: flex; align-items: center; gap: 6px; }
 .tabs button ha-icon { --mdc-icon-size: 20px; }
 .tabs button[aria-selected="true"] { opacity: 1; border-bottom-color: currentColor; }
+.helpbtn { background: transparent; border: 0; color: inherit; opacity: .8; cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex: none; }
+.helpbtn ha-icon { --mdc-icon-size: 24px; }
+.helpbtn:hover, .helpbtn[aria-pressed="true"] { opacity: 1; background: rgba(255,255,255,.15); }
 @media (max-width: 560px) { .tabs button span { display: none; } .tabs button { padding: 0 12px; } }
 main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--ha-card-border-color, var(--line));
@@ -244,7 +247,7 @@ class HamletHomePanel extends HTMLElement {
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
     if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -265,7 +268,8 @@ class HamletHomePanel extends HTMLElement {
   async _init() {
     const root = this.shadowRoot;
     root.innerHTML = `<style>${STYLE}</style>
-      <div class="toolbar"><span id="menu"></span><div class="title">Hamlet Home</div><div class="tabs" role="tablist" id="tabs"></div></div>
+      <div class="toolbar"><span id="menu"></span><div class="title">Hamlet Home</div><div class="tabs" role="tablist" id="tabs"></div>
+        <button class="helpbtn" id="helpbtn" aria-label="Help" title="Help"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button></div>
       <main id="main"><div class="loading">Loading…</div></main>`;
     const mb = document.createElement("ha-menu-button");
     mb.hass = this._hass; mb.narrow = this._narrow;
@@ -278,6 +282,8 @@ class HamletHomePanel extends HTMLElement {
       try { localStorage.setItem("hamlet_home_tab", this._tab); } catch (e) { /* ignore */ }
       this._buildTab();
     });
+    root.getElementById("helpbtn").addEventListener("click", () => { this._tab = "help"; this._buildTab(); });
+    this.shadowRoot.addEventListener("hamlet-help-contact", (ev) => { this._helpContact = ev.detail; });
     this._main.addEventListener("click", (ev) => this._click(ev));
     await this._load();
     this._subscribe();
@@ -290,6 +296,8 @@ class HamletHomePanel extends HTMLElement {
       this._geyser = s.geyser_available || s.geyser_installed;
       this._weather = !!s.weather_available;
       this._devices = s.devices || [];
+      this._updates = s.updates || [];
+      this._helpContact = s.help_contact;
       this._geyserCount = s.geyser_count ?? (s.geyser_installed ? 1 : 0);
       this._rows = s.rows; this._days = s.days; this._raw = s.raw;
       this._water = s.water; this._waterRows = s.water?.rows; this._solar = s.solar_loads; this._irr = s.irrigation;
@@ -316,7 +324,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
     if (this._devices?.length || this._isAdmin) tabs.push(["devices", "mdi:power-socket-za", "Devices"]);
     tabs.push(["controls", "mdi:light-switch", "Controls"]);
-    if (!tabs.some((t) => t[0] === this._tab)) this._tab = "energy";
+    if (!tabs.some((t) => t[0] === this._tab) && this._tab !== "help") this._tab = "energy";
     this.shadowRoot.getElementById("tabs").innerHTML = tabs.length < 2 ? "" : tabs.map(([id, icon, label]) =>
       `<button role="tab" data-tab="${id}" aria-selected="${this._tab === id}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("");
   }
@@ -325,14 +333,17 @@ class HamletHomePanel extends HTMLElement {
     this._built = true;
     this._ro?.disconnect();
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === this._tab));
+    this.shadowRoot.getElementById("helpbtn")?.setAttribute("aria-pressed", this._tab === "help");
     if (this._tab === "geyser") return this._buildGeyser();
     if (this._tab === "water") return this._buildWater();
     if (this._tab === "controls") return this._buildControls();
     if (this._tab === "weather") return this._buildModule("weather");
     if (this._tab === "costs") return this._buildModule("costs");
     if (this._tab === "devices") return this._buildModule("devices");
+    if (this._tab === "help") return this._buildModule("help");
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
+      <div id="updbar" style="display:contents"></div>
       <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div><div id="flowinfo"></div></section>
       <section class="card s5"><h2>Today <span class="sub" id="todaysub"></span></h2><div id="batt"></div><div id="today"></div><div id="battset"></div></section>
       <div id="solfc" style="display:contents"></div>
@@ -349,13 +360,15 @@ class HamletHomePanel extends HTMLElement {
         <div class="chartwrap" id="hist"></div><div class="totals" id="histtot"></div></section>
       <section class="card s4"><h2>Electricity price</h2><div id="tariff"></div></section>
       <section class="card" id="installer" hidden><details><summary>Installer: live sensor check</summary><div class="raw" id="raw"></div>
-        <p class="muted small">Battery should be + while charging and grid + while buying. Change sensors or flip signs in Settings → Devices &amp; services → Hamlet Home → Configure.</p></details></section>`;
+        <p class="muted small">Battery should be + while charging and grid + while buying. Change sensors or flip signs in Settings → Devices &amp; services → Hamlet Home → Configure.</p></details>
+        <details style="margin-top:10px" id="upddet"><summary>Installer: app updates</summary><div id="updstat"></div></details></section>`;
     this._flowBuilt = null;
     this._tariffShown = null;
     this._battShown = null;
     this._ro = new ResizeObserver(() => { this._renderChart(); this._renderHistory(); });
     this._ro.observe(this.shadowRoot.getElementById("chart"));
     if (this._snap) { this._apply(this._snap); this._renderChart(); this._renderHistory(); this._renderRaw(); }
+    this._renderUpdates();
     this._addSolarForecast();
   }
 
@@ -384,7 +397,7 @@ class HamletHomePanel extends HTMLElement {
     el.hass = this._hass;
     this._main.innerHTML = "";
     this._main.appendChild(el);
-    if (el.update) el.update({ ...(this._snap || {}), devices: this._devices || [], solar_loads: this._solar, is_admin: this._isAdmin });
+    if (el.update) el.update({ ...(this._snap || {}), devices: this._devices || [], solar_loads: this._solar, is_admin: this._isAdmin, help_contact: this._helpContact });
   }
 
   async _buildControls() {
@@ -456,6 +469,8 @@ class HamletHomePanel extends HTMLElement {
     }
     if (ev.target.closest("#savetariff")) return this._saveTariff();
     if (ev.target.closest("#savebatt")) return this._saveBattery();
+    const up = ev.target.closest("[data-upd]");
+    if (up) return this._updateClick(up);
     const fi = ev.target.closest("[data-fi]");
     if (fi) return this._flowInfoClick(fi);
     const pr = ev.target.closest("[data-prio]");
@@ -472,7 +487,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._tab === "water") return this._renderWater();
     if (s.devices !== undefined) this._devices = s.devices;
     if (this._tab === "devices") { const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
-    if (this._tab === "weather" || this._tab === "costs") return;
+    if (this._tab === "weather" || this._tab === "costs" || this._tab === "help") return;
     if (this._tab === "controls") {
       const c = this.shadowRoot.querySelector("hamlet-home-controls");
       if (c) c.gridAvailable = s.live?.grid_available;
@@ -588,6 +603,41 @@ class HamletHomePanel extends HTMLElement {
     extras.forEach((e, i) => { setNode(`n-ex${i}`, fmtW(e.w)); dash(`w-ex${i}`, e.w, "var(--c-load)", true); });
     const sub = this.shadowRoot.getElementById("flowsub");
     if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  /* -------------------------------------------------- app updates (admin) */
+  _renderUpdates() {
+    const bar = this.shadowRoot.getElementById("updbar"), st = this.shadowRoot.getElementById("updstat");
+    if (!bar || !this._isAdmin) return;
+    const list = this._updates || [];
+    const avail = list.filter((u) => u.available);
+    bar.innerHTML = avail.map((u) => `<div class="card" style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-color:var(--accent)">
+        <ha-icon icon="mdi:package-up" style="color:var(--accent)"></ha-icon><span style="flex:1;min-width:200px"><b style="font-weight:500">${esc(u.title)} ${esc(u.github)}</b> is available
+        <span class="muted small">· you have ${esc(u.installed)}. Installing restarts Home Assistant (about a minute).</span></span>
+        <span class="msg" id="updmsg-${esc(u.entity_id)}"></span>
+        ${u.can_install ? `<button class="btn primary" data-upd="install" data-e="${esc(u.entity_id)}" ${u.in_progress ? "disabled" : ""}>${u.in_progress ? "Installing…" : "Install"}</button>` : ""}</div>`).join("");
+    if (!st) return;
+    const when = (iso) => (iso ? new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "not yet");
+    st.innerHTML = `<div class="raw">${list.map((u) => `<span>${esc(u.title)}</span><span>${esc(u.installed)} installed · GitHub ${esc(u.github || "?")}</span>
+        <span class="muted">${u.available ? "update available" : u.managed_by === "HACS" ? "update shown by HACS" : u.github && u.github === u.installed ? "up to date" : "–"}</span><span class="muted">checked ${esc(when(u.checked))}</span>
+        ${u.error ? `<span style="grid-column:1/-1;color:var(--c-bad)">${esc(u.error)}</span>` : ""}`).join("") || "<span>No update checks running – restart Home Assistant.</span>"}</div>
+      <div class="actions"><span class="msg" id="updchk"></span><button class="btn" data-upd="check">Check now</button></div>`;
+  }
+
+  async _updateClick(b) {
+    if (b.dataset.upd === "check") {
+      const m = this.shadowRoot.getElementById("updchk");
+      if (m) { m.textContent = "Asking GitHub…"; m.className = "msg"; }
+      try { this._updates = await this._hass.callWS({ type: `${DOMAIN}/update_check` }); this._renderUpdates();
+        const m2 = this.shadowRoot.getElementById("updchk"); if (m2) { m2.textContent = "Done"; m2.className = "msg ok"; } }
+      catch (e) { if (m) { m.textContent = e.message || "Check failed"; m.className = "msg err"; } }
+      return;
+    }
+    if (b.dataset.upd === "install") {
+      b.disabled = true; b.textContent = "Installing…";
+      try { await this._hass.callService("update", "install", { entity_id: b.dataset.e }); b.textContent = "Restarting…"; }
+      catch (e) { b.disabled = false; b.textContent = "Install"; const m = this.shadowRoot.getElementById(`updmsg-${b.dataset.e}`); if (m) { m.textContent = e.message || "Install failed"; m.className = "msg err"; } }
+    }
   }
 
   /* ------------------------------------------- info under the power flow */

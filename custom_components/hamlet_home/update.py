@@ -49,6 +49,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(HamletUpdate(hass, c, "hamlet_geyser", str(geyser.version)))
     except IntegrationNotFound:
         pass
+    hass.data[DOMAIN]["updates"] = entities
     async_add_entities(entities)
 
 
@@ -73,6 +74,8 @@ class HamletUpdate(UpdateEntity):
         self._asset: str | None = None
         self._managed = False
         self._error: str | None = None
+        self._checked: str | None = None
+        self._github: str | None = None
 
     @property
     def entity_picture(self) -> str | None:
@@ -90,14 +93,23 @@ class HamletUpdate(UpdateEntity):
     def _check(self, _now=None) -> None:
         self.hass.async_create_task(self.async_check(), f"{DOMAIN}_update_check_{self.domain}")
 
+    def status(self) -> dict:
+        """For the Hamlet Home page (admins): what's installed, what GitHub has, and any problem."""
+        return {"entity_id": self.entity_id, "title": NAMES[self.domain], "installed": self.installed_version,
+                "github": self._github, "available": self.latest_version != self.installed_version and not self._managed,
+                "managed_by": "HACS" if self._managed else "Hamlet Home", "checked": self._checked, "error": self._error,
+                "can_install": bool(self._asset), "in_progress": bool(self.in_progress)}
+
     async def async_check(self) -> None:
+        from homeassistant.util import dt as dt_util  # noqa: PLC0415
+        self._checked = dt_util.now().isoformat()
         session = async_get_clientsession(self.hass)
         try:
             async with session.get(f"https://api.github.com/repos/{self.repo}/releases/latest",
                                    headers={"Accept": "application/vnd.github+json", "User-Agent": "Hamlet-Home-updater"},
                                    timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 if resp.status != 200:
-                    self._error = f"GitHub answered {resp.status}"
+                    self._error = f"GitHub answered {resp.status}" + (" (too many checks from this internet connection – try again in an hour)" if resp.status in (403, 429) else "")
                     _LOGGER.debug("Hamlet update check for %s: HTTP %s", self.repo, resp.status)
                     return
                 rel = await resp.json()
@@ -107,6 +119,7 @@ class HamletUpdate(UpdateEntity):
             return
         self._error = None
         latest = str(rel.get("tag_name", "")).lstrip("v") or self.installed_version
+        self._github = latest
         self._managed = hacs_shows(self.hass, self.repo, self.entity_id)
         self._asset = updater.pick_asset(rel, self.domain)
         self._notes = rel.get("body") or ""

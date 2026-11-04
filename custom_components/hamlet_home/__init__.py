@@ -32,7 +32,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                     ws_irrigation_action, ws_irrigation_settings, ws_irrigation_entities, ws_battery_settings,
                     ws_controls, ws_controls_settings, ws_controls_pulse, ws_weather, ws_weather_settings,
                     ws_costs, ws_costs_settings,
-                    ws_devices_save, ws_devices_remove, ws_devices_entities):
+                    ws_devices_save, ws_devices_remove, ws_devices_entities, ws_update_check, ws_help_contact):
         websocket_api.async_register_command(hass, handler)
     return True
 
@@ -75,6 +75,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hass.data[DOMAIN].pop("water").async_stop()
         await hass.data[DOMAIN].pop("irrigation").async_stop()
         await hass.data[DOMAIN].pop("devices").async_stop()
+        hass.data[DOMAIN].pop("updates", None)
         hass.data[DOMAIN].pop("controls", None)
         if hass.data[DOMAIN].pop("_panel", False):
             frontend.async_remove_panel(hass, PANEL_URL_PATH)
@@ -127,6 +128,8 @@ async def ws_state(hass, connection, msg):
                                            "geyser_available": geyser_available,
                                            "geyser_count": len(hass.config_entries.async_entries("hamlet_geyser")),
                                            "geyser_installed": "hamlet_geyser" in hass.config.components,
+                                           "help_contact": c.help_contact,
+                                           "updates": [u.status() for u in hass.data[DOMAIN].get("updates", [])] if connection.user.is_admin else [],
                                            "weather_available": bool(_weather_conf(hass, c)["weather_entity"] or _weather_conf(hass, c)["pv_forecast_today"])})
 
 
@@ -492,3 +495,31 @@ def ws_devices_entities(hass, connection, msg):
     if _controller(hass, connection, msg) is None:
         return
     connection.send_result(msg["id"], hass.data[DOMAIN]["devices"].entity_options())
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/update_check"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_update_check(hass, connection, msg):
+    """'Check now' on the page: ask GitHub right away and return what was found."""
+    if _controller(hass, connection, msg) is None:
+        return
+    ents = hass.data[DOMAIN].get("updates", [])
+    for u in ents:
+        await u.async_check()
+    connection.send_result(msg["id"], [u.status() for u in ents])
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/help_contact", vol.Required("contact"): dict})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_help_contact(hass, connection, msg):
+    """Installer's name / phone / email shown on the Help page."""
+    if (c := _controller(hass, connection, msg)) is None:
+        return
+    try:
+        await c.async_set_help_contact(msg["contact"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], c.help_contact)

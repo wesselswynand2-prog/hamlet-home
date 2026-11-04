@@ -12,7 +12,7 @@ For the geyser, add `https://github.com/wesselswynand2-prog/hamlet-geyser` the s
 
 ## Updates without HACS (built in)
 Hamlet Home checks GitHub every 6 hours. A new version of **Hamlet Home** or **Hamlet Geyser** shows up under **Settings → Updates** – click **Install**: it downloads the release, keeps the previous version in `hamlet_backup/`, and restarts Home Assistant. Settings and history are kept.
-When HACS already shows a version, Hamlet Home stays quiet (no double notices); if HACS is behind, Hamlet Home shows it.
+Admins also see a banner with **Install** on the Energy tab, and the check status (installed, GitHub, last check, errors, **Check now**) under *Installer: app updates*. When HACS already shows a version, Hamlet Home stays quiet (no double notices); if HACS is behind, Hamlet Home shows it.
 
 ## Install or update without HACS (zip + one command)
 1. Upload `hamlet-home.zip` to the Home Assistant config folder.
@@ -45,6 +45,9 @@ The top of the **Today** card shows:
 - **Full in** – how long until the battery is full at the current charge rate. (Charging slows near 100 %, so the last bit can take a little longer.)
 
 Battery size: leave it empty and it's measured from the history (needs one stretch where the battery drops at least 15 %, normally the first night), or type the usable size under **Battery settings** (admin). Sensors: `sensor.<name>_battery_backup_time`, `sensor.<name>_battery_full_in` (hours).
+
+## Help
+The **?** button at the top right opens the user guide in the app (`frontend/guide.md` – edit that file to change it), with contents and the installer's phone / email / WhatsApp. Admins enter those under *Contact your installer → Edit contact details*.
 
 ## Devices (heat pumps, heaters, aircons … on a Shelly)
 The **Devices** tab (admins: **+ Add a device**): name, type, the Shelly switch, its power sensor (optional) and rated watts. Each device then works like the pool pump:

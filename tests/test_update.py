@@ -86,6 +86,9 @@ async def test_update_entity_installs_and_restarts(enable_custom_integrations, h
     st = hass.states.get("update.huis_app_update")
     assert st.state == "on" and st.attributes["latest_version"] == "9.9.9" and st.attributes["release_summary"] == "Controls tab"
     assert st.attributes["managed_by"] == "Hamlet Home"
+    ent0 = next(e for e in hass.data[DOMAIN]["updates"] if e.domain == "hamlet_home")
+    stat = ent0.status()
+    assert stat["available"] and stat["github"] == "9.9.9" and stat["checked"] and stat["error"] is None and stat["can_install"]
     # HACS is showing the same update -> we step aside; HACS quiet / stale -> we show it
     hass.states.async_set("update.hamlet_home_update", "on", {"release_url": "https://github.com/wesselswynand2-prog/hamlet-home/releases/v9.9.9"})
     ent = next(e for e in hass.data["entity_components"]["update"].entities if e.entity_id == "update.huis_app_update")
