@@ -63,7 +63,8 @@
         "title": "Hamlet Home",
         "menu_options": {
           "energy": "Energy (solar, battery, grid)",
-          "water": "Water & pump"
+          "water": "Water & pump",
+          "weather": "Weather & solar forecast"
         }
       },
       "water": {
@@ -80,6 +81,17 @@
           "pool_switch": "Pool pump switch",
           "pool_power": "Pool pump power (W)",
           "tank_level": "Water tank level (%)"
+        }
+      },
+      "weather": {
+        "title": "Weather & solar forecast",
+        "description": "Shown on the Weather tab. Found automatically when left empty (the first weather entity, Solcast or Forecast.Solar sensors).",
+        "data": {
+          "weather_entity": "Weather (e.g. weather.wynand_huis, Met.no, OpenWeatherMap)",
+          "pv_forecast_today": "Solar forecast today (kWh) – Solcast Forecast Today",
+          "pv_forecast_tomorrow": "Solar forecast tomorrow (kWh)",
+          "pv_forecast_remaining": "Solar forecast remaining today (optional)",
+          "weather_extras": "Extra sensors to show (e.g. Forecast SOC, DOD, rain gauge)"
         }
       }
     },

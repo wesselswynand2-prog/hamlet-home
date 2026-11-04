@@ -45,6 +45,14 @@ The top of the **Today** card shows:
 
 Battery size: leave it empty and it's measured from the history (needs one stretch where the battery drops at least 15 %, normally the first night), or type the usable size under **Battery settings** (admin). Sensors: `sensor.<name>_battery_backup_time`, `sensor.<name>_battery_full_in` (hours).
 
+## Weather
+The **Weather** tab appears when there's a weather entity or a solar forecast sensor (found automatically; change under Configure → **Weather & solar forecast**):
+- **Now** – condition, temperature, today's high / low, feels-like, cloud cover, wind (with direction and gusts), humidity, rain today, UV, pressure.
+- **Solar forecast** – Solcast (or Forecast.Solar) today and tomorrow in kWh, what's been made so far, what's still to come, and a chart of the forecast (with its likely range) against your actual solar today.
+- **Forecast** – 7 days (high / low and rain with chance) or the next 24 hours (temperature, rain, wind).
+- **Extra sensors** – any sensors you pick, e.g. Forecast SOC and DOD.
+- **Weather settings** (admin, bottom of the page) – rain in mm or inches, wind in km/h, m/s, mph or knots.
+
 ## Controls
 The **Controls** tab fills itself from Home Assistant: every light, switch, plug, aircon, fan, blind, lock, scene and script, grouped by the **area** it's in (Settings → Areas – give devices an area and they land in that room). Things the other tabs already run (booster pump, pool pump, irrigation valves, geysers) are left out so nobody fights the automation.
 

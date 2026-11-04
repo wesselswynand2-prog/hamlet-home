@@ -75,6 +75,7 @@ class EnergyController:
         self.acc = energy.Accumulator(max_gap=600)
         self.live: dict[str, Any] = {}
         self.battery: dict = dict(energy.DEFAULT_BATTERY)
+        self.weather_prefs: dict = {"rain_unit": "auto", "wind_unit": "auto"}
         self.learned_capacity: float | None = None
         self._smooth: dict[str, float] = {}
         self._smooth_t: float | None = None
@@ -115,6 +116,7 @@ class EnergyController:
         data = await self.store.async_load() or {}
         self.tariff = {**energy.DEFAULT_TARIFF, **data.get("tariff", {})}
         self.battery = {**energy.DEFAULT_BATTERY, **data.get("battery", {})}
+        self.weather_prefs = {**self.weather_prefs, **data.get("weather_prefs", {})}
         self.learned_capacity = data.get("learned_capacity")
         self.acc.days = data.get("days", {})
         self.acc.load_buckets(data.get("buckets", {}))
@@ -137,7 +139,7 @@ class EnergyController:
         cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
         self.acc.days = {d: v for d, v in self.acc.days.items() if d >= cutoff}
         self.acc.buckets = {d: v for d, v in self.acc.buckets.items() if d in keep}
-        return {"tariff": self.tariff, "battery": self.battery, "learned_capacity": self.learned_capacity, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
+        return {"tariff": self.tariff, "battery": self.battery, "weather_prefs": self.weather_prefs, "learned_capacity": self.learned_capacity, "days": self.acc.days, "buckets": self.acc.dump_buckets(keep)}
 
     def _save(self, delay: float = 30) -> None:
         self.store.async_delay_save(self._store_data, delay)
@@ -378,6 +380,11 @@ class EnergyController:
         self.battery.update(clean)
         self._save(1)
         self._notify(force=True)
+
+    async def async_set_weather_prefs(self, new: dict) -> None:
+        from .weather import validate_prefs  # noqa: PLC0415
+        self.weather_prefs.update(validate_prefs(new))
+        self._save(1)
 
     # ------------------------------------------------------------- snapshot
     def today(self) -> dict:

@@ -29,7 +29,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     for handler in (ws_state, ws_subscribe, ws_set_tariff, ws_water_action, ws_water_settings, ws_solar_settings,
                     ws_irrigation_action, ws_irrigation_settings, ws_irrigation_entities, ws_battery_settings,
-                    ws_controls, ws_controls_settings, ws_controls_pulse):
+                    ws_controls, ws_controls_settings, ws_controls_pulse, ws_weather, ws_weather_settings):
         websocket_api.async_register_command(hass, handler)
     return True
 
@@ -118,7 +118,8 @@ async def ws_state(hass, connection, msg):
                                            "is_admin": connection.user.is_admin,
                                            "geyser_available": geyser_available,
                                            "geyser_count": len(hass.config_entries.async_entries("hamlet_geyser")),
-                                           "geyser_installed": "hamlet_geyser" in hass.config.components})
+                                           "geyser_installed": "hamlet_geyser" in hass.config.components,
+                                           "weather_available": bool(_weather_conf(hass, c)["weather_entity"] or _weather_conf(hass, c)["pv_forecast_today"])})
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/subscribe"})
@@ -315,3 +316,70 @@ async def ws_controls_pulse(hass, connection, msg):
         connection.send_error(msg["id"], "invalid", str(err))
         return
     connection.send_result(msg["id"])
+
+
+def _weather_conf(hass, c) -> dict:
+    """Configured weather / PV forecast entities, falling back to what's found automatically."""
+    from .const import WEATHER_KEYS  # noqa: PLC0415
+    from .weather import autodetect  # noqa: PLC0415
+    conf = c.conf
+    found = autodetect(hass.states.async_entity_ids())
+    out = {k: conf.get(k) or found.get(k) for k in WEATHER_KEYS}
+    out["weather_extras"] = [e for e in (conf.get("weather_extras") or []) if e]
+    return out
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/weather"})
+@callback
+def ws_weather(hass, connection, msg):
+    if (c := _controller(hass, connection, msg)) is None:
+        return
+    from homeassistant.util import dt as dt_util  # noqa: PLC0415
+    from . import weather as wx  # noqa: PLC0415
+    from datetime import timedelta  # noqa: PLC0415
+    conf = _weather_conf(hass, c)
+    now = dt_util.now()
+    tz = dt_util.get_default_time_zone()
+
+    def kwh(eid):
+        st = hass.states.get(eid) if eid else None
+        try:
+            return round(float(st.state), 2) if st else None
+        except (TypeError, ValueError):
+            return None
+
+    today_st = hass.states.get(conf["pv_forecast_today"]) if conf["pv_forecast_today"] else None
+    tom_st = hass.states.get(conf["pv_forecast_tomorrow"]) if conf["pv_forecast_tomorrow"] else None
+    series_today = wx.detailed(dict(today_st.attributes), now.date(), tz) if today_st else []
+    series_tom = wx.detailed(dict(tom_st.attributes), (now + timedelta(days=1)).date(), tz) if tom_st else []
+    remaining = kwh(conf["pv_forecast_remaining"])
+    if remaining is None and series_today:
+        remaining = wx.remaining_kwh(series_today, now.hour * 60 + now.minute)
+    rows = c.acc.rows(now.date().isoformat())
+    connection.send_result(msg["id"], {
+        "conf": conf,
+        "prefs": c.weather_prefs,
+        "is_admin": connection.user.is_admin,
+        "pv": {"today": kwh(conf["pv_forecast_today"]), "tomorrow": kwh(conf["pv_forecast_tomorrow"]), "remaining": remaining,
+               "series_today": series_today, "series_tomorrow": series_tom},
+        "solar_today_kwh": round(c.today().get("solar", 0.0), 2) if c.ready else None,
+        "solar_rows": [[r[0], r[1]] for r in rows if r[1] is not None],
+        "live_solar": c.live.get("solar"),
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): f"{DOMAIN}/weather_settings",
+    vol.Required("settings"): dict,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_weather_settings(hass, connection, msg):
+    if (c := _controller(hass, connection, msg)) is None:
+        return
+    try:
+        await c.async_set_weather_prefs(msg["settings"])
+    except (ValueError, TypeError) as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], c.weather_prefs)

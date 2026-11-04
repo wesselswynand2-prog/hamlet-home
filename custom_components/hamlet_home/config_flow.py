@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_PV_REMAINING, CONF_PV_TODAY, CONF_PV_TOMORROW, CONF_WEATHER, CONF_WEATHER_EXTRAS, WEATHER_KEYS,
     CONF_BATTERY_INVERT,
     CONF_BATTERY_POWER,
     CONF_BATTERY_SOC,
@@ -96,6 +97,16 @@ def geyser_defaults(hass: HomeAssistant) -> dict:
     return {}
 
 
+def _weather_schema() -> vol.Schema:
+    return vol.Schema({
+        vol.Optional(CONF_WEATHER): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
+        vol.Optional(CONF_PV_TODAY): _sensor(),
+        vol.Optional(CONF_PV_TOMORROW): _sensor(),
+        vol.Optional(CONF_PV_REMAINING): _sensor(),
+        vol.Optional(CONF_WEATHER_EXTRAS): _sensor(multiple=True),
+    })
+
+
 class HamletHomeConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -136,7 +147,7 @@ class HamletHomeOptionsFlow(OptionsFlow):
         return {**self.config_entry.data, **self.config_entry.options}
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(step_id="init", menu_options=["energy", "water"])
+        return self.async_show_menu(step_id="init", menu_options=["energy", "water", "weather"])
 
     async def async_step_energy(self, user_input: dict | None = None) -> ConfigFlowResult:
         if user_input is not None and _solar_errors(user_input):
@@ -153,6 +164,16 @@ class HamletHomeOptionsFlow(OptionsFlow):
             self._data.update(user_input)
             return self._save()
         return self.async_show_form(step_id="water", data_schema=self.add_suggested_values_to_schema(_water_schema(), self._current))
+
+    async def async_step_weather(self, user_input: dict | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update({k: None for k in WEATHER_KEYS})
+            self._data.update(user_input)
+            return self._save()
+        from .weather import autodetect  # noqa: PLC0415
+        found = {k: v for k, v in autodetect(self.hass.states.async_entity_ids()).items() if v}
+        current = {k: v for k, v in self._current.items() if k in WEATHER_KEYS and v}
+        return self.async_show_form(step_id="weather", data_schema=self.add_suggested_values_to_schema(_weather_schema(), {**found, **current}))
 
     def _save(self) -> ConfigFlowResult:
         return self.async_create_entry(title="", data={**self.config_entry.options, **self._data})
