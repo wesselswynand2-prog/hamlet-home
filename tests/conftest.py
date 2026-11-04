@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 
+import pytest
 import pytest_homeassistant_custom_component
 
 _TARGET = Path(pytest_homeassistant_custom_component.__file__).parent / "testing_config" / "custom_components"
@@ -15,3 +16,9 @@ for src in _SOURCES:
                 link.unlink()
             link.symlink_to(comp.resolve(), target_is_directory=True)
 
+
+
+@pytest.fixture(autouse=True)
+def _no_internet(aioclient_mock):
+    """Every test gets Home Assistant's fake web client (the GitHub update check must not go online)."""
+    yield aioclient_mock

@@ -22,7 +22,7 @@ from .controls_manager import ControlsManager
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.UPDATE]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:

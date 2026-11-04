@@ -10,6 +10,10 @@ One app for the home: **Energy** (power flow, today in kWh and rand, power chart
 Updates then show up in Settings like any other update – click **Update** and restart.
 For the geyser, add `https://github.com/wesselswynand2-prog/hamlet-geyser` the same way – it appears in the Geyser tab.
 
+## Updates without HACS (built in)
+Hamlet Home checks GitHub every 6 hours. A new version of **Hamlet Home** or **Hamlet Geyser** shows up under **Settings → Updates** – click **Install**: it downloads the release, keeps the previous version in `hamlet_backup/`, and restarts Home Assistant. Settings and history are kept.
+When HACS manages an app, HACS shows its update instead (no double notices).
+
 ## Install or update without HACS (zip + one command)
 1. Upload `hamlet-home.zip` to the Home Assistant config folder.
 2. Terminal & SSH add-on:
