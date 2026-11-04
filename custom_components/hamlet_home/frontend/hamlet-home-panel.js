@@ -239,6 +239,33 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .wdia .ic ha-icon { --mdc-icon-size: 19px; }
 .wdia .ic.on { border-color: var(--c-water); color: var(--c-water); }
 .wdia .ic.bad { border-color: var(--c-bad); color: var(--c-bad); }
+/* pool diagram */
+.pdia { position: relative; width: 100%; margin: 4px auto 0; --c-water: #1f8fd0; --c-heat: #eb6834; }
+.pdia svg { display: block; width: 100%; height: auto; overflow: visible; }
+.pdia .pipe { fill: none; stroke: var(--line); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.pdia .wet { fill: none; stroke: color-mix(in srgb, var(--c-water) 35%, transparent); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.pdia .drops { fill: none; stroke: var(--c-water); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 1 11; opacity: 0; }
+.pdia .on .wet, .pdia .on .drops { opacity: 1; } .pdia .on .drops { animation: wrun 1.1s linear infinite; }
+.pdia .hot .drops { stroke: var(--c-heat); }
+.pdia .imp { transform-box: fill-box; transform-origin: center; } .pdia .spin .imp { animation: wspin .7s linear infinite; }
+.pdia .wv1 { animation: pwave 4s ease-in-out infinite alternate; } .pdia .wv2 { animation: pwave 5.5s ease-in-out infinite alternate-reverse; }
+@keyframes pwave { from { transform: translateX(-24px); } to { transform: translateX(0); } }
+.pdia .bub { fill: #fff; opacity: 0; } .pdia .chl .bub { animation: pbub 2.4s ease-in infinite; }
+@keyframes pbub { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: .8; } 100% { opacity: 0; transform: translateY(-46px); } }
+.pdia .glow { opacity: 0; transition: opacity .6s; } .pdia .lit .glow { opacity: 1; animation: pglow 3s ease-in-out infinite alternate; }
+@keyframes pglow { to { opacity: .6; } }
+.pdia .bot { transform-box: fill-box; } .pdia .clean .bot { animation: pbot 9s ease-in-out infinite alternate; }
+@keyframes pbot { to { transform: translateX(var(--run)); } }
+.pdia .lbl { fill: var(--muted); font-size: 11px; text-anchor: middle; } .pdia .lbl.on { fill: var(--primary-text-color); font-weight: 500; }
+.pdia .tmp { fill: #fff; font-size: 30px; font-weight: 300; text-anchor: middle; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: rgba(0,0,0,.12); stroke-width: 2px; }
+.pdia .tmp tspan { font-size: 14px; }
+.pdia .tsub { fill: #fff; font-size: 11px; text-anchor: middle; opacity: .9; }
+.pdia .ic { position: absolute; transform: translate(-50%, -50%); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--card); border: 2px solid var(--line); color: var(--muted); transition: border-color .3s, color .3s; }
+.pdia .ic ha-icon { --mdc-icon-size: 20px; } .pdia .ic.on { border-color: var(--c-water); color: var(--c-water); }
+.pdia .ic.hot { border-color: var(--c-heat); color: var(--c-heat); animation: pulse 1.6s ease-in-out infinite; }
+.pdia .ic.bad { border-color: var(--c-bad); color: var(--c-bad); }
+@media (prefers-reduced-motion: reduce) { .pdia .on .drops, .pdia .spin .imp, .pdia .wv1, .pdia .wv2, .pdia .chl .bub, .pdia .lit .glow, .pdia .clean .bot, .pdia .ic.hot { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .wdia .on .drops, .wdia .spin .imp, .wdia .wave, .wdia .on .spray circle { animation: none; } .wdia .on .drops { stroke-dasharray: none; opacity: .5; } }
 .modes3 { display: inline-grid; grid-template-columns: repeat(4, auto); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .modes3 button { font: inherit; font-size: 14px; padding: 8px 18px; border: 0; background: transparent; color: var(--primary-text-color); cursor: pointer; }
@@ -1210,9 +1237,9 @@ Object.assign(HamletHomePanel.prototype, {
   /* Pool tab: the pool pump, the water temperature and any devices linked to the pool (heat pump, lights …) */
   async _buildPool() {
     this._main.innerHTML = `
-      <section class="card s7" id="wpool"><h2><ha-icon icon="mdi:pump"></ha-icon>Pool pump</h2><div id="wpoolbody"></div><div id="wpoolsched"></div>
+      <section class="card" id="wpooltemp"><h2><ha-icon icon="mdi:pool"></ha-icon>Swimming pool <span class="sub" id="wpoolsub"></span></h2><div id="pooldia"></div><div id="wpooltempbody"></div></section>
+      <section class="card" id="wpool"><h2><ha-icon icon="mdi:pump"></ha-icon>Pool pump</h2><div id="wpoolbody"></div><div id="wpoolsched"></div>
         <div class="actions" id="wpoolact" hidden><span class="msg" id="wpoolmsg"></span><button class="btn" data-w="poolreset">Discard</button><button class="btn primary" data-w="poolsave">Save times</button></div></section>
-      <section class="card s5" id="wpooltemp" style="align-self:start"><h2><ha-icon icon="mdi:pool-thermometer"></ha-icon>Pool water</h2><div id="wpooltempbody"></div></section>
       <div id="pooldevs" style="display:contents"></div>`;
     this._wShown = {}; this._poolDirty = false;
     this._renderWater();
@@ -1237,10 +1264,13 @@ Object.assign(HamletHomePanel.prototype, {
     const hasPool = f0.pool_switch || f0.pool_power;
     if ($("wpool")) {
       hide("wpool", !hasPool);
-      hide("wpooltemp", !f0.pool_temp);
-      if (!hasPool && !f0.pool_temp) {
+      const poolDevs = (this._devices || []).filter((d) => d.area === "pool");
+      hide("wpooltemp", !(hasPool || f0.pool_temp || poolDevs.length || this._isAdmin));
+      this._renderPoolDiagram();
+      this._setHTML($("wpooltempbody"), "");
+      if (!hasPool && !f0.pool_temp && !poolDevs.length) {
         const holder = $("wpooltemp");
-        if (holder) { holder.hidden = false; this._setHTML($("wpooltempbody"), `<div class="muted small">${this._isAdmin ? "No pool pump set up yet. Add the pool pump switch, its power and a pool temperature sensor under Settings → Devices &amp; services → Hamlet Home → Configure → Water, pump &amp; pool. Add a pool heat pump, lights or a chlorinator below." : "Nothing set up for the pool yet."}</div>`); }
+        if (holder) { this._setHTML($("wpooltempbody"), `<div class="muted small">${this._isAdmin ? "No pool pump set up yet. Add the pool pump switch, its power and a pool temperature sensor under Settings → Devices &amp; services → Hamlet Home → Configure → Water, pump &amp; pool. Add a pool heat pump, lights or a chlorinator below." : "Nothing set up for the pool yet."}</div>`); }
       }
     }
     if (!w) { ["wpump", "wpool", "wchartcard", "wprot", "walarm"].forEach((id) => hide(id, true)); return; }
@@ -1249,11 +1279,6 @@ Object.assign(HamletHomePanel.prototype, {
     hide("wpump", !hasPump);
     hide("wchartcard", !f.water_pressure);
     hide("wprot", !this._isAdmin || !hasPump);
-    if (f.pool_temp && $("wpooltempbody")) {
-      const t = num(L.pool_temp);
-      this._setHTML($("wpooltempbody"), `<div class="row2"><div class="big" style="font-size:38px;font-weight:300">${t === null ? "–" : t.toFixed(1)}<small style="font-size:16px"> °C</small></div>
-        <span class="muted small">${t === null ? "The sensor isn't reporting" : t >= 28 ? "Warm" : t >= 24 ? "Nice for swimming" : t >= 20 ? "Fresh" : "Cold"}</span></div>`);
-    }
 
     // alarm
     const al = $("walarm");
@@ -1478,6 +1503,87 @@ Object.assign(HamletHomePanel.prototype, {
         <div class="row"><span>Booster running</span><span>${Math.round(r[3] * 5)} of 5 min</span></div>
         ${r[4] > 0 ? `<div class="row"><span>Pool pump</span><span>${Math.round(r[4] * 5)} of 5 min</span></div>` : ""}`;
     }, m, iw);
+  },
+
+  /* -------------------------------------------------------- pool diagram */
+  // Pool -> pump -> filter -> heat pump / chlorinator … -> back into the pool. Water runs while the pool pump runs;
+  // a running heater warms the return water (orange), a chlorinator bubbles, lights glow, a cleaner drives about.
+  _renderPoolDiagram() {
+    const el = this.shadowRoot.getElementById("pooldia"); if (!el) return;
+    const w = this._water || {}, L = w.live || {}, f = w.features || {};
+    const devs = (this._devices || []).filter((d) => d.area === "pool");
+    const hasPump = f.pool_switch || f.pool_power;
+    if (!hasPump && !f.pool_temp && !devs.length) { el.innerHTML = ""; el._key = null; return; }
+    const run = !!L.pool_running;
+    const t = num(L.pool_temp);
+    const inline = devs.filter((d) => !["light", "cleaner"].includes(d.kind)).slice(0, 4);
+    const lights = devs.filter((d) => d.kind === "light"), cleaners = devs.filter((d) => d.kind === "cleaner");
+    const isHeat = (d) => ["heatpump", "heater"].includes(d.kind);
+    const hot = inline.some((d) => isHeat(d) && d.on);
+    const chl = run && inline.some((d) => d.kind === "chlorinator" && d.on);
+    const lit = lights.some((d) => d.on), clean = cleaners.some((d) => d.on);
+    const narrow = (this.shadowRoot.host.clientWidth || 800) < 560;
+    let P, pump, filt, eq, Wd, H, pipe, inX, cold, warmP;
+    const hi = inline.findIndex((d) => isHeat(d) && d.on);   // water turns warm after the first running heater
+    if (!narrow) {
+      P = { x: 16, y: 34, w: 270, h: 156 }; pump = [340, 172]; filt = [412, 172];
+      eq = (i) => [484 + i * 72, 172];
+      const end = inline.length ? eq(inline.length - 1)[0] : filt[0];
+      Wd = Math.max(560, end + 56); H = 214; inX = 236;
+      pipe = `M${P.x + P.w} 172 H ${end + 34} V 16 H ${inX} V ${P.y + 18}`;
+      if (hi >= 0) { const hx = eq(hi)[0]; cold = `M${P.x + P.w} 172 H ${hx}`; warmP = `M${hx} 172 H ${end + 34} V 16 H ${inX} V ${P.y + 18}`; }
+    } else {
+      P = { x: 16, y: 34, w: 308, h: 126 }; pump = [64, 214]; filt = [130, 214];
+      eq = (i) => [196 + i * 60, 214];
+      const end = inline.length ? eq(inline.length - 1)[0] : filt[0];
+      const right = Math.max(end + 30, 334);
+      Wd = Math.max(344, right + 10); H = 246; inX = 250;
+      pipe = `M36 ${P.y + P.h} V 214 H ${right} V 16 H ${inX} V ${P.y + 18}`;
+      if (hi >= 0) { const hx = eq(hi)[0]; cold = `M36 ${P.y + P.h} V 214 H ${hx}`; warmP = `M${hx} 214 H ${right} V 16 H ${inX} V ${P.y + 18}`; }
+    }
+    const key = JSON.stringify([narrow, Wd, run, t === null ? null : t.toFixed(1), hot, chl, lit, clean, w.pool_reason, inline.map((d) => [d.name, d.kind, d.on, d.available]), lights.length, cleaners.length, hasPump]);
+    if (el._key === key) return;
+    el._key = key;
+    const sub = this.shadowRoot.getElementById("wpoolsub");
+    if (sub) sub.textContent = [hasPump ? (run ? "pump running" : "pump off") : "", hot ? "heating" : "", lit ? "lights on" : ""].filter(Boolean).join(" · ");
+    // water colour: cooler = deeper blue, warmer = more turquoise
+    const warm = t === null ? 0.5 : Math.max(0, Math.min(1, (t - 16) / 14));
+    const water = `hsl(${Math.round(205 - warm * 25)} 70% ${Math.round(48 + warm * 6)}%)`;
+    const sy = P.y + 16, x1 = P.x, x2 = P.x + P.w;
+    const wave = (y, amp) => { let d = `M${x1 - 30} ${y}`; for (let x = x1 - 30; x < x2 + 30; x += 24) d += ` q 6 ${-amp} 12 0 t 12 0`; return d + ` V ${P.y + P.h} H ${x1 - 30} Z`; };
+    let svg = `<defs><clipPath id="pclip"><rect x="${P.x}" y="${P.y}" width="${P.w}" height="${P.h}" rx="18"/></clipPath>
+        <radialGradient id="pglowg" cx="50%" cy="60%" r="60%"><stop offset="0" stop-color="#fff6c2" stop-opacity=".75"/><stop offset="1" stop-color="#fff6c2" stop-opacity="0"/></radialGradient></defs>
+      <path class="pipe" d="${pipe}"/>
+      ${hi >= 0 ? `<g class="${run ? "on" : ""}"><path class="wet" d="${cold}"/><path class="drops" d="${cold}"/></g><g class="${run ? "on" : ""} hot"><path class="wet" d="${warmP}"/><path class="drops" d="${warmP}"/></g>`
+        : `<g class="${run ? "on" : ""}"><path class="wet" d="${pipe}"/><path class="drops" d="${pipe}"/></g>`}
+      <g clip-path="url(#pclip)" class="${lit ? "lit" : ""} ${chl ? "chl" : ""} ${clean ? "clean" : ""}">
+        <rect x="${P.x}" y="${P.y}" width="${P.w}" height="${P.h}" fill="color-mix(in srgb, var(--c-water) 8%, var(--card))"/>
+        <path class="wv2" d="${wave(sy + 3, 3)}" fill="${water}" opacity=".55"/>
+        <path class="wv1" d="${wave(sy, 4)}" fill="${water}" opacity=".85"/>
+        <ellipse class="glow" cx="${x1 + P.w / 2}" cy="${P.y + P.h * 0.62}" rx="${P.w * 0.55}" ry="${P.h * 0.5}" fill="url(#pglowg)"/>
+        ${[0, 1, 2, 3].map((i) => `<circle class="bub" cx="${inX - 14 + i * 9}" cy="${P.y + P.h - 10}" r="${2 + (i % 2)}" style="animation-delay:${i * 0.55}s"/>`).join("")}
+        ${cleaners.length ? `<g class="bot" style="--run:${Math.round(P.w - 70)}px"><rect x="${x1 + 14}" y="${P.y + P.h - 20}" width="30" height="13" rx="5" fill="${clean ? "#2b3440" : "rgba(0,0,0,.35)"}"/><rect x="${x1 + 17}" y="${P.y + P.h - 8}" width="24" height="3" rx="1.5" fill="#111"/></g>` : ""}
+      </g>
+      <rect x="${P.x}" y="${P.y}" width="${P.w}" height="${P.h}" rx="18" fill="none" stroke="color-mix(in srgb, var(--c-water) 45%, var(--line))" stroke-width="3"/>
+      <text class="tmp" x="${x1 + P.w / 2}" y="${P.y + P.h / 2 + 12}">${t === null ? "" : t.toFixed(1)}<tspan>${t === null ? "" : " °C"}</tspan></text>
+      <text class="tsub" x="${x1 + P.w / 2}" y="${P.y + P.h / 2 + 30}">${t === null ? "" : t >= 28 ? "Warm" : t >= 24 ? "Nice for swimming" : t >= 20 ? "Fresh" : "Cold"}</text>`;
+    if (hasPump) {
+      const [px, py] = pump;
+      svg += `<g class="${run ? "spin" : ""}"><circle cx="${px}" cy="${py}" r="22" fill="var(--card)" stroke="${run ? "var(--c-water)" : "var(--line)"}" stroke-width="2.5"/>
+        <g class="imp"><path d="M${px} ${py} l0 -14 a14 14 0 0 1 10 4 Z M${px} ${py} l12.1 7 a14 14 0 0 1 -4.9 9.5 Z M${px} ${py} l-12.1 7 a14 14 0 0 1 -5.3 -9.5 Z" fill="${run ? "var(--c-water)" : "var(--muted)"}" opacity=".85"/></g>
+        <circle cx="${px}" cy="${py}" r="3" fill="var(--card)"/></g><text class="lbl ${run ? "on" : ""}" x="${px}" y="${py + 38}">${run ? "Pump on" : "Pump"}</text>`;
+    }
+    const [fx, fy] = filt;
+    svg += `<rect x="${fx - 15}" y="${fy - 27}" width="30" height="50" rx="13" fill="${run ? "color-mix(in srgb, var(--c-water) 18%, var(--card))" : "var(--card)"}" stroke="${run ? "var(--c-water)" : "var(--line)"}" stroke-width="2.5"/>
+      <line x1="${fx - 8}" y1="${fy - 6}" x2="${fx + 8}" y2="${fy - 6}" stroke="var(--line)" stroke-width="2"/><line x1="${fx - 8}" y1="${fy + 2}" x2="${fx + 8}" y2="${fy + 2}" stroke="var(--line)" stroke-width="2"/>
+      <text class="lbl ${run ? "on" : ""}" x="${fx}" y="${fy + 38}">Filter</text>`;
+    const nm = (x) => { x = String(x || ""); return x.length > 12 ? x.slice(0, 11) + "…" : x; };
+    inline.forEach((d, i) => { const [ex, ey] = eq(i); svg += `<text class="lbl ${d.on ? "on" : ""}" x="${ex}" y="${ey + 38}">${esc(nm(d.name))}</text>`; });
+    const pct = (x, y) => `left:${(x / Wd) * 100}%;top:${(y / H) * 100}%`;
+    let icons = inline.map((d, i) => `<div class="ic ${d.available === false ? "bad" : d.on ? (isHeat(d) ? "hot" : "on") : ""}" style="${pct(...eq(i))}" title="${esc(d.name)}"><ha-icon icon="${esc(d.icon || "mdi:power-plug")}"></ha-icon></div>`).join("");
+    if (lights.length) icons += `<div class="ic ${lit ? "hot" : ""}" style="${pct(P.x + 22, P.y + 2)};width:30px;height:30px${lit ? ";border-color:#e8b400;color:#e8b400;animation:none" : ""}" title="${esc(lights.map((d) => d.name).join(", "))}"><ha-icon icon="${lit ? "mdi:lightbulb-on" : "mdi:lightbulb-outline"}" style="--mdc-icon-size:17px"></ha-icon></div>`;
+    el.innerHTML = `<div class="pdia" style="max-width:${Math.round(Wd * 1.3)}px" role="img" aria-label="${esc(`Pool${t !== null ? ` ${t.toFixed(1)} °C` : ""}${hasPump ? (run ? ", pump running" : ", pump off") : ""}${hot ? ", heating" : ""}${lit ? ", lights on" : ""}`)}">
+      <svg viewBox="0 0 ${Wd} ${H}">${svg}</svg>${icons}</div>`;
   },
 
   /* ------------------------------------------------------- water diagram */

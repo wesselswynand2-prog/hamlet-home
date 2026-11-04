@@ -130,6 +130,8 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 
 Everything for the swimming pool: the pool pump, the water temperature and any other pool devices.
 
+At the top, a live picture shows the pool and its equipment: water flows from the pool through the pump and filter and back in while the pump runs. The water after a running heat pump turns orange. A running salt cell bubbles, pool lights make the pool glow, and the cleaner drives along the bottom. The temperature is shown in the water.
+
 **Pool pump – the four modes**
 
 | Mode | What it does |
@@ -154,10 +156,6 @@ The line next to the status always says why the pump is on or off, for example *
 **Run times (Timer mode)**
 
 Tap **+ Add run time**, set the start and end, tap the days, then tap **Save**. Switch a run time off with its slider without deleting it.
-
-**Pool water**
-
-Shows the pool temperature when a pool temperature sensor (for example a floating pool sensor) is set up.
 
 **Pool devices**
 
