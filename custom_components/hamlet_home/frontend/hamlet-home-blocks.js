@@ -58,12 +58,25 @@ svg.lines .flow.rev { animation-direction: reverse; }
 .lvl.chg i { background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.28) 0 6px, transparent 6px 12px); background-size: 34px 34px; animation: stripes 1.2s linear infinite; }
 @keyframes stripes { to { background-position: 34px 0; } }
 @media (prefers-reduced-motion: reduce) { svg.lines .flow.on, .inv.busy .top::after, .lvl.chg i { animation: none; } svg.lines .flow.on { stroke-dasharray: none; opacity: .6; } }
-@media (max-width: 640px) {
-  .row.top { flex-wrap: wrap; } .row.top > .box { flex: 1 1 calc(50% - var(--gap)); }
-  .row.bottom { flex-wrap: wrap; } .row.bottom > .box { flex: 1 1 calc(50% - var(--gap)); }
-  .mid { margin: 22px 0; } .inv { width: 70%; }
-  .box .big { font-size: 24px; }
-}
+/* phone / narrow card: two columns with a bus line down the middle (set from the card's own width) */
+.wrap.m { --gap: 10px; }
+.wrap.m .row { display: grid; grid-template-columns: 1fr 30px 1fr; grid-auto-flow: row dense; gap: 10px 0; }
+.wrap.m .row > .box { grid-column: 3; }
+.wrap.m .row > .box[data-side="l"] { grid-column: 1; }
+.wrap.m .mid { margin: 26px 0; }
+.wrap.m .inv { width: 62%; }
+.wrap.m .inv .top { padding: 10px; } .wrap.m .inv .top ha-icon { --mdc-icon-size: 26px; } .wrap.m .inv .top .w { font-size: 16px; }
+.wrap.m .inv .st { padding: 6px; font-size: 12px; }
+.wrap.m .box .hd { padding: 8px 10px 0; font-size: 12px; gap: 6px; }
+.wrap.m .box .hd ha-icon { --mdc-icon-size: 16px; }
+.wrap.m .box .hd .r { font-size: 11px; }
+.wrap.m .box .big { padding: 0 10px; font-size: 22px; }
+.wrap.m .box .spark { display: none; }
+.wrap.m .box .lvl { margin: 4px 10px 2px; height: 7px; }
+.wrap.m .box .ft { padding: 5px 10px; font-size: 11px; gap: 1px; }
+.wrap.m .box .ft .r2:nth-child(n+4) { display: none; }
+.wrap.m svg.lines .base { stroke-width: 5; }
+.wrap.m svg.lines .flow { stroke-width: 3.5; }
 `;
 
 class HamletHomeBlocks extends HTMLElement {
@@ -100,7 +113,8 @@ class HamletHomeBlocks extends HTMLElement {
   }
 
   _box(id, icon, color, title) {
-    return `<div class="box" id="b-${id}" style="--bc:${color}"><div class="hd"><ha-icon icon="${icon}"></ha-icon><span>${esc(title)}</span><span class="r" id="r-${id}"></span></div>
+    const side = ["grid", "pvac", "batt"].includes(id) ? "l" : "r";
+    return `<div class="box" id="b-${id}" data-side="${side}" style="--bc:${color}"><div class="hd"><ha-icon icon="${icon}"></ha-icon><span>${esc(title)}</span><span class="r" id="r-${id}"></span></div>
       <div class="big" id="v-${id}"></div><div id="s-${id}"></div><div class="ft" id="f-${id}"></div></div>`;
   }
 
@@ -175,9 +189,10 @@ class HamletHomeBlocks extends HTMLElement {
       this._set("s-batt", soc !== null ? `<div class="lvl ${batt > 20 && soc < 99.5 ? "chg" : ""}"><i style="width:${Math.max(soc, 2)}%"></i></div>` : this._spark(4, "var(--c-batt)"));
       const icon = this.shadowRoot.querySelector("#b-batt .hd ha-icon");
       if (icon) icon.setAttribute("icon", batt > 20 ? "mdi:battery-charging-high" : soc === null ? "mdi:battery" : `mdi:battery${soc >= 95 ? "" : "-" + Math.max(10, Math.round(soc / 10) * 10)}`);
-      this._set("f-batt", rows([["Voltage", this._val(E.battery_voltage)], ["Current", this._val(E.battery_current)], ["Temperature", this._val(E.battery_temp)],
-        [o.state === "charging" ? "Full in" : down ? "Battery lasts" : "If the power goes off",
-          o.state === "charging" ? fmtH(o.full_h) : o.backup_h !== null && o.backup_h !== undefined ? fmtH(o.backup_h) : null]]));
+      // the time comes first: on a phone only the first three rows fit
+      this._set("f-batt", rows([[o.state === "charging" ? "Full in" : down ? "Battery lasts" : "If the power goes off",
+          o.state === "charging" ? fmtH(o.full_h) : o.backup_h !== null && o.backup_h !== undefined ? fmtH(o.backup_h) : null],
+        ["Voltage", this._val(E.battery_voltage)], ["Current", this._val(E.battery_current)], ["Temperature", this._val(E.battery_temp)]]));
     }
     // PV charger (MPPTs on the DC side) or plain solar
     if (this._bottoms.includes("pvdc")) {
@@ -221,25 +236,46 @@ class HamletHomeBlocks extends HTMLElement {
     if (!force && this._lkey === key) return;
     this._lkey = key;
     const narrow = R.width < 640;
-    const busY = inv.y - 23, dcY = inv.y + inv.h + 23;
-    const paths = [];
-    // AC side: every top box drops to the AC line, which runs into the inverter's top
-    for (const k of this._tops) {
-      const b = box(`b-${k}`); if (!b) continue;
-      const from = { x: b.cx, y: b.y + b.h };
-      // grid and grid-tie PV feed the line (drawn toward the inverter); loads are fed (drawn from the inverter)
-      const toInv = k === "grid" || k === "pvac";
-      const d = narrow ? "" : toInv ? `M${from.x},${from.y}V${busY}H${inv.cx}V${inv.y}` : `M${inv.cx},${inv.y}V${busY}H${from.x}V${from.y}`;
-      paths.push([k, d]);
+    if (wrap.classList.contains("m") !== narrow) {
+      // switch layout first, then measure again once it has settled
+      wrap.classList.toggle("m", narrow);
+      this._lkey = null;
+      requestAnimationFrame(() => this._lines(true));
+      return;
     }
-    // DC side: battery and PV charger meet under the inverter
-    for (const k of this._bottoms) {
-      const b = box(`b-${k}`); if (!b) continue;
-      const d = narrow ? "" : k === "batt" ? `M${inv.cx},${inv.y + inv.h}V${dcY}H${b.cx}V${b.y}` : `M${b.cx},${b.y}V${dcY}H${inv.cx}V${inv.y + inv.h}`;
-      paths.push([k, d]);
+    const paths = [];
+    if (narrow) {
+      // a bus line down the middle; each box joins it from its inner edge
+      const bx = inv.cx;
+      for (const k of this._tops) {
+        const b = box(`b-${k}`); if (!b) continue;
+        const left = b.cx < bx, edge = left ? b.x + b.w : b.x, my = b.y + Math.min(b.h / 2, 34);
+        const toInv = k === "grid" || k === "pvac";
+        paths.push([k, toInv ? `M${edge},${my}H${bx}V${inv.y}` : `M${bx},${inv.y}V${my}H${edge}`]);
+      }
+      for (const k of this._bottoms) {
+        const b = box(`b-${k}`); if (!b) continue;
+        const left = b.cx < bx, edge = left ? b.x + b.w : b.x, my = b.y + Math.min(b.h / 2, 34);
+        paths.push([k, k === "batt" ? `M${bx},${inv.y + inv.h}V${my}H${edge}` : `M${edge},${my}H${bx}V${inv.y + inv.h}`]);
+      }
+    } else {
+      const busY = inv.y - 23, dcY = inv.y + inv.h + 23;
+      // AC side: every top box drops to the AC line, which runs into the inverter's top
+      for (const k of this._tops) {
+        const b = box(`b-${k}`); if (!b) continue;
+        const from = { x: b.cx, y: b.y + b.h };
+        // grid and grid-tie PV feed the line (drawn toward the inverter); loads are fed (drawn from the inverter)
+        const toInv = k === "grid" || k === "pvac";
+        paths.push([k, toInv ? `M${from.x},${from.y}V${busY}H${inv.cx}V${inv.y}` : `M${inv.cx},${inv.y}V${busY}H${from.x}V${from.y}`]);
+      }
+      // DC side: battery and PV charger meet under the inverter
+      for (const k of this._bottoms) {
+        const b = box(`b-${k}`); if (!b) continue;
+        paths.push([k, k === "batt" ? `M${inv.cx},${inv.y + inv.h}V${dcY}H${b.cx}V${b.y}` : `M${b.cx},${b.y}V${dcY}H${inv.cx}V${inv.y + inv.h}`]);
+      }
     }
     svg.setAttribute("viewBox", `0 0 ${R.width} ${R.height}`);
-    svg.innerHTML = paths.map(([k, d]) => (d ? `<path class="base" d="${d}"/><path class="flow" id="fl-${k}" d="${d}"/>` : "")).join("");
+    svg.innerHTML = paths.map(([k, d]) => `<path class="base" d="${d}"/><path class="flow" id="fl-${k}" d="${d}"/>`).join("");
     this._animate();
   }
 
