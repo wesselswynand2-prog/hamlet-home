@@ -515,11 +515,13 @@ class HamletHomePanel extends HTMLElement {
 
   /* -------------------------------------------------------- power flow */
   _renderFlow() {
-    const s = this._snap, L = s.live || {}, f = s.features || {}, extras = (s.extras || []).slice(0, 4);
+    const s = this._snap, L = s.live || {}, f = s.features || {};
+    // like the old card: a load drawing nothing (or not reporting) is left out until it uses power again
+    const extras = (s.extras || []).filter((e) => num(e.w) !== null && Number(e.w) >= 1).slice(0, 4);
     const box = this.shadowRoot.getElementById("flow"); if (!box) return;
     const split = !!(f.pv_ac || f.pv_dc);
     const hasGrid = !!(f.grid || f.grid_status);
-    const shape = `${split}|${f.pv_ac}|${f.pv_dc}|${f.battery}|${hasGrid}|${extras.length}`;
+    const shape = `${split}|${f.pv_ac}|${f.pv_dc}|${f.battery}|${hasGrid}|${extras.map((e) => e.name).join("|")}`;
     // Layouts in a 400-wide box. Split: grid-tie PV into the roof, MPPTs on the DC bus between battery and inverter.
     const H = split ? 390 : 320;
     const home = split ? [200, 158] : [200, 160];
