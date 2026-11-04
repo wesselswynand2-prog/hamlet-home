@@ -52,6 +52,7 @@ Battery size: leave it empty and it's measured from the history (needs one stret
 Configure → **Name & icon in the sidebar**: show the client's name (e.g. "Smith Huis") or your company's instead of *Hamlet Home*, with any icon.
 
 ## Help
+A small "Installed and supported by" footer with the Hamlet Elektries logo (`frontend/logo.png`) sits under every tab and opens Help.
 The **?** button at the top right opens the user guide in the app (`frontend/guide.md` – edit that file to change it), with contents and the installer's phone / email / WhatsApp. Admins enter those under *Contact your installer → Edit contact details*.
 
 ## Devices (heat pumps, heaters, aircons … on a Shelly)

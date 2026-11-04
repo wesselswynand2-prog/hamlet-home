@@ -16,7 +16,7 @@ async def test_help_guide_and_contact(enable_custom_integrations, hass: HomeAssi
     await hass.async_block_till_done(wait_background_tasks=True)
 
     client = await hass_client()
-    for path in ("/hamlet_home_static/guide.md", "/hamlet_home_static/hamlet-home-help.js"):
+    for path in ("/hamlet_home_static/guide.md", "/hamlet_home_static/hamlet-home-help.js", "/hamlet_home_static/logo.png"):
         r = await client.get(path)
         assert r.status == 200, path
     text = await (await client.get("/hamlet_home_static/guide.md")).text()

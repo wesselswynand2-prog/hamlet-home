@@ -45,6 +45,12 @@ const STYLE = `
   border-bottom: 2px solid transparent; display: flex; align-items: center; gap: 6px; }
 .tabs button ha-icon { --mdc-icon-size: 20px; }
 .tabs button[aria-selected="true"] { opacity: 1; border-bottom-color: currentColor; }
+.foot { max-width: 1280px; margin: 0 auto; padding: 4px 16px 24px; display: flex; justify-content: center; }
+.footbtn { background: transparent; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px;
+  color: var(--muted); font: inherit; font-size: 12px; opacity: .8; }
+.footbtn:hover { opacity: 1; background: color-mix(in srgb, var(--primary-text-color) 5%, transparent); }
+.footbtn img { height: 26px; width: auto; display: block; }
+:host([dark]) .footbtn img { filter: invert(1); }
 .helpbtn { background: transparent; border: 0; color: inherit; opacity: .8; cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex: none; }
 .helpbtn ha-icon { --mdc-icon-size: 24px; }
 .helpbtn:hover, .helpbtn[aria-pressed="true"] { opacity: 1; background: rgba(255,255,255,.15); }
@@ -274,7 +280,9 @@ class HamletHomePanel extends HTMLElement {
     root.innerHTML = `<style>${STYLE}</style>
       <div class="toolbar"><span id="menu"></span><div class="title" id="apptitle">${esc(this._panel?.config?.title || "Hamlet Home")}</div><div class="tabs" role="tablist" id="tabs"></div>
         <button class="helpbtn" id="helpbtn" aria-label="Help" title="Help"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button></div>
-      <main id="main"><div class="loading">Loading…</div></main>`;
+      <main id="main"><div class="loading">Loading…</div></main>
+      <footer class="foot"><button class="footbtn" id="footbtn" title="Help and contact details">
+        <span>Installed and supported by</span><img src="/hamlet_home_static/logo.png?v=${VERSION}" alt="Hamlet Elektries" height="26" loading="lazy"></button></footer>`;
     const mb = document.createElement("ha-menu-button");
     mb.hass = this._hass; mb.narrow = this._narrow;
     root.getElementById("menu").appendChild(mb);
@@ -287,6 +295,7 @@ class HamletHomePanel extends HTMLElement {
       this._buildTab();
     });
     root.getElementById("helpbtn").addEventListener("click", () => { this._tab = "help"; this._buildTab(); });
+    root.getElementById("footbtn").addEventListener("click", () => { this._tab = "help"; this._buildTab(); window.scrollTo({ top: 0, behavior: "smooth" }); });
     this.shadowRoot.addEventListener("hamlet-help-contact", (ev) => { this._helpContact = ev.detail; });
     this._main.addEventListener("click", (ev) => this._click(ev));
     await this._load();

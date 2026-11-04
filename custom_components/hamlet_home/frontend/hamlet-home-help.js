@@ -54,7 +54,8 @@ const STYLE = `
 .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--ha-card-border-color, var(--line));
   box-shadow: var(--ha-card-box-shadow, none); padding: 16px 20px; min-width: 0; grid-column: span 12; }
 @media (min-width: 980px) { .toc { grid-column: span 4; align-self: start; position: sticky; top: calc(var(--header-height, 56px) + 16px); } .body { grid-column: span 8; } }
-.body { display: grid; gap: 16px; min-width: 0; grid-column: span 12; }
+.body { display: grid; gap: 16px; min-width: 0; }
+@media (max-width: 979px) { .body { grid-column: span 12; } }
 h1 { font-size: 22px; font-weight: 500; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
 h1 ha-icon { --mdc-icon-size: 26px; color: var(--accent); }
 h2 { font-size: 18px; font-weight: 500; margin: 0 0 10px; }
@@ -69,6 +70,8 @@ th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--lin
 th { font-weight: 500; color: var(--muted); font-size: 13px; }
 .toc a { display: block; padding: 7px 10px; border-radius: 8px; color: var(--primary-text-color); text-decoration: none; font-size: 14px; }
 .toc a:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.logo { height: 40px; width: auto; float: right; margin: 0 0 8px 12px; }
+:host([dark]) .logo { filter: invert(1); }
 .contact { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14.5px; margin-top: 6px; }
 .contact a { color: var(--accent); }
 .call { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -85,7 +88,7 @@ section { scroll-margin-top: calc(var(--header-height, 56px) + 12px); }
 
 class HamletHomeHelp extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: "open" }); }
-  set hass(h) { const first = !this._hass; this._hass = h; if (first) this._load(); }
+  set hass(h) { const first = !this._hass; this._hass = h; this.toggleAttribute("dark", !!h.themes?.darkMode); if (first) this._load(); }
   update(s) {
     if (s.help_contact !== undefined) this._contact = s.help_contact;
     if (s.is_admin !== undefined) this._admin = s.is_admin;
@@ -119,7 +122,7 @@ class HamletHomeHelp extends HTMLElement {
       ${c.note ? `<p>${esc(c.note)}</p>` : ""}`;
     const none = !phone && !email;
     const top = this.shadowRoot.getElementById("contact-top");
-    if (top) top.innerHTML = `<h2>Need help?</h2><p>Contact <b>${esc(name)}</b>. Say which tab you're on and what its status line says, or send a screenshot.</p>
+    if (top) top.innerHTML = `<img class="logo" src="/hamlet_home_static/logo.png?v=${VERSION}" alt="Hamlet Elektries" height="40"><h2>Need help?</h2><p>Contact <b>${esc(name)}</b>. Say which tab you're on and what its status line says, or send a screenshot.</p>
       ${none ? `<p class="muted small">${admin ? "Add your phone and email below (Contact your installer) so clients can reach you." : "Ask your installer for their contact details."}</p>` : lines}
       <div class="call">${tel ? `<a class="btn primary" href="tel:${esc(tel)}"><ha-icon icon="mdi:phone"></ha-icon>Call</a>` : ""}
         ${tel ? `<a class="btn" href="https://wa.me/${esc(tel.replace(/^0/, "27").replace(/^\+/, ""))}" target="_blank" rel="noopener"><ha-icon icon="mdi:whatsapp"></ha-icon>WhatsApp</a>` : ""}
