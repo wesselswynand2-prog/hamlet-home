@@ -184,7 +184,7 @@ class EnergyController:
         self.acc.set(now, energy.combine(self._raw_now(), self.mapping))
         self.ready = True
         self._learn_capacity()
-        ids = self.mapping.all_entities() + _list(self.conf.get(CONF_EXTRA_LOADS)) + _list(self.conf.get(CONF_GRID_STATUS))
+        ids = self.mapping.all_entities() + _list(self.conf.get(CONF_EXTRA_LOADS)) + _list(self.conf.get("extra_loads_nonessential")) + _list(self.conf.get(CONF_GRID_STATUS))
         self._unsubs.append(async_track_state_change_event(self.hass, ids, self._on_change))
         self._unsubs.append(async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=TICK_SECONDS)))
         self._save(5)
@@ -355,10 +355,13 @@ class EnergyController:
     def _read_live(self) -> dict:
         values = energy.combine(self._raw_now(), self.mapping)
         extras = []
-        for entity_id in _list(self.conf.get(CONF_EXTRA_LOADS)):
+        grid_side = set(_list(self.conf.get("extra_loads_nonessential")))
+        ids = list(dict.fromkeys(_list(self.conf.get(CONF_EXTRA_LOADS)) + list(grid_side)))
+        for entity_id in ids:
             st = self.hass.states.get(entity_id)
             name = (st.attributes.get("friendly_name") if st else None) or entity_id.split(".")[-1].replace("_", " ").title()
-            extras.append({"entity_id": entity_id, "name": name, "w": to_number(st, "power")})
+            extras.append({"entity_id": entity_id, "name": name, "w": to_number(st, "power"),
+                           "side": "noness" if entity_id in grid_side else "ess"})
         self.extras = extras
         self.live = {**values, "grid_available": self._grid_available()}
         self._update_smooth(values)

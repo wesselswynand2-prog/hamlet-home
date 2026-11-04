@@ -68,6 +68,14 @@ async def test_backfill_from_history_and_live(recorder_mock, enable_custom_integ
     # live values + extras + grid status
     assert c.live["solar"] == 0 and c.live["grid"] == 2000 and c.live["grid_available"] is True
     assert c.extras[0]["name"] == "Kantoor Aircon" and c.extras[0]["w"] == 1200
+    assert c.extras[0]["side"] == "ess"
+    hass.states.async_set("sensor.geyser_1", "3420", {"unit_of_measurement": "W", "friendly_name": "Geyser 1"})
+    real = c.entry
+    c.entry = type("E", (), {"data": real.data, "options": {**real.options, "extra_loads_nonessential": ["sensor.geyser_1"]}})()
+    c._read_live()   # a geyser on the grid side (AC Loads)
+    c.entry = real
+    assert [(e["name"], e["side"], e["w"]) for e in c.extras] == [("Kantoor Aircon", "ess", 1200), ("Geyser 1", "noness", 3420)]
+    c._read_live()
 
     # panel + sensors
     assert "hamlet-home" in hass.data["frontend_panels"]

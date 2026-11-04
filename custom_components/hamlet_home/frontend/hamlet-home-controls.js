@@ -9,7 +9,7 @@ const KIND_LABEL = { light: "Light", switch: "Switch", plug: "Plug", gate: "Gate
   blind: "Blind / cover", aircon: "Aircon", fan: "Fan", lock: "Lock", action: "Quick action", media: "Media" };
 const ICON = {
   light: ["mdi:lightbulb-outline", "mdi:lightbulb-on"], switch: ["mdi:toggle-switch-off-outline", "mdi:toggle-switch"],
-  plug: ["mdi:power-socket-za", "mdi:power-socket-za"], fan: ["mdi:fan-off", "mdi:fan"], aircon: ["mdi:air-conditioner", "mdi:air-conditioner"],
+  plug: ["mdi:power-plug-off-outline", "mdi:power-plug"], fan: ["mdi:fan-off", "mdi:fan"], aircon: ["mdi:air-conditioner", "mdi:air-conditioner"],
   blind: ["mdi:blinds", "mdi:blinds-open"], lock: ["mdi:lock-open-variant", "mdi:lock"], media: ["mdi:speaker-off", "mdi:speaker"],
   gate: ["mdi:gate", "mdi:gate-open"], garage: ["mdi:garage", "mdi:garage-open"], action: ["mdi:play-circle-outline", "mdi:play-circle"],
 };

@@ -180,7 +180,7 @@ class HamletHomeBlocks extends HTMLElement {
       this._shape = shape; this._html = {};
       const T = {
         grid: ["mdi:transmission-tower", "var(--c-grid)", "Grid"], pvac: ["mdi:solar-panel-large", "var(--c-solar)", "PV Inverter"],
-        noness: ["mdi:power-socket-za", "var(--c-load)", "AC Loads"], home: ["mdi:home-lightning-bolt", "var(--c-load)", lsplit ? "Essential Loads" : "AC Loads"],
+        noness: ["mdi:power-plug", "var(--c-load)", "AC Loads"], home: ["mdi:home-lightning-bolt", "var(--c-load)", lsplit ? "Essential Loads" : "AC Loads"],
         batt: ["mdi:battery-high", "var(--c-batt)", "Battery"], pvdc: ["mdi:solar-power-variant", "var(--c-solar)", split ? "PV Charger" : "Solar"],
       };
       this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="wrap" id="wrap"><svg class="lines" id="lines"></svg>
@@ -215,7 +215,9 @@ class HamletHomeBlocks extends HTMLElement {
       const box = this.shadowRoot.getElementById("b-noness");
       box.classList.toggle("dead", down);
       this._set("v-noness", down ? "No power" : (() => { const [v, u] = W(noness); return `${v}<small>${u}</small>`; })());
-      this._set("f-noness", rows([["grid side (AC-in)", down ? "off" : noness !== null ? `${Math.round(noness)} W` : "–"]]));
+      const exN = (d.extras || []).filter((e) => e.side === "noness" && num(e.w) !== null && e.w >= 1);
+      this._set("f-noness", rows(exN.length && !down ? exN.map((e) => [short(e.name), `${Math.round(e.w)} W`])
+        : [["grid side (AC-in)", down ? "off" : noness !== null ? `${Math.round(noness)} W` : "–"]]));
       this._set("s-noness", "");
     }
     // house / essential loads, with the single loads listed like Victron's L1 rows
@@ -224,7 +226,8 @@ class HamletHomeBlocks extends HTMLElement {
     const fm = flowMix(L, lsplit), mix = fm.home;
     this._set("s-home", mix.length ? `<div class="mixbar" role="img" aria-label="Power comes from ${mix.map(([k, v]) => `${SRC_NAME[k]} ${Math.round(v * 100)}%`).join(", ")}">${mix.map(([k, v]) => `<i style="flex-grow:${v};background:${SRC[k]}"></i>`).join("")}</div>
       <div class="mixtxt">${mix.map(([k, v]) => `${SRC_NAME[k]} ${Math.round(v * 100)}%`).join(" · ")}</div>` : (lsplit ? "" : this._spark(2, "var(--c-load)")));
-    const ex = (d.extras || []).filter((e) => num(e.w) !== null && e.w >= 1);
+    // loads wired on the grid side are listed under AC Loads instead (when that split is set up)
+    const ex = (d.extras || []).filter((e) => num(e.w) !== null && e.w >= 1 && !(lsplit && e.side === "noness"));
     this._set("f-home", rows(ex.length ? ex.map((e) => [short(e.name), `${Math.round(e.w)} W`]) : [[lsplit ? "inverter output (AC-out)" : "house", homeW !== null ? `${Math.round(homeW)} W` : "–"]]));
 
     // battery

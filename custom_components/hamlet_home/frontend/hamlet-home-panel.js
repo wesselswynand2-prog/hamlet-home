@@ -335,7 +335,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._weather) tabs.push(["weather", "mdi:weather-partly-cloudy", "Weather"]);
     if (this._water || this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:water-pump", "Water"]);
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
-    if (this._devices?.length || this._isAdmin) tabs.push(["devices", "mdi:power-socket-za", "Devices"]);
+    if (this._devices?.length || this._isAdmin) tabs.push(["devices", "mdi:power-plug", "Devices"]);
     tabs.push(["controls", "mdi:light-switch", "Controls"]);
     if (!tabs.some((t) => t[0] === this._tab) && this._tab !== "help") this._tab = "energy";
     this.shadowRoot.getElementById("tabs").innerHTML = tabs.length < 2 ? "" : tabs.map(([id, icon, label]) =>
@@ -564,12 +564,14 @@ class HamletHomePanel extends HTMLElement {
     if (this.shadowRoot.querySelector("#flow hamlet-home-blocks")) { this.shadowRoot.getElementById("flow").innerHTML = ""; this._flowBuilt = null; }
     const s = this._snap, L = s.live || {}, f = s.features || {};
     // like the old card: a load drawing nothing (or not reporting) is left out until it uses power again
-    const extras = (s.extras || []).filter((e) => num(e.w) !== null && Number(e.w) >= 1).slice(0, 4);
+    // grid-side loads first, so they sit at the top next to the Non-essential circle
+    const extras = (s.extras || []).filter((e) => num(e.w) !== null && Number(e.w) >= 1)
+      .sort((a, b) => (b.side === "noness") - (a.side === "noness")).slice(0, 4);
     const box = this.shadowRoot.getElementById("flow"); if (!box) return;
     const split = !!(f.pv_ac || f.pv_dc);
     const hasGrid = !!(f.grid || f.grid_status);
     const lsplit = !!f.load_split;   // Victron style: essential (AC-out) vs non-essential (grid side) loads
-    const shape = `${split}|${f.pv_ac}|${f.pv_dc}|${f.battery}|${hasGrid}|${lsplit}|${extras.map((e) => e.name).join("|")}`;
+    const shape = `${split}|${f.pv_ac}|${f.pv_dc}|${f.battery}|${hasGrid}|${lsplit}|${extras.map((e) => `${e.name}:${e.side}`).join("|")}`;
     // Layouts in a 400-wide box. Split: grid-tie PV into the roof, MPPTs on the DC bus between battery and inverter.
     const H = split ? 390 : 320;
     const home = split ? [200, 158] : [200, 160];
@@ -586,6 +588,12 @@ class HamletHomePanel extends HTMLElement {
       const wire = (id, d) => `<path class="wire" d="${d}"/><path class="dash" id="${id}" d="${d}"/>`;
       const line = ([x1, y1], [x2, y2]) => `M${x1} ${y1} L${x2} ${y2}`;
       const curve = ([x1, y1], [x2, y2]) => `M${x1} ${y1} C ${(x1 + x2) / 2} ${y1}, ${(x1 + x2) / 2} ${y2}, ${x2} ${y2}`;
+      // over the top of the PV circle, from the Non-essential circle to a grid-side load
+      // (along the top, then down a lane at x=290 that clears the house and PV circles)
+      const over = ([x1, y1], [x2, y2]) => {
+        const t = 6, lane = 290, r = Math.min(18, Math.max((y2 - t) / 2, 1));
+        return `M${x1} ${y1} Q ${x1} ${t}, ${x1 + 30} ${t} L ${lane - r} ${t} Q ${lane} ${t}, ${lane} ${t + r} L ${lane} ${y2 - r} Q ${lane} ${y2}, ${lane + r} ${y2} L ${x2} ${y2}`;
+      };
       const pct = ([x, y]) => `left:${(x / 400) * 100}%;top:${(y / H) * 100}%`;
       const node = (id, size, pos, color, icon, sub = "", extra = "") =>
         `<div class="node ${size}" id="${id}" style="${pct(pos)};--nc:${color}">${extra}<ha-icon icon="${icon}"></ha-icon><span class="v"></span>${sub !== null ? `<span class="s">${sub}</span>` : ""}</div>`;
@@ -608,10 +616,11 @@ class HamletHomePanel extends HTMLElement {
       if (lsplit) {
         // drawn from the grid toward the loads, so forward = power flowing into them
         if (hasGrid) svg += wire("w-noness", line(P.grid, P.noness));
-        nodes += node("n-noness", "mid", P.noness, "var(--c-load)", "mdi:power-socket-za", "non-essential");
+        nodes += node("n-noness", "mid", P.noness, "var(--c-load)", "mdi:power-plug", "non-essential");
       }
       ex.forEach((p, i) => {
-        svg += wire(`w-ex${i}`, curve(P.home, p));
+        // a load on the grid side hangs off the Non-essential circle instead of the house
+        svg += wire(`w-ex${i}`, lsplit && extras[i].side === "noness" ? over(P.noness, p) : curve(P.home, p));
         nodes += node(`n-ex${i}`, "sm", p, "var(--muted)", "mdi:flash", null)
           + `<div class="lab" style="left:${(p[0] / 400) * 100}%;top:calc(${(p[1] / H) * 100}% + ${(10.5 * 320 / H).toFixed(1)}%)">${esc(String(extras[i].name).replace(/\s*(kwh\s*meter\s*)?power$/i, "").replace(/\s*kwh\s*meter$/i, ""))}</div>`;
       });
@@ -683,7 +692,7 @@ class HamletHomePanel extends HTMLElement {
                charge: top([["var(--c-solar)", s3], ["var(--c-grid)", g3]]) || "var(--c-batt)" };
     })();
     const srcColor = fm.home;
-    extras.forEach((e, i) => { setNode(`n-ex${i}`, fmtW(e.w)); dash(`w-ex${i}`, e.w, srcColor, true); });
+    extras.forEach((e, i) => { setNode(`n-ex${i}`, fmtW(e.w)); dash(`w-ex${i}`, e.w, lsplit && e.side === "noness" ? "var(--c-grid)" : srcColor, true); });
     if ($("w-batt") && (batt || 0) > 20) dash("w-batt", batt, fm.charge, false);   // what's charging it
     const sub = this.shadowRoot.getElementById("flowsub");
     if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -1044,7 +1053,7 @@ class HamletHomePanel extends HTMLElement {
     const st = sl.settings || {};
     const sub = this.shadowRoot.getElementById("priosub");
     sub.textContent = sl.spare_w === null || sl.spare_w === undefined ? "" : `spare solar now ${fmtW(Math.max(sl.spare_w, 0))}`;
-    const DEV_ICON = { heatpump: "mdi:heat-pump", heater: "mdi:radiator", aircon: "mdi:air-conditioner", pump: "mdi:pump", charger: "mdi:ev-station", other: "mdi:power-socket-za" };
+    const DEV_ICON = { heatpump: "mdi:heat-pump", heater: "mdi:radiator", aircon: "mdi:air-conditioner", pump: "mdi:pump", charger: "mdi:ev-station", other: "mdi:power-plug" };
     const icon = (k, l) => (k === "pool" ? "mdi:pool" : k === "device" ? (DEV_ICON[l?.device_kind] || DEV_ICON.other) : "mdi:water-boiler");
     const state = (l) => {
       if (!l.active) return ["var(--muted)", l.kind === "pool" ? "Not in Solar mode – set the pool to Solar on the Water tab"

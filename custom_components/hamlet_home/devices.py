@@ -15,7 +15,7 @@ KINDS = {
     "aircon": ("Aircon", "mdi:air-conditioner"),
     "pump": ("Pump", "mdi:pump"),
     "charger": ("EV / charger", "mdi:ev-station"),
-    "other": ("Other", "mdi:power-socket-za"),
+    "other": ("Other", "mdi:power-plug"),
 }
 MODES = ("auto", "solar", "on", "off")
 MAX_DEVICES = 12
