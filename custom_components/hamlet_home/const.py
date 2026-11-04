@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.10.5"
+VERSION = "0.11.0"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"
@@ -67,3 +67,7 @@ CONF_APP_TITLE = "app_title"
 CONF_APP_ICON = "app_icon"
 DEFAULT_APP_TITLE = "Hamlet Home"
 DEFAULT_APP_ICON = "mdi:home-lightning-bolt"
+
+# Victron-style split: AC-out (essential / backed up) and AC-in side (non-essential) loads, both optional
+CONF_LOAD_ESSENTIAL = "load_essential"
+CONF_LOAD_NONESSENTIAL = "load_nonessential"

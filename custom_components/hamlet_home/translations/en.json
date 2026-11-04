@@ -25,7 +25,9 @@
           "battery_invert": "Battery sensor is positive when discharging (invert)",
           "grid_invert": "Grid sensor is positive when exporting (invert)",
           "flow_info": "Info under the power flow (e.g. Forecast SOC, Current DOD) – number / input_number ones can be changed by tapping",
-          "flow_info_clients_edit": "Clients may change those values (otherwise admins only)"
+          "flow_info_clients_edit": "Clients may change those values (otherwise admins only)",
+          "load_essential": "Essential loads – inverter AC-out, backed up (optional; Victron \"Consumption on output\")",
+          "load_nonessential": "Non-essential loads – grid side, AC-in (optional; Victron \"Consumption on input\")"
         }
       }
     },
@@ -45,7 +47,9 @@
           "battery_invert": "Battery sensor is positive when discharging (invert)",
           "grid_invert": "Grid sensor is positive when exporting (invert)",
           "flow_info": "Info under the power flow (e.g. Forecast SOC, Current DOD) – number / input_number ones can be changed by tapping",
-          "flow_info_clients_edit": "Clients may change those values (otherwise admins only)"
+          "flow_info_clients_edit": "Clients may change those values (otherwise admins only)",
+          "load_essential": "Essential loads – inverter AC-out, backed up (optional; Victron \"Consumption on output\")",
+          "load_nonessential": "Non-essential loads – grid side, AC-in (optional; Victron \"Consumption on input\")"
         }
       },
       "energy": {

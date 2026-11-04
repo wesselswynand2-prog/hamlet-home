@@ -133,8 +133,11 @@ class DevicesController:
             # act only when the wanted state changes, so switching it by hand is respected
             if want != st.last_desired and on is not None and not hold:
                 if want != on:
-                    await self.hass.services.async_call("homeassistant", "turn_on" if want else "turn_off",
-                                                        {"entity_id": d["switch"]}, blocking=False)
+                    try:
+                        await self.hass.services.async_call("homeassistant", "turn_on" if want else "turn_off",
+                                                            {"entity_id": d["switch"]}, blocking=False)
+                    except Exception as err:  # noqa: BLE001 - one device must never stop the others
+                        _LOGGER.warning("Hamlet Home: could not switch %s: %s", d["switch"], err)
                     st.live["on"] = want
                     st.last_switch = now
                 st.last_desired = want

@@ -29,11 +29,13 @@ class Mapping:
     solar_ac: list[str] = field(default_factory=list)  # grid-tie / AC-coupled PV inverter
     solar_dc: list[str] = field(default_factory=list)  # MPPTs on the DC bus
     loads: list[str] = field(default_factory=list)     # single loads for the cost breakdown (W)
+    load_ess: list[str] = field(default_factory=list)  # essential loads on the inverter's AC-out (backed up)
+    load_noness: list[str] = field(default_factory=list)  # non-essential loads on the grid side (AC-in)
     battery_invert: bool = False
     grid_invert: bool = False
 
     def all_entities(self) -> list[str]:
-        return [*self.solar, *self.solar_ac, *self.solar_dc, *self.load, *self.grid, *self.battery, *self.soc,
+        return [*self.solar, *self.solar_ac, *self.solar_dc, *self.load, *self.grid, *self.battery, *self.soc, *self.load_ess, *self.load_noness,
                 *[e for e in self.loads if e not in (*self.solar, *self.load, *self.grid, *self.battery)]]
 
     @property
@@ -64,6 +66,9 @@ def combine(raw: dict[str, float | None], m: Mapping) -> dict[str, float | None]
         battery = -battery
     soc = _sum(raw, m.soc[:1])
     load = _sum(raw, m.load)
+    ess, noness = _sum(raw, m.load_ess), _sum(raw, m.load_noness)
+    if load is None and (ess is not None or noness is not None):
+        load = max(ess or 0, 0) + max(noness or 0, 0)
     if load is None and (solar is not None or grid is not None or battery is not None):
         # energy balance: what comes in minus what goes into the battery
         if solar is not None or grid is not None:
@@ -71,6 +76,9 @@ def combine(raw: dict[str, float | None], m: Mapping) -> dict[str, float | None]
     if solar is not None:
         solar = max(solar, 0.0)
     out = {"solar": solar, "load": load, "grid": grid, "battery": battery, "soc": soc}
+    if m.load_ess or m.load_noness:
+        out["load_ess"] = None if ess is None else max(ess, 0.0)
+        out["load_noness"] = None if noness is None else max(noness, 0.0)
     for eid in m.loads:
         v = raw.get(eid)
         out[LOAD_PREFIX + eid] = None if v is None else max(v, 0.0)
@@ -337,6 +345,9 @@ def battery_outlook(live: dict, capacity_kwh: float | None, reserve: float, full
                            "drain_w": None, "backup_h": None, "charge_w": None, "full_h": None, "state": "unknown"}
     if grid_off and batt is not None:
         drain = max(-batt, 0.0)
+    elif live.get("load_ess") is not None:
+        # only the backed-up loads keep running when the grid goes
+        drain = max(live["load_ess"] - (solar or 0), 0.0)
     elif load is not None:
         drain = max(load - (solar or 0), 0.0)
     else:

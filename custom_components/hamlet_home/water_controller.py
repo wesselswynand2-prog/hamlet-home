@@ -208,7 +208,10 @@ class WaterController:
         self._notify_ui()
 
     async def _switch_to(self, key: str, on: bool) -> None:
-        await self.hass.services.async_call("homeassistant", "turn_on" if on else "turn_off", {"entity_id": self.conf[key]}, blocking=False)
+        try:
+            await self.hass.services.async_call("homeassistant", "turn_on" if on else "turn_off", {"entity_id": self.conf[key]}, blocking=False)
+        except Exception as err:  # noqa: BLE001 - a failed switch must never stop the app
+            _LOGGER.warning("Hamlet Home: could not switch %s %s: %s", self.conf.get(key), "on" if on else "off", err)
 
     async def _alert(self, ev: str, live: dict) -> None:
         title, text = EVENT_TEXT[ev]

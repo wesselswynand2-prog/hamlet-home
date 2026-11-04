@@ -68,6 +68,8 @@ def _extras_schema() -> vol.Schema:
     from .const import CONF_FLOW_INFO, CONF_FLOW_INFO_EDIT  # noqa: PLC0415
     return vol.Schema({
         vol.Optional(CONF_EXTRA_LOADS): _sensor(multiple=True),
+        vol.Optional("load_essential"): _sensor(multiple=True),
+        vol.Optional("load_nonessential"): _sensor(multiple=True),
         vol.Optional(CONF_FLOW_INFO): selector.EntitySelector(selector.EntitySelectorConfig(domain=["sensor", "number", "input_number"], multiple=True)),
         vol.Optional(CONF_FLOW_INFO_EDIT, default=False): selector.BooleanSelector(),
         vol.Required(CONF_BATTERY_INVERT, default=False): selector.BooleanSelector(),
@@ -211,6 +213,7 @@ class HamletHomeOptionsFlow(OptionsFlow):
 
     async def async_step_extras(self, user_input: dict | None = None) -> ConfigFlowResult:
         if user_input is not None:
+            self._data.update({k: None for k in (CONF_EXTRA_LOADS, "load_essential", "load_nonessential", "flow_info")})
             self._data.update(user_input)
             return self._save()
         return self.async_show_form(step_id="extras", data_schema=self.add_suggested_values_to_schema(_extras_schema(), self._current))

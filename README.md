@@ -30,6 +30,7 @@ Admins also see a banner with **Install** on the Energy tab, and the check statu
 - **Grid** – grid power, + while buying (tick invert if your sensor is + while selling).
 - **Grid available** – AC-in voltage, a grid-connected sensor or Victron's grid-lost alarm.
 - **Battery** – power (+ while charging; Sunsynk/Deye usually need invert) and state of charge.
+- **Essential / non-essential loads** (optional, Victron style) – the inverter's AC-out (backed up) and the grid-side AC-in loads. The power flow then shows *Essential* in the middle and a *Non-essential* circle on the grid ("No power" during an outage), and the backup time counts only the essential loads. Victron: *Consumption on output* / *Consumption on input*.
 - **Extra loads** – up to 4 power sensors shown around the house in the power flow; a load drawing nothing (0 W) is hidden until it uses power again.
 - **Info under the power flow** – any sensors (e.g. Forecast SOC) or number / input_number entities (e.g. Current DOD). Tap a number to change it with a slider and − / +. Admins only, unless "Clients may change those values" is ticked.
 

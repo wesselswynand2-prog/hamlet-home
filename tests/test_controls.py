@@ -78,6 +78,8 @@ def test_validate():
 async def test_controls_in_home_assistant(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user):
     for mod in ("http", "frontend"):
         assert await async_setup_component(hass, mod, {})
+    async_mock_service(hass, "homeassistant", "turn_on")    # the pool pump's timer may be running at test time
+    async_mock_service(hass, "homeassistant", "turn_off")
     area = ar.async_get(hass).async_create("Kantoor")
     src = MockConfigEntry(domain="shelly")
     src.add_to_hass(hass)

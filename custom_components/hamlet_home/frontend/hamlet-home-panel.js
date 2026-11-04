@@ -521,7 +521,8 @@ class HamletHomePanel extends HTMLElement {
     const box = this.shadowRoot.getElementById("flow"); if (!box) return;
     const split = !!(f.pv_ac || f.pv_dc);
     const hasGrid = !!(f.grid || f.grid_status);
-    const shape = `${split}|${f.pv_ac}|${f.pv_dc}|${f.battery}|${hasGrid}|${extras.map((e) => e.name).join("|")}`;
+    const lsplit = !!f.load_split;   // Victron style: essential (AC-out) vs non-essential (grid side) loads
+    const shape = `${split}|${f.pv_ac}|${f.pv_dc}|${f.battery}|${hasGrid}|${lsplit}|${extras.map((e) => e.name).join("|")}`;
     // Layouts in a 400-wide box. Split: grid-tie PV into the roof, MPPTs on the DC bus between battery and inverter.
     const H = split ? 390 : 320;
     const home = split ? [200, 158] : [200, 160];
@@ -529,6 +530,7 @@ class HamletHomePanel extends HTMLElement {
       ? { pvac: [200, 44], grid: [58, 158], home, bus: [200, 265], pvdc: [58, 265], batt: [200, 343] }
       : { solar: [200, 48], grid: [62, 160], home, batt: [200, 272] };
     // spread the extra loads over the whole height when there are several, so names don't run into circles
+    if (lsplit) P.noness = split ? [58, 44] : [62, 48];
     const exTop = extras.length > 2 ? (split ? 40 : 36) : (split ? 82 : 70);
     const exSpan = extras.length > 2 ? (split ? 300 : 236) : (split ? 170 : 180);
     const ex = extras.map((_, i, a) => [340, a.length === 1 ? home[1] : exTop + i * (exSpan / Math.max(a.length - 1, 1))]);
@@ -556,12 +558,17 @@ class HamletHomePanel extends HTMLElement {
         if (f.battery) { svg += wire("w-batt", line(P.batt, P.home)); nodes += node("n-batt", "mid", P.batt, "var(--c-batt)", "mdi:battery-high", "", ring); }
       }
       if (hasGrid) { svg += wire("w-grid", line(P.grid, P.home)); nodes += node("n-grid", "mid", P.grid, "var(--c-grid)", "mdi:transmission-tower"); }
+      if (lsplit) {
+        // drawn from the grid toward the loads, so forward = power flowing into them
+        if (hasGrid) svg += wire("w-noness", line(P.grid, P.noness));
+        nodes += node("n-noness", "mid", P.noness, "var(--c-load)", "mdi:power-socket-za", "non-essential");
+      }
       ex.forEach((p, i) => {
         svg += wire(`w-ex${i}`, curve(P.home, p));
         nodes += node(`n-ex${i}`, "sm", p, "var(--muted)", "mdi:flash", null)
           + `<div class="lab" style="left:${(p[0] / 400) * 100}%;top:calc(${(p[1] / H) * 100}% + ${(10.5 * 320 / H).toFixed(1)}%)">${esc(String(extras[i].name).replace(/\s*(kwh\s*meter\s*)?power$/i, "").replace(/\s*kwh\s*meter$/i, ""))}</div>`;
       });
-      nodes += node("n-home", "big", P.home, "var(--c-load)", "mdi:home", "house");
+      nodes += node("n-home", "big", P.home, "var(--c-load)", lsplit ? "mdi:home-lightning-bolt" : "mdi:home", lsplit ? "essential" : "house");
       box.innerHTML = `<div class="flow" style="aspect-ratio:400 / ${H}" role="img" aria-label="Power flow"><svg viewBox="0 0 400 ${H}" preserveAspectRatio="none">${svg}</svg>${nodes}</div>`;
       this._flowBuilt = shape;
     }
@@ -578,7 +585,15 @@ class HamletHomePanel extends HTMLElement {
       el.style.setProperty("--dur", `${Math.max(0.5, 2.6 - Math.log10(w + 1) * 0.55).toFixed(2)}s`);
     };
     const solar = num(L.solar), load = num(L.load), grid = num(L.grid), batt = num(L.battery), soc = num(L.soc);
-    setNode("n-home", fmtW(load));
+    const ess = num(L.load_ess), noness = num(L.load_noness);
+    setNode("n-home", fmtW(lsplit && ess !== null ? ess : load));
+    if (lsplit && $("n-noness")) {
+      const down = L.grid_available === false;
+      const nn = $("n-noness");
+      nn.style.setProperty("--nc", down ? "var(--muted)" : "var(--c-load)");
+      setNode("n-noness", down ? "No power" : fmtW(noness), "non-essential");
+      dash("w-noness", down ? 0 : noness, "var(--c-load)", true);
+    }
     if (split) {
       setNode("n-pvac", fmtW(L.solar_ac));
       dash("w-pvac", L.solar_ac, "var(--c-solar)", true);
@@ -597,7 +612,9 @@ class HamletHomePanel extends HTMLElement {
       n.style.setProperty("--nc", down ? "var(--c-warn)" : "var(--c-grid)");
       n.querySelector("ha-icon").setAttribute("icon", down ? "mdi:transmission-tower-off" : "mdi:transmission-tower");
       setNode("n-grid", down ? "Down" : grid === null ? "Up" : fmtW(grid), down ? "no grid" : grid === null ? "grid" : Math.abs(grid) < 20 ? "grid idle" : grid > 0 ? "buying" : "selling");
-      dash("w-grid", down ? 0 : grid, "var(--c-grid)", (grid || 0) > 0);
+      // with the split, the line to the house carries what goes on into the inverter (grid − non-essential)
+      const through = lsplit && grid !== null && noness !== null ? grid - noness : grid;
+      dash("w-grid", down ? 0 : through, "var(--c-grid)", (through || 0) > 0);
     }
     if ($("n-batt")) {
       setNode("n-batt", soc === null ? fmtW(batt) : `${Math.round(soc)}%`, batt === null ? "battery" : Math.abs(batt) < 20 ? "idle" : batt > 0 ? `+${fmtW(batt)}` : `−${fmtW(batt)}`);

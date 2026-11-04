@@ -131,3 +131,17 @@ def test_battery_outlook():
     o = energy.battery_outlook({"soc": 60, "battery": -800, "load": 900}, None, 20)
     assert o["backup_h"] is None and o["drain_w"] == 900
     assert energy.battery_outlook({"soc": 99.8, "battery": 100}, 10, 20)["state"] == "full"
+
+
+def test_essential_and_nonessential_loads():
+    m = energy.Mapping(grid=["g"], battery=["b"], load_ess=["out"], load_noness=["in"], soc=["s"])
+    v = energy.combine({"g": 6666, "b": 96, "out": 1503, "in": 5042, "s": 100}, m)
+    assert v["load"] == 6545 and v["load_ess"] == 1503 and v["load_noness"] == 5042
+    # a mapped total wins over the sum
+    m2 = energy.Mapping(load=["tot"], load_ess=["out"], load_noness=["in"])
+    assert energy.combine({"tot": 7000, "out": 1503, "in": 5042}, m2)["load"] == 7000
+    # no split mapped -> no extra keys
+    assert "load_ess" not in energy.combine({"g": 100}, energy.Mapping(grid=["g"]))
+    # backup time counts only the essential loads (the rest goes off with the grid)
+    o = energy.battery_outlook({"soc": 100, "battery": 96, "load": 6545, "load_ess": 1503, "solar": 0, "grid_available": True}, 10, 20)
+    assert o["drain_w"] == 1503 and abs(o["backup_h"] - 8 * 1000 / 1503) < 0.01

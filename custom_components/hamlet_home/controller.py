@@ -111,6 +111,7 @@ class EnergyController:
             solar_ac=_list(c.get(CONF_SOLAR_AC)), solar_dc=_list(c.get(CONF_SOLAR_DC)),
             grid=_list(c.get(CONF_GRID_POWER)), battery=_list(c.get(CONF_BATTERY_POWER)),
             soc=_list(c.get(CONF_BATTERY_SOC)), loads=self.cost_loads,
+            load_ess=_list(c.get("load_essential")), load_noness=_list(c.get("load_nonessential")),
             battery_invert=bool(c.get(CONF_BATTERY_INVERT)), grid_invert=bool(c.get(CONF_GRID_INVERT)),
         )
 
@@ -368,7 +369,7 @@ class EnergyController:
         now = time.monotonic()
         k = 1.0 if self._smooth_t is None else min(max(now - self._smooth_t, 0) / 60, 1.0)
         self._smooth_t = now
-        for key in ("load", "solar", "battery"):
+        for key in ("load", "solar", "battery", "load_ess"):
             v = values.get(key)
             if v is None:
                 self._smooth.pop(key, None)
@@ -528,6 +529,7 @@ class EnergyController:
                 "load_meter": bool(c.get(CONF_LOAD_POWER)),
                 "pv_ac": bool(c.get(CONF_SOLAR_AC)),
                 "pv_dc": bool(c.get(CONF_SOLAR_DC)),
+                "load_split": bool(c.get("load_essential") or c.get("load_nonessential")),
             },
         }
         if history:
