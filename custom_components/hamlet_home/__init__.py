@@ -19,6 +19,7 @@ from .water_controller import WaterController
 from .solar_manager import SolarManager
 from .irrigation_controller import IrrigationController
 from .controls_manager import ControlsManager
+from .devices_controller import DevicesController
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -30,7 +31,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     for handler in (ws_state, ws_subscribe, ws_set_tariff, ws_water_action, ws_water_settings, ws_solar_settings,
                     ws_irrigation_action, ws_irrigation_settings, ws_irrigation_entities, ws_battery_settings,
                     ws_controls, ws_controls_settings, ws_controls_pulse, ws_weather, ws_weather_settings,
-                    ws_costs, ws_costs_settings):
+                    ws_costs, ws_costs_settings,
+                    ws_devices_save, ws_devices_remove, ws_devices_entities):
         websocket_api.async_register_command(hass, handler)
     return True
 
@@ -42,13 +44,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]["water"] = water
     irrigation = IrrigationController(hass, entry, notify=controller._notify)
     hass.data[DOMAIN]["irrigation"] = irrigation
-    solar = SolarManager(hass, entry, controller, water)
+    devices = DevicesController(hass, entry, notify=controller._notify)
+    hass.data[DOMAIN]["devices"] = devices
+    solar = SolarManager(hass, entry, controller, water, devices)
     hass.data[DOMAIN]["solar"] = solar
     ctrl = ControlsManager(hass, entry, water, irrigation)
     hass.data[DOMAIN]["controls"] = ctrl
     await controller.async_start()
     await irrigation.async_start()
     await water.async_start()
+    await devices.async_start()
     await solar.async_start()
     await ctrl.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -69,6 +74,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hass.data[DOMAIN].pop("solar").async_stop()
         await hass.data[DOMAIN].pop("water").async_stop()
         await hass.data[DOMAIN].pop("irrigation").async_stop()
+        await hass.data[DOMAIN].pop("devices").async_stop()
         hass.data[DOMAIN].pop("controls", None)
         if hass.data[DOMAIN].pop("_panel", False):
             frontend.async_remove_panel(hass, PANEL_URL_PATH)
@@ -116,6 +122,7 @@ async def ws_state(hass, connection, msg):
         connection.send_result(msg["id"], {**c.snapshot(history=True), "water": hass.data[DOMAIN]["water"].snapshot(history=True),
                                            "solar_loads": hass.data[DOMAIN]["solar"].snapshot(),
                                            "irrigation": hass.data[DOMAIN]["irrigation"].snapshot(),
+                                           "devices": hass.data[DOMAIN]["devices"].snapshot(),
                                            "is_admin": connection.user.is_admin,
                                            "geyser_available": geyser_available,
                                            "geyser_count": len(hass.config_entries.async_entries("hamlet_geyser")),
@@ -134,7 +141,8 @@ def ws_subscribe(hass, connection, msg):
     def forward() -> None:
         connection.send_message(websocket_api.event_message(msg["id"], {**c.snapshot(), "water": hass.data[DOMAIN]["water"].snapshot(),
                                                                          "solar_loads": hass.data[DOMAIN]["solar"].snapshot(),
-                                                                         "irrigation": hass.data[DOMAIN]["irrigation"].snapshot()}))
+                                                                         "irrigation": hass.data[DOMAIN]["irrigation"].snapshot(),
+                                                                         "devices": hass.data[DOMAIN]["devices"].snapshot()}))
 
     connection.subscriptions[msg["id"]] = c.add_listener(forward)
     connection.send_result(msg["id"])
@@ -439,3 +447,48 @@ async def ws_costs_settings(hass, connection, msg):
         connection.send_error(msg["id"], "invalid", str(err))
         return
     connection.send_result(msg["id"], {"settings": c.costs, "tariff": c.tariff})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): f"{DOMAIN}/devices_save",
+    vol.Optional("device"): vol.Any(str, None),
+    vol.Required("settings"): dict,
+})
+@websocket_api.async_response
+async def ws_devices_save(hass, connection, msg):
+    """Add a device (admin, no id) or change one (clients: mode, run times, solar levels)."""
+    if _controller(hass, connection, msg) is None:
+        return
+    dev: DevicesController = hass.data[DOMAIN]["devices"]
+    try:
+        did = await dev.async_save_device(msg.get("device"), msg["settings"], connection.user.is_admin)
+    except (ValueError, KeyError, TypeError) as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    await hass.data[DOMAIN]["solar"].async_run()
+    connection.send_result(msg["id"], {"id": did, "devices": dev.snapshot(), "solar_loads": hass.data[DOMAIN]["solar"].snapshot()})
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/devices_remove", vol.Required("device"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_devices_remove(hass, connection, msg):
+    if _controller(hass, connection, msg) is None:
+        return
+    dev: DevicesController = hass.data[DOMAIN]["devices"]
+    try:
+        await dev.async_remove(msg["device"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    await hass.data[DOMAIN]["solar"].async_run()
+    connection.send_result(msg["id"], {"devices": dev.snapshot()})
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/devices_entities"})
+@websocket_api.require_admin
+@callback
+def ws_devices_entities(hass, connection, msg):
+    if _controller(hass, connection, msg) is None:
+        return
+    connection.send_result(msg["id"], hass.data[DOMAIN]["devices"].entity_options())

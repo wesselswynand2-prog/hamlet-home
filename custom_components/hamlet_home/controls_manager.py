@@ -42,6 +42,9 @@ class ControlsManager:
         for g in self.hass.config_entries.async_entries("hamlet_geyser"):
             c = {**g.data, **g.options}
             used |= {c.get("geyser_switch"), c.get("pump_entity")}
+        devs = self.hass.data.get(DOMAIN, {}).get("devices")
+        if devs is not None:
+            used |= devs.used_entities()
         used.discard(None)
         used.discard("")
         return used

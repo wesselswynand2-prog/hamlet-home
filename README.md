@@ -46,6 +46,14 @@ The top of the **Today** card shows:
 
 Battery size: leave it empty and it's measured from the history (needs one stretch where the battery drops at least 15 %, normally the first night), or type the usable size under **Battery settings** (admin). Sensors: `sensor.<name>_battery_backup_time`, `sensor.<name>_battery_full_in` (hours).
 
+## Devices (heat pumps, heaters, aircons … on a Shelly)
+The **Devices** tab (admins: **+ Add a device**): name, type, the Shelly switch, its power sensor (optional) and rated watts. Each device then works like the pool pump:
+- **Timer** (run times), **Solar** (start when spare solar is above X W, keep running while above Y W, run hours per day, only inside the solar hours), **On**, **Off**.
+- In Solar mode it takes part in **Energy → Solar priority** with the pool pump and geysers – put them in the order you want.
+- **Wait between switches** (default 5 min) protects heat-pump / aircon compressors.
+- Devices with a power sensor are counted in the Costs breakdown; their switches are left off the Controls tab so nobody fights the timer.
+- Clients can change the mode, run times and solar levels; adding, removing and the switch are admin only.
+
 ## Costs
 The **Costs** tab:
 - **Today / This month / This year / Since <start date>** – grid cost and savings in rand, and per line kWh and rand: house used (at the grid price), solar, bought, sold, battery used and charged.

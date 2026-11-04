@@ -1,4 +1,4 @@
-"""Share spare solar between the pool pump and geysers by priority."""
+"""Share spare solar between the pool pump, geysers and Shelly devices by priority."""
 from __future__ import annotations
 
 import logging
@@ -18,8 +18,8 @@ RUN_SECONDS = 15
 
 
 class SolarManager:
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, energy, water) -> None:
-        self.hass, self.entry, self.energy, self.water = hass, entry, energy, water
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, energy, water, devices=None) -> None:
+        self.hass, self.entry, self.energy, self.water, self.devices = hass, entry, energy, water, devices
         self.store: Store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.solar")
         self.settings: dict = dict(solar_loads.DEFAULT_SOLAR_SETTINGS)
         self.status: list[dict] = []
@@ -70,6 +70,10 @@ class SolarManager:
             info = g.solar_load()
             if info:
                 loads[info["id"]], targets[info["id"]] = info, g
+        if self.devices is not None:
+            for info in self.devices.solar_loads():
+                loads[info["id"]], targets[info["id"]] = info, self.devices.grant_target(info["id"])
+            await self.devices.async_clear_grants(set(loads))
 
         live = self.energy.live or {}
         solar, load = live.get("solar"), live.get("load")
@@ -128,6 +132,10 @@ class SolarManager:
         for g in self._geysers():
             gid = f"geyser:{g.entry.entry_id}"
             loads[gid] = {"id": gid, "name": g.name, "kind": "geyser", "active": bool(g.settings.get("solar_enabled", True))}
+        if self.devices is not None:
+            for d in self.devices.devices:
+                lid = f"dev:{d['id']}"
+                loads[lid] = {"id": lid, "name": d["name"], "kind": "device", "device_kind": d["kind"], "active": d["mode"] == "solar"}
         return solar_loads.ordered(loads, self.settings["order"])
 
     def snapshot(self) -> dict:

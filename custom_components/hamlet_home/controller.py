@@ -128,6 +128,9 @@ class EnergyController:
                 # no meter (Geyserwise / plain relay): Hamlet Geyser's own estimated "Geyser power" sensor
                 est = reg.async_get_entity_id("sensor", "hamlet_geyser", f"{g.entry_id}_geyser_power")
                 chosen += [est] if est else meter
+            devs = self.hass.data.get(DOMAIN, {}).get("devices")
+            if devs is not None:
+                chosen += devs.power_sensors()
         return list(dict.fromkeys(chosen))[:MAX_COST_LOADS]
 
     def _kind(self, entity_id: str) -> str:

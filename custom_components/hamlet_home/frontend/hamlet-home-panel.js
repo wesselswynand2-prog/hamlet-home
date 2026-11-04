@@ -244,7 +244,7 @@ class HamletHomePanel extends HTMLElement {
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
     if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -289,6 +289,7 @@ class HamletHomePanel extends HTMLElement {
       this._isAdmin = s.is_admin;
       this._geyser = s.geyser_available || s.geyser_installed;
       this._weather = !!s.weather_available;
+      this._devices = s.devices || [];
       this._geyserCount = s.geyser_count ?? (s.geyser_installed ? 1 : 0);
       this._rows = s.rows; this._days = s.days; this._raw = s.raw;
       this._water = s.water; this._waterRows = s.water?.rows; this._solar = s.solar_loads; this._irr = s.irrigation;
@@ -313,6 +314,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._weather) tabs.push(["weather", "mdi:weather-partly-cloudy", "Weather"]);
     if (this._water || this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:water-pump", "Water"]);
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
+    if (this._devices?.length || this._isAdmin) tabs.push(["devices", "mdi:power-socket-za", "Devices"]);
     tabs.push(["controls", "mdi:light-switch", "Controls"]);
     if (!tabs.some((t) => t[0] === this._tab)) this._tab = "energy";
     this.shadowRoot.getElementById("tabs").innerHTML = tabs.length < 2 ? "" : tabs.map(([id, icon, label]) =>
@@ -328,6 +330,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._tab === "controls") return this._buildControls();
     if (this._tab === "weather") return this._buildModule("weather");
     if (this._tab === "costs") return this._buildModule("costs");
+    if (this._tab === "devices") return this._buildModule("devices");
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
       <section class="card s7"><h2>Power flow <span class="sub" id="flowsub"></span></h2><div id="flow"></div><div id="flowinfo"></div></section>
@@ -381,6 +384,7 @@ class HamletHomePanel extends HTMLElement {
     el.hass = this._hass;
     this._main.innerHTML = "";
     this._main.appendChild(el);
+    if (el.update) el.update({ ...(this._snap || {}), devices: this._devices || [], solar_loads: this._solar, is_admin: this._isAdmin });
   }
 
   async _buildControls() {
@@ -466,6 +470,8 @@ class HamletHomePanel extends HTMLElement {
     if (s.solar_loads !== undefined) this._solar = s.solar_loads;
     if (s.irrigation !== undefined) this._irr = s.irrigation;
     if (this._tab === "water") return this._renderWater();
+    if (s.devices !== undefined) this._devices = s.devices;
+    if (this._tab === "devices") { const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
     if (this._tab === "weather" || this._tab === "costs") return;
     if (this._tab === "controls") {
       const c = this.shadowRoot.querySelector("hamlet-home-controls");
@@ -904,19 +910,21 @@ class HamletHomePanel extends HTMLElement {
     const st = sl.settings || {};
     const sub = this.shadowRoot.getElementById("priosub");
     sub.textContent = sl.spare_w === null || sl.spare_w === undefined ? "" : `spare solar now ${fmtW(Math.max(sl.spare_w, 0))}`;
-    const icon = (k) => (k === "pool" ? "mdi:pool" : "mdi:water-boiler");
+    const DEV_ICON = { heatpump: "mdi:heat-pump", heater: "mdi:radiator", aircon: "mdi:air-conditioner", pump: "mdi:pump", charger: "mdi:ev-station", other: "mdi:power-socket-za" };
+    const icon = (k, l) => (k === "pool" ? "mdi:pool" : k === "device" ? (DEV_ICON[l?.device_kind] || DEV_ICON.other) : "mdi:water-boiler");
     const state = (l) => {
-      if (!l.active) return ["var(--muted)", l.kind === "pool" ? "Not in Solar mode – set the pool to Solar on the Water tab" : "Solar heating is off for this geyser"];
+      if (!l.active) return ["var(--muted)", l.kind === "pool" ? "Not in Solar mode – set the pool to Solar on the Water tab"
+        : l.kind === "device" ? "Not in Solar mode – set it to Solar on the Devices tab" : "Solar heating is off for this geyser"];
       if (l.grant === undefined) return ["var(--muted)", "Starting…"];
       if (l.grant && l.running) return ["var(--c-ok)", `Running on solar · ${fmtW(l.power)}`];
       if (l.grant) return ["var(--c-ok)", "Switching on"];
-      if (!l.wants) return ["var(--muted)", l.kind === "pool" ? "Not needed now (outside hours or done for today)" : "Not needed now (hot enough or not in Auto)"];
+      if (!l.wants) return ["var(--muted)", l.kind === "geyser" ? "Not needed now (hot enough or not in Auto)" : "Not needed now (outside hours or done for today)"];
       return ["var(--c-warn)", l.why ? l.why.charAt(0).toUpperCase() + l.why.slice(1) : "Waiting for solar"];
     };
     const rows = loads.map((l, i) => {
       const [c, t] = state(l);
       return `<div class="prow ${l.active ? "" : "off"}" data-id="${esc(l.id)}">
-        <span class="rank">${i + 1}</span><ha-icon icon="${icon(l.kind)}"></ha-icon>
+        <span class="rank">${i + 1}</span><ha-icon icon="${icon(l.kind, l)}"></ha-icon>
         <div style="min-width:0"><div class="n">${esc(l.name)}</div><div class="w"><span class="dotx" style="--bc:${c}"></span>${esc(t)}</div></div>
         <div class="mv"><button data-prio="up" aria-label="Move ${esc(l.name)} up" ${i === 0 ? "disabled" : ""}>↑</button><button data-prio="down" aria-label="Move ${esc(l.name)} down" ${i === loads.length - 1 ? "disabled" : ""}>↓</button></div></div>`;
     }).join("");
