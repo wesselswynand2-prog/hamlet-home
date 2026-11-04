@@ -30,11 +30,15 @@ def target_dir(hass: HomeAssistant, domain: str) -> Path:
     return config_dir(hass) / "custom_components" / domain
 
 
-def hacs_manages(hass: HomeAssistant, repo: str) -> bool:
-    """True when HACS has this repo downloaded (then HACS shows the update, not us)."""
+def hacs_shows(hass: HomeAssistant, repo: str, latest: str) -> bool:
+    """True only when HACS has this repo downloaded AND already knows about `latest`
+    (then HACS shows that update and we stay quiet). If HACS is behind, we show it."""
     try:
         r = hass.data["hacs"].repositories.get_by_full_name(repo)
-        return bool(r and r.data.installed)
+        if not (r and r.data.installed):
+            return False
+        known = str(getattr(r.data, "last_version", None) or getattr(r, "display_available_version", "") or "").lstrip("v")
+        return known == latest.lstrip("v")
     except Exception:  # noqa: BLE001 - HACS missing or a different version
         return False
 
@@ -104,13 +108,13 @@ class HamletUpdate(UpdateEntity):
             _LOGGER.debug("Hamlet update check failed: %s", err)
             return
         self._error = None
-        self._managed = hacs_manages(self.hass, self.repo)
         latest = str(rel.get("tag_name", "")).lstrip("v") or self.installed_version
+        self._managed = hacs_shows(self.hass, self.repo, latest)
         self._asset = updater.pick_asset(rel, self.domain)
         self._notes = rel.get("body") or ""
         self._attr_release_url = rel.get("html_url") or self._attr_release_url
         self._attr_release_summary = (self._notes.strip().splitlines() or [""])[0][:250] or None
-        # HACS shows its own update for repos it downloaded; don't show a second one
+        # when HACS already shows this version, don't show a second one
         self._attr_latest_version = self.installed_version if (self._managed or not self._asset) else latest
         self.async_write_ha_state()
 

@@ -80,11 +80,26 @@ async def test_update_entity_installs_and_restarts(enable_custom_integrations, h
     await hass.async_block_till_done(wait_background_tasks=True)
     st = hass.states.get("update.huis_app_update")
     assert st is not None and st.state == "off", st                 # nothing checked yet
+    # HACS has the repo "downloaded" but its info is stale (still thinks 0.5.0 is newest) -> we show the update
+    from types import SimpleNamespace
+    repo = SimpleNamespace(data=SimpleNamespace(installed=True, last_version="v0.5.0"))
+    hass.data["hacs"] = SimpleNamespace(repositories=SimpleNamespace(get_by_full_name=lambda name: repo))
     freezer.tick(70)
     async_fire_time_changed(hass)
     await hass.async_block_till_done(wait_background_tasks=True)
     st = hass.states.get("update.huis_app_update")
     assert st.state == "on" and st.attributes["latest_version"] == "9.9.9" and st.attributes["release_summary"] == "Controls tab"
+    assert st.attributes["managed_by"] == "Hamlet Home"
+    # HACS knows 9.9.9 -> HACS shows it, we stay quiet
+    repo.data.last_version = "v9.9.9"
+    ent = next(e for e in hass.data["entity_components"]["update"].entities if e.entity_id == "update.huis_app_update")
+    await ent.async_check()
+    await hass.async_block_till_done()
+    assert hass.states.get("update.huis_app_update").state == "off"
+    repo.data.last_version = "v0.5.0"
+    await ent.async_check()
+    await hass.async_block_till_done()
+    assert hass.states.get("update.huis_app_update").state == "on"
     geyser = hass.states.get("update.huis_hamlet_geyser_update")
     assert geyser is None or geyser.state == "off"
     await hass.services.async_call("update", "install", {"entity_id": "update.huis_app_update"}, blocking=True)

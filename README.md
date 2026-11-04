@@ -12,7 +12,7 @@ For the geyser, add `https://github.com/wesselswynand2-prog/hamlet-geyser` the s
 
 ## Updates without HACS (built in)
 Hamlet Home checks GitHub every 6 hours. A new version of **Hamlet Home** or **Hamlet Geyser** shows up under **Settings → Updates** – click **Install**: it downloads the release, keeps the previous version in `hamlet_backup/`, and restarts Home Assistant. Settings and history are kept.
-When HACS manages an app, HACS shows its update instead (no double notices).
+When HACS already shows a version, Hamlet Home stays quiet (no double notices); if HACS is behind, Hamlet Home shows it.
 
 ## Install or update without HACS (zip + one command)
 1. Upload `hamlet-home.zip` to the Home Assistant config folder.
