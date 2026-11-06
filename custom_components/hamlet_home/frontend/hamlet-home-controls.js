@@ -103,6 +103,7 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
 .arow .n { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .arow > ha-icon { --mdc-icon-size: 22px; color: var(--muted); }
 .sheet { display: grid; gap: 8px; }
+.sheet select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--primary-text-color); max-width: 320px; }
 .sheet .lab { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 6px; }
 .kinds, .opts { display: flex; flex-wrap: wrap; gap: 6px; }
 .kbtn { font: inherit; font-size: 13px; padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--primary-text-color); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
@@ -236,7 +237,7 @@ class HamletHomeControls extends HTMLElement {
           ${this._admin ? `<button class="btn sm primary" data-a="addopen"><ha-icon icon="mdi:plus" style="--mdc-icon-size:16px;vertical-align:-3px"></ha-icon> Add</button>
             <button class="btn sm" data-a="tweak" aria-pressed="${!!this._tweak}"><ha-icon icon="mdi:pencil" style="--mdc-icon-size:16px;vertical-align:-3px"></ha-icon> ${this._tweak ? "Done" : "Edit"}</button>` : ""}</div>
         <div id="tools" style="display:contents"></div>
-        ${nothing ? `<section class="card empty">Nothing on this page yet.${this._admin ? " Tap <b>+ Add</b> to put switches, lights, gates and more here." : ""}</section>` : ""}
+        ${nothing ? `<section class="card empty">Nothing on this page yet.${this._admin ? " Tap <b>+ Add</b> to put switches, lights, gates and more here, and pick the room for each." : ""}</section>` : ""}
         <section class="card" id="sfav" hidden><h2><ha-icon icon="mdi:star"></ha-icon>Favourites</h2><div class="tiles" id="fav"></div></section>
         <section class="card" id="sgates" hidden><h2><ha-icon icon="mdi:gate"></ha-icon>Gates &amp; doors</h2><div class="gates" id="gates"></div></section>
         ${L.rooms.map((r, i) => `<section class="card ${L.rooms.length > 1 ? "s6" : ""}"><h2><ha-icon icon="${esc(r.icon || "mdi:floor-plan")}"></ha-icon>${esc(r.name)}
@@ -419,6 +420,7 @@ class HamletHomeControls extends HTMLElement {
   _change(ev) {
     const t = ev.target;
     if (this._edit) return this._editInput(t);
+    if (t.id === "sheetroom" && this._sheetDraft) { this._sheetDraft.room = t.value; return; }
     if (t.dataset.a === "bright") {
       this._busy = false;
       this._call("light", "turn_on", { entity_id: t.dataset.e, brightness_pct: Number(t.value) });
@@ -429,6 +431,7 @@ class HamletHomeControls extends HTMLElement {
     const t = ev.target;
     if (t.id === "addq") { this._addQ = t.value; this._filterAdd(); }
     if (t.id === "sheetname" && this._sheetDraft) this._sheetDraft.name = t.value;
+    if (t.id === "sheetroom" && this._sheetDraft) this._sheetDraft.room = t.value;
   }
 
   /* --------------------------------------------- simple add / edit tools */
@@ -436,7 +439,7 @@ class HamletHomeControls extends HTMLElement {
     const s = this._lay.settings || {};
     return { hidden: [...(s.hidden || [])], added: [...(s.added || [])], names: { ...(s.names || {}) }, kinds: { ...(s.kinds || {}) },
       favourites: [...(s.favourites || [])], confirm: { ...(s.confirm || {}) }, room_order: [...(s.room_order || [])],
-      room_names: { ...(s.room_names || {}) }, pulse_seconds: s.pulse_seconds ?? 1 };
+      room_names: { ...(s.room_names || {}) }, pulse_seconds: s.pulse_seconds ?? 1, rooms: { ...(s.rooms || {}) } };
   }
   async _saveSettings(settings, msg) {
     try {
@@ -465,7 +468,7 @@ class HamletHomeControls extends HTMLElement {
     const it = (this._lay.all || []).find((i) => i.entity_id === eid); if (!it) return;
     const s = this._lay.settings || {};
     this._sheet = eid; this._sheetFresh = fresh;
-    this._sheetDraft = { name: (s.names || {})[eid] || "", kind: it.kind, fav: !!it.favourite, confirm: !!it.confirm };
+    this._sheetDraft = { name: (s.names || {})[eid] || "", kind: it.kind, fav: !!it.favourite, confirm: !!it.confirm, room: it.area_id || "" };
     this._renderTools(true);
     this.shadowRoot.getElementById("sheetname")?.focus();
   }
@@ -473,6 +476,7 @@ class HamletHomeControls extends HTMLElement {
     const eid = this._sheet, d = this._sheetDraft, s = this._settingsCopy();
     if (d.name.trim()) s.names[eid] = d.name.trim(); else delete s.names[eid];
     s.kinds[eid] = d.kind;
+    if (d.room !== undefined) { if (d.room) s.rooms[eid] = d.room; else delete s.rooms[eid]; }
     s.confirm[eid] = d.confirm;
     s.favourites = s.favourites.filter((x) => x !== eid); if (d.fav) s.favourites.push(eid);
     this._sheet = null;
@@ -502,7 +506,7 @@ class HamletHomeControls extends HTMLElement {
           <div style="flex:1;min-width:0"><div class="n">${esc(i.full_name)}</div><div class="muted small">${esc([i.room, KIND_LABEL[i.kind] || ""].filter(Boolean).join(" · "))}</div></div>
           <button class="btn sm primary" data-a="addone" data-e="${esc(i.entity_id)}">Add</button></div>`).join("")}
           <div class="empty" id="anone" ${cand.length ? "hidden" : ""}>${cand.length ? "Nothing matches." : "Everything is already on the page."}</div></div>
-        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="muted small" style="align-self:center">Rooms come from Home Assistant's areas (Settings → Areas).</span>
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="muted small" style="align-self:center">A room shows once it has a control in it. Pick the room after adding.</span>
           <button class="btn sm" data-a="addopen">Close</button></div></section>`;
     }
     if (this._sheet) {
@@ -511,6 +515,8 @@ class HamletHomeControls extends HTMLElement {
         <div class="sheet">
           <label class="lab" for="sheetname">Name on the page</label>
           <input type="text" id="sheetname" maxlength="40" value="${esc(d.name)}" placeholder="${esc(it.name)}">
+          <label class="lab" for="sheetroom">Room</label>
+          <select id="sheetroom">${[["", "Other (no room)"], ...(this._lay.areas || []).map((a) => [a.id, a.name])].map(([id, n]) => `<option value="${esc(id)}" ${id === (d.room || "") ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
           <div class="lab">Type</div>
           <div class="kinds">${Object.keys(KIND_LABEL).map((k) => `<button class="kbtn" data-a="sheetkind" data-k="${k}" aria-pressed="${d.kind === k}"><ha-icon icon="${ICON[k][1]}"></ha-icon>${KIND_LABEL[k]}</button>`).join("")}</div>
           <div class="opts">
@@ -670,6 +676,7 @@ class HamletHomeControls extends HTMLElement {
         room_order: D.rooms.filter((r) => r.id !== null).map((r) => r.id),
         room_names: Object.fromEntries(Object.entries(D.roomNames).filter(([, v]) => v && v.trim())),
         pulse_seconds: D.pulse,
+        rooms: { ...(s.rooms || {}) },
       };
       const msg = this.shadowRoot.getElementById("emsg");
       try {

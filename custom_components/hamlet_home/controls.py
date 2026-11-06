@@ -20,6 +20,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "room_order": [],    # area ids
     "room_names": {},    # area id -> name on the page
     "pulse_seconds": 1.0,
+    "rooms": {},         # entity id -> area id chosen on the page (overrides Home Assistant's area)
 }
 
 
@@ -85,7 +86,8 @@ def build(entities: list[dict], areas: dict[str, dict], settings: dict, admin: b
             continue
         shown = (auto_include(eid, default_kind(eid, e["name"], e.get("attrs") or {}, e.get("device_class"))) or eid in added
                  or eid in s["kinds"]) and eid not in hidden
-        area = e.get("area_id") if e.get("area_id") in areas else None
+        own = s["rooms"].get(eid)
+        area = own if own in areas else (e.get("area_id") if e.get("area_id") in areas else None)
         room_name = s["room_names"].get(area) or (areas[area]["name"] if area else None)
         item = {
             "entity_id": eid,
@@ -126,6 +128,8 @@ def build(entities: list[dict], areas: dict[str, dict], settings: dict, admin: b
     if admin:
         result["all"] = every
         result["settings"] = s
+        # every area in Home Assistant, so a control can be put in a room that has nothing yet
+        result["areas"] = sorted(({"id": a, "name": v["name"], "icon": v.get("icon")} for a, v in areas.items()), key=lambda x: x["name"].lower())
     return result
 
 
@@ -150,6 +154,10 @@ def validate(new: dict, known: set[str]) -> dict:
         out["kinds"] = {k: v for k, v in new["kinds"].items() if k in known}
     if "confirm" in new:
         out["confirm"] = {k: bool(v) for k, v in new["confirm"].items() if k in known}
+    if "rooms" in new:
+        if not isinstance(new["rooms"], dict):
+            raise ValueError("rooms must be a mapping")
+        out["rooms"] = {str(k): str(v) for k, v in new["rooms"].items() if k in known and v}
     if "pulse_seconds" in new:
         p = float(new["pulse_seconds"])
         if not 0.2 <= p <= 10:

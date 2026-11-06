@@ -62,6 +62,15 @@ def test_build_groups_rooms_gates_favourites():
     assert stoep["shown"] is False
 
 
+def test_room_chosen_on_the_page():
+    """A switch without an area (or in the wrong one) can be put in any Home Assistant area, even an empty one."""
+    ents = [e("switch.stoep", "Stoep lig"), e("light.kantoor", "Kantoor lig", "kantoor")]
+    lay = controls.build(ents, AREAS, {"rooms": {"switch.stoep": "kombuis"}}, admin=True)
+    assert [r["name"] for r in lay["rooms"]] == ["Kantoor", "Kombuis"]
+    assert [a["name"] for a in lay["areas"]] == ["Kantoor", "Kombuis"]
+    assert controls.validate({"rooms": {"switch.stoep": "kombuis", "switch.unknown": "x"}}, {"switch.stoep"}) == {"rooms": {"switch.stoep": "kombuis"}}
+
+
 def test_validate():
     known = {"light.a", "switch.b"}
     out = controls.validate({"hidden": ["light.a", "light.gone"], "names": {"light.a": "  Lamp "}, "kinds": {"switch.b": "plug"},

@@ -237,7 +237,7 @@ The Controls tab lets you switch lights, gates, aircons and plugs, grouped by ro
 - **Edit**: the controls get a dashed outline. Tap any of them to rename it, change its type, star it or **Remove** it from the page. Tap **Done** when finished.
 - **All devices & rooms…** (under Edit): the full list, to show or hide many at once, set the room order and names, and the gate pulse length.
 
-Rooms come from Home Assistant's Areas (**Settings → Areas**).
+Rooms come from Home Assistant's Areas (**Settings → Areas**). A room appears once it has a control in it. When you add or edit a control you can pick its **Room** from all your areas, even one that has nothing in it yet.
 
 During a power outage, devices without power show **No power**. The pool pump, booster pump, irrigation valves, geyser and devices on the Devices tab are not on this tab, because the app runs them.
 
