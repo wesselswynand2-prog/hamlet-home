@@ -307,7 +307,7 @@ class HamletHomePanel extends HTMLElement {
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
     if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -416,7 +416,7 @@ class HamletHomePanel extends HTMLElement {
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
       <div id="updbar" style="display:contents"></div>
-      <section class="card s7" id="flowcard"><h2>Power flow <span class="sub"><span id="flowsub"></span><span class="seg" id="fstyleseg"><button data-fstyle="blocks">Blocks</button><button data-fstyle="circles">Circles</button></span></span></h2><div id="flow"></div><div id="flowinfo"></div></section>
+      <section class="card s7" id="flowcard"><h2>Power flow <span class="sub"><span id="flowsub"></span><span class="seg" id="fstyleseg"><button data-fstyle="blocks">Blocks</button><button data-fstyle="circles">Circles</button><button data-fstyle="scene">Scene</button></span></span></h2><div id="flow"></div><div id="flowinfo"></div></section>
       <section class="card s5" id="todaycard"><h2>Today <span class="sub" id="todaysub"></span></h2><div id="batt"></div><div id="today"></div><div id="battset"></div></section>
       <div id="solfc" style="display:contents"></div>
       <section class="card" id="prio" hidden><h2>Solar priority <span class="sub" id="priosub"></span></h2><div id="priobody"></div></section>
@@ -610,19 +610,45 @@ class HamletHomePanel extends HTMLElement {
     el.data = { live: s.live, features: s.features, extras: s.extras, battery: s.battery, flow_entities: s.flow_entities, rows: this._rows?.today };
   }
 
+  // "Scene": the house drawn as a picture, with the same live readings
+  async _renderScene() {
+    const box = this.shadowRoot.getElementById("flow"); if (!box) return;
+    if (!customElements.get("hamlet-home-scene")) {
+      if (!this._sceneLoading) this._sceneLoading = import(`/hamlet_home_static/hamlet-home-scene.js?v=${VERSION}`).catch(() => null);
+      await this._sceneLoading;
+      if (!customElements.get("hamlet-home-scene")) { this._fstyle = "blocks"; return this._renderFlow(); }
+    }
+    let el = box.querySelector("hamlet-home-scene");
+    if (!el) { box.innerHTML = ""; this._flowBuilt = null; el = document.createElement("hamlet-home-scene"); box.appendChild(el); }
+    el.hass = this._hass;
+    const s = this._snap;
+    el.data = { live: s.live, features: s.features, extras: s.extras, battery: s.battery };
+  }
+
   _renderFlow() {
-    const blocks = this._flowStyle() === "blocks";
+    const style = this._flowStyle();
+    if (style === "scene") {
+      const fc = this.shadowRoot.getElementById("flowcard"), tc = this.shadowRoot.getElementById("todaycard");
+      if (fc) fc.classList.remove("s7");
+      if (tc) tc.classList.remove("s5");
+      this.shadowRoot.querySelectorAll("[data-fstyle]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.fstyle === style));
+      const sub = this.shadowRoot.getElementById("flowsub");
+      if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return this._renderScene();
+    }
+    const blocks = style === "blocks";
     const fc = this.shadowRoot.getElementById("flowcard"), tc = this.shadowRoot.getElementById("todaycard");
     if (fc) fc.classList.toggle("s7", !blocks);
     if (tc) tc.classList.toggle("s5", !blocks);
     this.shadowRoot.querySelectorAll("[data-fstyle]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.fstyle === this._flowStyle()));
     if (blocks) {
+      if (this.shadowRoot.querySelector("#flow hamlet-home-scene")) this.shadowRoot.getElementById("flow").innerHTML = "";
       this._renderBlocks();
       const sub = this.shadowRoot.getElementById("flowsub");
       if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       return;
     }
-    if (this.shadowRoot.querySelector("#flow hamlet-home-blocks")) { this.shadowRoot.getElementById("flow").innerHTML = ""; this._flowBuilt = null; }
+    if (this.shadowRoot.querySelector("#flow hamlet-home-blocks, #flow hamlet-home-scene")) { this.shadowRoot.getElementById("flow").innerHTML = ""; this._flowBuilt = null; }
     const s = this._snap, L = s.live || {}, f = s.features || {};
     // like the old card: a load drawing nothing (or not reporting) is left out until it uses power again
     // grid-side loads first, so they sit at the top next to the Non-essential circle
