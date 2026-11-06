@@ -69,6 +69,10 @@ This card decides which device gets spare solar first. See *Devices and Solar pr
 - **History:** kWh per day for the last 7 or 30 days.
 - **Electricity price:** what you pay per kWh. Change it here when your tariff goes up, so the rand figures stay right.
 
+## Property tab
+
+The whole property on one live picture: the grid, roof solar, inverter and battery, the geyser (and solar collector), the water tank and booster pump, the garden sprinklers, the pool with its pump, filter and heat pump, and the aircon. Power wires show where the power comes from (amber solar, green battery, pink grid); pipes show water moving (blue, or orange when heated). Sprinklers spray while their valve is open, pumps and fans spin while running, and the pool glows when its lights are on. Only the parts your home has are drawn. Tiles under the picture sum up Energy, Geyser, Pool and Water.
+
 ## Costs tab
 
 The Costs tab shows what your electricity cost and what the solar system saved – today, this month, this year and since your system was installed.

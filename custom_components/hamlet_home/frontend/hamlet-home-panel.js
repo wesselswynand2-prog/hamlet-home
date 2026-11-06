@@ -307,7 +307,7 @@ class HamletHomePanel extends HTMLElement {
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
     if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene, hamlet-home-property").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -386,7 +386,7 @@ class HamletHomePanel extends HTMLElement {
   }
 
   _renderTabs() {
-    const tabs = [["energy", "mdi:lightning-bolt", "Energy"], ["costs", "mdi:cash-multiple", "Costs"]];
+    const tabs = [["energy", "mdi:lightning-bolt", "Energy"], ["property", "mdi:home-variant-outline", "Property"], ["costs", "mdi:cash-multiple", "Costs"]];
     if (this._weather) tabs.push(["weather", "mdi:weather-partly-cloudy", "Weather"]);
     const wf = this._water?.features || {};
     const poolDevs = (this._devices || []).filter((d) => d.area === "pool");
@@ -408,6 +408,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._tab === "geyser") return this._buildGeyser();
     if (this._tab === "water") return this._buildWater();
     if (this._tab === "pool") return this._buildPool();
+    if (this._tab === "property") return this._buildProperty();
     if (this._tab === "controls") return this._buildControls();
     if (this._tab === "weather") return this._buildModule("weather");
     if (this._tab === "costs") return this._buildModule("costs");
@@ -565,6 +566,7 @@ class HamletHomePanel extends HTMLElement {
     if (s.irrigation !== undefined) this._irr = s.irrigation;
     if (s.devices !== undefined) this._devices = s.devices;
     if (this._tab === "water") return this._renderWater();
+    if (this._tab === "property") return this._renderProperty();
     if (this._tab === "pool") { this._renderWater(); const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
     if (this._tab === "devices") { const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
     if (this._tab === "weather" || this._tab === "costs" || this._tab === "help") return;
@@ -1262,6 +1264,29 @@ Object.assign(HamletHomePanel.prototype, {
     this._renderWater(); this._renderPressure();
   },
 
+  /* Property tab: the whole property on one live picture (energy, geyser, water, irrigation, pool) */
+  async _buildProperty() {
+    this._main.innerHTML = `<section class="card" style="grid-column:1/-1"><h2><ha-icon icon="mdi:home-variant-outline"></ha-icon>Property <span class="sub" id="propsub"></span></h2><div id="propbox"></div></section>`;
+    if (!customElements.get("hamlet-home-property")) {
+      try { await import(`/hamlet_home_static/hamlet-home-property.js?v=${VERSION}`); } catch (e) {
+        this.shadowRoot.getElementById("propbox").innerHTML = `<div class="muted small">Couldn't load the property view – refresh the page.</div>`; return;
+      }
+    }
+    const box = this.shadowRoot.getElementById("propbox");
+    if (this._tab !== "property" || !box) return;
+    const el = document.createElement("hamlet-home-property");
+    el.hass = this._hass;
+    box.appendChild(el);
+    this._renderProperty();
+  },
+
+  _renderProperty() {
+    const el = this.shadowRoot.querySelector("hamlet-home-property"); if (!el) return;
+    const sub = this.shadowRoot.getElementById("propsub");
+    if (sub) sub.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    el.data = { snap: this._snap || {}, water: this._water, irr: this._irr, devices: this._devices || [] };
+  },
+
   /* Pool tab: the pool pump, the water temperature and any devices linked to the pool (heat pump, lights …) */
   async _buildPool() {
     this._main.innerHTML = `
@@ -1730,6 +1755,7 @@ Object.assign(HamletHomePanel.prototype, {
 
   _renderIrrLive() {
     const $ = (id) => this.shadowRoot.getElementById(id);
+    if (this._tab === "property") this._renderProperty();
     if (this._water && $("wpumpdia")) this._renderWaterDiagram();
     const ir = this._irr; if (!ir) return;
     const st = ir.settings || {};
