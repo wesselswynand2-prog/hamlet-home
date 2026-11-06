@@ -199,7 +199,8 @@ class HamletHomeOptionsFlow(OptionsFlow):
         """Extra readings for the Victron-style Blocks power flow (all optional)."""
         from .const import FLOW_DETAIL_KEYS  # noqa: PLC0415
         any_sensor = selector.EntitySelector(selector.EntitySelectorConfig(domain=["sensor", "input_number", "input_select"]))
-        schema = vol.Schema({vol.Optional(k): any_sensor for k in FLOW_DETAIL_KEYS})
+        mode_sel = selector.EntitySelector(selector.EntitySelectorConfig(domain=["select", "input_select"]))
+        schema = vol.Schema({vol.Optional(k): (mode_sel if k == "inverter_mode" else any_sensor) for k in FLOW_DETAIL_KEYS})
         if user_input is not None:
             self._data.update({k: None for k in FLOW_DETAIL_KEYS})
             self._data.update(user_input)

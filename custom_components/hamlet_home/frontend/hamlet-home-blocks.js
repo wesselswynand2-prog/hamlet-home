@@ -96,6 +96,17 @@ svg.lines .flow.mix.on { animation-name: run6; }
 @keyframes shine { to { transform: translateX(100%); } }
 .inv .bar { height: 4px; background: var(--c-solar); }
 .inv .st { text-align: center; padding: 8px; font-size: 13px; color: var(--accent); }
+.inv .mode { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px 8px; margin-top: -4px; font-size: 12px; color: var(--muted); }
+.inv .mode ha-icon { --mdc-icon-size: 14px; } .inv .mode b { color: var(--primary-text-color); font-weight: 600; } .inv .mode b.warn { color: var(--c-warn, #e08a00); }
+.inv.tap { cursor: pointer; } .inv.tap:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--inv) 40%, transparent); }
+.modepop { position: absolute; z-index: 5; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); min-width: 200px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 4px; }
+.modepop[hidden] { display: none; }
+.mid.open { z-index: 20; }
+.modepop .ph { font-size: 12px; color: var(--muted); padding: 2px 6px 4px; } .modepop .pn { font-size: 11px; color: var(--muted); padding: 4px 6px 0; }
+.modepop button { font: inherit; font-size: 14px; text-align: left; padding: 8px 10px; border-radius: 8px; border: 0; background: transparent; color: var(--primary-text-color); cursor: pointer; }
+.modepop button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.modepop button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 /* battery level */
 .lvl { margin: 6px 12px 2px; height: 10px; border-radius: 5px; background: color-mix(in srgb, var(--c-batt) 15%, transparent); overflow: hidden; position: relative; }
 .lvl i { position: absolute; inset: 0 auto 0 0; background: var(--c-batt); border-radius: 5px; transition: width .8s ease; }
@@ -135,6 +146,53 @@ class HamletHomeBlocks extends HTMLElement {
   disconnectedCallback() { this._ro?.disconnect(); }
 
   _st(eid) { return eid ? this._hass?.states?.[eid] : null; }
+
+  // inverter mode (e.g. Victron "Inverter Mode": On / Off / Charger only / Inverter only): shown under the state, tap to change
+  _renderMode(eid) {
+    const el = this.shadowRoot.getElementById("inv-mode"), inv = this.shadowRoot.getElementById("inv");
+    if (!el || !inv) return;
+    const st = this._st(eid);
+    el.hidden = !st;
+    const admin = !!this._hass?.user?.is_admin;   // only an administrator may change the inverter itself
+    inv.classList.toggle("tap", !!st && admin);
+    if (!st) return;
+    const cur = ["unavailable", "unknown"].includes(st.state) ? null : st.state;
+    const warn = cur && !/^on$/i.test(cur);
+    const html = `<ha-icon icon="mdi:tune-variant"></ha-icon>Mode: <b class="${warn ? "warn" : ""}">${esc(cur || "unavailable")}</b>`;
+    if (this._html["inv-mode"] !== html) { this._html["inv-mode"] = html; el.innerHTML = html; }
+    this._modeEid = eid;
+    if (!this._modeWired) {
+      this._modeWired = true;
+      inv.addEventListener("click", (ev) => { if (this._modeEid && this._st(this._modeEid) && this._hass?.user?.is_admin) { ev.stopPropagation(); this._openMode(); } });
+      this.shadowRoot.addEventListener("click", (ev) => {
+        const b = ev.target.closest("[data-imode]");
+        const pop = this.shadowRoot.getElementById("modepop");
+        if (b) return this._pickMode(b.dataset.imode);
+        if (pop && !pop.hidden && !ev.target.closest("#modepop") && !ev.target.closest("#inv")) { pop.hidden = true; pop.parentElement.classList.remove("open"); }
+      });
+    }
+  }
+  _openMode() {
+    const pop = this.shadowRoot.getElementById("modepop"); const st = this._st(this._modeEid);
+    if (!pop || !st) return;
+    if (!pop.hidden) { pop.hidden = true; pop.parentElement.classList.remove("open"); return; }
+    const opts = st.attributes?.options || [];
+    pop.innerHTML = `<div class="ph">Inverter mode</div>${opts.length ? opts.map((o) => `<button data-imode="${esc(o)}" aria-pressed="${o === st.state}">${esc(o)}</button>`).join("")
+      : `<div class="muted">This entity doesn't list its modes.</div>`}<div class="pn">Changes the inverter itself.</div>`;
+    pop.hidden = false;
+    pop.parentElement.classList.add("open");
+  }
+  async _pickMode(option) {
+    const pop = this.shadowRoot.getElementById("modepop"); const st = this._st(this._modeEid);
+    const close = () => { if (pop) { pop.hidden = true; pop.parentElement.classList.remove("open"); } };
+    if (!st || option === st.state) return close();
+    if (/off/i.test(option) && !confirm(`Switch the inverter to "${option}"? Loads on the inverter output may lose power.`)) return;
+    if (!/off/i.test(option) && !confirm(`Change the inverter mode to "${option}"?`)) return;
+    try {
+      await this._hass.callService(this._modeEid.split(".")[0], "select_option", { entity_id: this._modeEid, option });
+      close();
+    } catch (e) { alert(e.message || e); }
+  }
   _val(eid, unit) {
     const st = this._st(eid);
     if (!st || ["unavailable", "unknown"].includes(st.state)) return null;
@@ -185,7 +243,7 @@ class HamletHomeBlocks extends HTMLElement {
       };
       this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="wrap" id="wrap"><svg class="lines" id="lines"></svg>
         <div class="row top">${tops.map((k) => this._box(k, ...T[k])).join("")}</div>
-        <div class="mid"><div class="inv" id="inv" style="--inv:#2f6fd0"><div class="top"><ha-icon icon="mdi:sine-wave"></ha-icon><span class="w" id="inv-w"></span></div><div class="bar"></div><div class="st" id="inv-st"></div></div></div>
+        <div class="mid"><div class="inv" id="inv" style="--inv:#2f6fd0"><div class="top"><ha-icon icon="mdi:sine-wave"></ha-icon><span class="w" id="inv-w"></span></div><div class="bar"></div><div class="st" id="inv-st"></div><div class="mode" id="inv-mode" hidden></div></div><div class="modepop" id="modepop" hidden></div></div>
         <div class="row bottom">${bottoms.map((k) => this._box(k, ...T[k])).join("")}</div></div>`;
       this._tops = tops; this._bottoms = bottoms;
       requestAnimationFrame(() => this._lines(true));
@@ -264,6 +322,7 @@ class HamletHomeBlocks extends HTMLElement {
     this._set("inv-w", inv !== null ? `${Math.abs(Math.round(inv))} W` : "");
     this._set("inv-st", esc(stTxt && typeof stTxt === "string" && !/^\d/.test(stTxt) ? stTxt : derived));
     this.shadowRoot.getElementById("inv")?.classList.toggle("busy", inv !== null && Math.abs(inv) > 20);
+    this._renderMode(E.inverter_mode);
 
     // flows (+ = along the drawn path)
     this._flows = {

@@ -36,6 +36,7 @@ Tap **Blocks** or **Circles** at the top right of the card to choose the look; y
 
 - **Blocks** (like the Victron dashboard): a box for the grid, your loads, the battery and the solar, each with a small chart of the last 3 hours, joined to the blue inverter block by moving dots. The inverter block says what it's doing, for example *Inverting*, *Charging* or *Passthru*.
 - **Circles:** the circles are your solar panels, the grid, the house, the battery and the inverter. Extra circles on the right are single loads such as a fridge or pump.
+- The inverter block shows what the inverter is doing (e.g. Inverting, Bulk) and its **Mode** (On, Off, Charger only, Inverter only). Your installer can tap the inverter block to change the mode.
 - Loads that are wired on the grid side, such as geysers, show under **AC Loads**. They switch off when the grid is down, because the inverter does not back them up.
 - Moving dots show which way power flows. Faster dots mean more power.
 - The dots take the colour of where the power comes from: **amber** = solar, **green** = battery, **pink** = grid. When the house runs on a mix, the dots alternate colours, and the loads box shows the split, e.g. *Solar 60% · Battery 40%*.

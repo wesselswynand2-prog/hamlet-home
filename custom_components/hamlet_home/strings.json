@@ -132,7 +132,8 @@
           "battery_voltage": "Battery voltage",
           "battery_current": "Battery current",
           "battery_temp": "Battery temperature",
-          "inverter_state": "Inverter state (e.g. VE.Bus state)"
+          "inverter_state": "Inverter state (e.g. VE.Bus state)",
+          "inverter_mode": "Inverter mode (e.g. Victron Inverter Mode: On, Off, Charger only, Inverter only) – shown on the inverter block; tap it to change"
         }
       }
     },

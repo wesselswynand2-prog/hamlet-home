@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.13.2"
+VERSION = "0.13.3"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"
@@ -74,4 +74,4 @@ CONF_LOAD_ESSENTIAL = "load_essential"
 CONF_LOAD_NONESSENTIAL = "load_nonessential"
 
 # Optional details for the Victron-style "Blocks" power flow
-FLOW_DETAIL_KEYS = ("grid_voltage", "grid_current", "battery_voltage", "battery_current", "battery_temp", "inverter_state")
+FLOW_DETAIL_KEYS = ("grid_voltage", "grid_current", "battery_voltage", "battery_current", "battery_temp", "inverter_state", "inverter_mode")
