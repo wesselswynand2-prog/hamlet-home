@@ -22,7 +22,7 @@ const STYLE = `
 @keyframes blink { 50% { opacity: .55; } }
 .hint { display: none; color: var(--muted, #667); font-size: 12px; margin-top: 6px; }
 @media (max-width: 700px) { .hint { display: block; } }
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
 @media (max-width: 900px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .tile { border: 1px solid var(--line, #d3dbe4); border-radius: 12px; padding: 10px 12px; min-width: 0; display: grid; gap: 3px; }
 .tile .k { font-size: 11px; color: var(--muted, #667); text-transform: uppercase; letter-spacing: .06em; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 6px; }
@@ -73,22 +73,24 @@ const STYLE = `
 `;
 
 class HamletHomeProperty extends HTMLElement {
-  constructor() { super(); this.attachShadow({ mode: "open" }); this._built = false; this._g = null; }
+  constructor() { super(); this.attachShadow({ mode: "open" }); this._built = false; this._gs = []; this._unsubs = []; }
   set hass(h) { const first = !this._hass; this._hass = h; if (first) this._geyserSub(); }
   set data(d) { this._d = d; this._render(); }
-  disconnectedCallback() { if (this._unsub) { this._unsub(); this._unsub = null; } this._subbing = false; }
+  disconnectedCallback() { this._unsubs.forEach((u) => u()); this._unsubs = []; this._subbing = false; }
   connectedCallback() { if (this._hass) this._geyserSub(); }
 
   // Hamlet Geyser (if installed): live tank temperature, element, solar collector
+  // Hamlet Geyser (if installed): each geyser's tank temperature, element and solar collector (up to two drawn)
   async _geyserSub() {
-    if (this._subbing || this._unsub || !this._hass) return;
+    if (this._subbing || this._unsubs.length || !this._hass) return;
     this._subbing = true;
     try {
-      const list = await this._hass.callWS({ type: "hamlet_geyser/list" });
-      this._gCount = list.length;
-      if (!list.length) return;
-      this._unsub = await this._hass.connection.subscribeMessage((s) => { this._g = s; this._render(); },
-        { type: "hamlet_geyser/subscribe", entry_id: list[0].entry_id });
+      const list = (await this._hass.callWS({ type: "hamlet_geyser/list" })).slice(0, 2);
+      this._gs = list.map(() => null);
+      for (const [i, item] of list.entries()) {
+        this._unsubs.push(await this._hass.connection.subscribeMessage((snap) => { this._gs[i] = snap; this._render(); },
+          { type: "hamlet_geyser/subscribe", entry_id: item.entry_id }));
+      }
     } catch (e) { /* Hamlet Geyser not installed */ } finally { this._subbing = false; }
   }
 
@@ -169,8 +171,10 @@ class HamletHomeProperty extends HTMLElement {
       <path class="wire" id="w-batt" d="M488 500 V 462"/>
       <path class="wire" id="w-ess" d="M528 420 H 560 V 402 H 700 V 430"/>
       <path class="wire" id="w-gey" d="M346 410 V 474"/>
+      <path class="wire" id="w-gey2" d="M628 402 V 486 H 622"/>
       <path class="wire" id="w-yard" d="M528 446 H 572 V 594 H 1000 V 608 H 1460"/>
       <path class="pipe" id="p-coll" d="M650 350 V 372 H 380 V 480"/>
+      <path class="pipe" id="p-coll2" d="M690 352 V 380 H 640 V 500 H 622"/>
       <path class="pipe" id="p-tankpump" d="M914 552 V 584 H 992"/>
       <path class="pipe" id="p-house" d="M992 588 H 780"/>
       <path class="pipe" id="p-irr" d="M1010 596 V 750 H 120"/>
@@ -192,6 +196,11 @@ class HamletHomeProperty extends HTMLElement {
         <rect x="330" y="486" width="5" height="60" rx="2.5" fill="#fff" opacity=".3"/>
         <path class="elem" id="elem" d="M332 572 h30 v4 h-30 v4 h30" fill="none" stroke="#ff5a36" stroke-width="2.5"/>
         <g id="geyheat"><path class="heat" d="M338 566 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2"/><path class="heat" d="M354 568 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2" style="animation-delay:.8s"/></g></g>
+      <g id="geyser2"><rect x="576" y="474" width="46" height="112" rx="21" fill="url(#tankg)" stroke="#6b5a4b" stroke-width="2.5"/>
+        <rect x="583" y="486" width="5" height="60" rx="2.5" fill="#fff" opacity=".3"/>
+        <path class="elem" id="elem2" d="M584 572 h28 v4 h-28 v4 h28" fill="none" stroke="#ff5a36" stroke-width="2.5"/>
+        <g><path class="heat" d="M590 566 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2"/><path class="heat" d="M605 568 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2" style="animation-delay:.8s"/></g>
+        <text x="599" y="530" text-anchor="middle" font-size="13" font-weight="700" fill="#fff" opacity=".9">2</text></g>
       <g id="loads"><ellipse id="lampglowe" cx="700" cy="480" rx="64" ry="70" fill="url(#lampglow)" opacity="0"/>
         <line x1="700" y1="394" x2="700" y2="430" stroke="#555" stroke-width="2"/><path d="M684 430 h32 l-6 16 h-20 z" fill="#c9b27c"/><circle id="bulb" cx="700" cy="450" r="5" fill="#ccc"/>
         <rect x="640" y="514" width="74" height="46" rx="4" fill="#1d2026"/><rect id="tv" x="644" y="518" width="66" height="38" rx="2" fill="#30343c"/>
@@ -261,8 +270,8 @@ class HamletHomeProperty extends HTMLElement {
     for (let k = 0; k < 8; k++) { const x = 612 + k * 10.5; t += `<line x1="${x}" y1="302" x2="${x + 44}" y2="350" stroke="#56616e" stroke-width="5" stroke-linecap="round"/><line x1="${x}" y1="302" x2="${x + 44}" y2="350" stroke="#9fb3c8" stroke-width="1" opacity=".6"/>`; }
     $("collector").querySelector("g").innerHTML = t;
     const fl = $("flows");
-    ["grid", "pvac", "pvdc", "batt", "ess", "gey", "yard"].forEach((k) => { const d = $("w-" + k).getAttribute("d"); fl.insertAdjacentHTML("beforeend", `<path class="glowline" id="g-${k}" d="${d}"/><path class="flow" id="f-${k}" d="${d}"/>`); });
-    ["coll", "tankpump", "house", "irr", "pool", "pool2", "poolret"].forEach((k) => { const d = $("p-" + k).getAttribute("d"); fl.insertAdjacentHTML("beforeend", `<path class="glowline" id="g-${k}" d="${d}"/><path class="flow wat" id="f-${k}" d="${d}"/>`); });
+    ["grid", "pvac", "pvdc", "batt", "ess", "gey", "gey2", "yard"].forEach((k) => { const d = $("w-" + k).getAttribute("d"); fl.insertAdjacentHTML("beforeend", `<path class="glowline" id="g-${k}" d="${d}"/><path class="flow" id="f-${k}" d="${d}"/>`); });
+    ["coll", "coll2", "tankpump", "house", "irr", "pool", "pool2", "poolret"].forEach((k) => { const d = $("p-" + k).getAttribute("d"); fl.insertAdjacentHTML("beforeend", `<path class="glowline" id="g-${k}" d="${d}"/><path class="flow wat" id="f-${k}" d="${d}"/>`); });
     this._built = true;
   }
 
@@ -295,24 +304,25 @@ class HamletHomeProperty extends HTMLElement {
     const snap = d.snap || {}, f = snap.features || {}, L = snap.live || {};
     const W = d.water || {}, WL = W.live || {}, WF = W.features || {};
     const irr = d.irr || { zones: [] }, devs = d.devices || [];
-    const g = this._g;
     // ---------- energy
     const split = !!(f.pv_ac || f.pv_dc), lsplit = !!f.load_split, hasGrid = !!(f.grid || f.grid_status), down = L.grid_available === false;
     const grid = num(L.grid), solar = num(L.solar), batt = num(L.battery), soc = num(L.soc), load = num(L.load);
     const pvac = split ? num(L.solar_ac) : null, pvdc = split ? num(L.solar_dc) : solar;
     const ess = lsplit && num(L.load_ess) !== null ? num(L.load_ess) : load;
     const fm = flowMix(L, lsplit), essSrc = top(fm.home, "grid");
-    // ---------- geyser: Hamlet Geyser first, else a load called "geyser"
+    // ---------- geysers: Hamlet Geyser first (one per geyser), else loads called "geyser"
     const geyLoads = (snap.extras || []).filter((e) => /geyser|geiser/i.test(`${e.name} ${e.entity_id || ""}`));
-    const gL = g?.live || {};
-    const gw = g ? (gL.is_on ? Math.max(num(gL.geyser_w) || 0, 0) : 0) : geyLoads.reduce((t, e) => t + Math.max(num(e.w) || 0, 0), 0);
-    const gTemp = g ? num(gL.temp) : null;
-    const gSide = geyLoads.some((e) => e.side === "noness");
-    const gSrc = gSide ? top(fm.noness, "grid") : top(fm.home, "solar");
-    const hasColl = !!(g && g.features?.collector && g.features.collector !== "none");
-    const collOn = !!(hasColl && (g.pump?.on || gL.collector_pump_on || gL.pump_on));
-    const collT = num(gL.collector_temp);
-    const hasGey = !!g || geyLoads.length > 0;
+    const loadSrc = (side) => (side === "noness" ? top(fm.noness, "grid") : top(fm.home, "solar"));
+    const G = (this._gs.filter(Boolean).length ? this._gs.filter(Boolean) : []).map((g, i) => {
+      const gl = g.live || {}, w = gl.is_on ? Math.max(num(gl.geyser_w) || 0, 0) : 0, coll = !!(g.features?.collector && g.features.collector !== "none");
+      const ld = geyLoads[i];
+      return { name: g.name || `Geyser ${i + 1}`, temp: num(gl.temp), w, src: g.decision?.source === "solar" ? "solar" : loadSrc(ld?.side),
+        coll, collOn: !!(coll && (g.pump?.on || gl.collector_pump_on || gl.pump_on)), collT: num(gl.collector_temp),
+        status: g.decision?.status || "", reason: g.decision?.reason || "" };
+    });
+    if (!G.length) geyLoads.slice(0, 2).forEach((e) => G.push({ name: e.name, temp: null, w: Math.max(num(e.w) || 0, 0), src: loadSrc(e.side), coll: false, collOn: false, collT: null, status: "", reason: "" }));
+    const hasGey = G.length > 0, g1 = G[0], g2 = G[1];
+    const ci = G.findIndex((x) => x.coll), cg = ci >= 0 ? G[ci] : null;
     // ---------- water
     const hasBooster = !!(WF.pump_switch || WF.pump_power || WF.pump_hz || WF.water_pressure);
     const boost = !!WL.pump_running, bar = num(WL.pressure), tank = num(WL.tank);
@@ -346,7 +356,10 @@ class HamletHomeProperty extends HTMLElement {
     const dc = split ? !!f.pv_dc : true; this._show(["w-pvdc", "f-pvdc", "g-pvdc"], dc);
     this._show(["battery", "w-batt", "f-batt", "g-batt"], !!f.battery);
     this._show(["geyser", "w-gey", "f-gey", "g-gey"], hasGey);
-    this._show(["collector", "p-coll", "f-coll", "g-coll"], hasColl);
+    this._show(["geyser2", "w-gey2", "f-gey2", "g-gey2"], !!g2);
+    this._show("collector", !!cg);
+    this._show(["p-coll", "f-coll", "g-coll"], ci === 0);
+    this._show(["p-coll2", "f-coll2", "g-coll2"], ci === 1);
     this._show(["jojo", "booster", "p-tankpump", "f-tankpump", "g-tankpump", "p-house", "f-house", "g-house"], hasBooster);
     this._show(["p-irr", "f-irr", "g-irr", "sprinklers"], zones.length > 0);
     this._show(["pool", "pooleq", "p-pool", "f-pool", "g-pool", "p-pool2", "f-pool2", "g-pool2", "p-poolret", "f-poolret", "g-poolret"], hasPool);
@@ -361,20 +374,25 @@ class HamletHomeProperty extends HTMLElement {
     this._flow("pvac", pvac, C.solar); this._flow("pvdc", pvdc, C.solar);
     this._flow("batt", batt === null ? 0 : Math.abs(batt), batt > 0 ? C[top(fm.charge, "solar")] : C.battery, batt > 0);
     this._flow("ess", Math.max((ess || 0) - yardW, 0), C[essSrc]);
-    this._flow("gey", gw > 50 ? gw : 0, C[g?.decision?.source === "solar" ? "solar" : gSrc] || C.grid);
+    this._flow("gey", g1 && g1.w > 50 ? g1.w : 0, C[g1?.src] || C.grid);
+    this._flow("gey2", g2 && g2.w > 50 ? g2.w : 0, C[g2?.src] || C.grid);
     this._flow("yard", yardW, C[essSrc]);
     // ---------- water pipes
     this._flow("tankpump", boost ? 900 : 0, C.water);
     this._flow("house", boost && !watering ? 900 : 0, C.water);
     this._flow("irr", watering ? 1400 : 0, C.water);
-    this._flow("coll", collOn ? 900 : 0, C.heat);
+    this._flow("coll", ci === 0 && cg.collOn ? 900 : 0, C.heat);
+    this._flow("coll2", ci === 1 && cg.collOn ? 900 : 0, C.heat);
     this._flow("pool", pp ? 1200 : 0, C.water); this._flow("pool2", pp ? 1200 : 0, C.water); this._flow("poolret", pp ? 1200 : 0, hpOn ? C.heat : C.water);
     // ---------- moving parts
     $("boostimp").classList.toggle("on", boost); $("poolimp").classList.toggle("on", pp);
     $("hpfan").classList.toggle("on", hpOn); $("hpled").setAttribute("fill", hpOn ? "#eb6834" : "#9aa4b0");
     $("acfan").classList.toggle("on", acOn);
-    $("elem").classList.toggle("on", gw > 50); $("elem").setAttribute("stroke", gw > 50 ? "#ff5a36" : "#6b5a4b");
-    $("geyser").classList.toggle("heating", gw > 50 || collOn);
+    [[g1, "elem", "geyser"], [g2, "elem2", "geyser2"]].forEach(([x, e, t]) => {
+      const on = !!(x && x.w > 50);
+      $(e).classList.toggle("on", on); $(e).setAttribute("stroke", on ? "#ff5a36" : "#6b5a4b");
+      $(t).classList.toggle("heating", on || !!(x && x.collOn));
+    });
     $("lampglowe").setAttribute("opacity", night ? 1 : 0.2); $("bulb").setAttribute("fill", night && (ess || 0) > 50 ? "#ffe27a" : "#ccc");
     this._tick = (this._tick || 0) + 1; $("tv").setAttribute("fill", (ess || 0) > 150 ? (this._tick % 2 ? "#3b6fb6" : "#4a86d4") : "#30343c");
     $("pvled").setAttribute("fill", (pvac || 0) > 20 ? "#2ecc71" : down ? "#e74c3c" : "#f1c40f"); $("invled").setAttribute("fill", down ? "#ffb300" : "#7CFC00");
@@ -398,9 +416,11 @@ class HamletHomeProperty extends HTMLElement {
     let labels = "";
     if (hasGrid) labels += lab(250, 300, down ? "Down" : fmt(Math.abs(grid || 0)), down ? "Grid · no power" : (grid || 0) > 20 ? "Grid · buying" : (grid || 0) < -20 ? "Grid · selling" : "Grid · idle", C.grid);
     labels += lab(300, 214, fmt(solar), split ? `Solar · ${[f.pv_ac ? `${fmt(pvac)} AC` : "", f.pv_dc ? `${fmt(pvdc)} DC` : ""].filter(Boolean).join(" + ")}` : "Solar", C.solar, "start");
-    if (hasGey) labels += lab(712, 214, gTemp !== null ? `${Math.round(gTemp)}°C` : gw > 50 ? fmt(gw) : "Geyser",
-      collOn ? `Collector pump on${collT !== null ? ` · ${Math.round(collT)}°C` : ""}` : gw > 50 ? `Geyser · element ${fmt(gw)}` : `Geyser · ${g?.decision?.status ? g.decision.status.toLowerCase() : "off"}`,
-      collOn ? C.heat : gw > 50 ? C[gSrc] : C.grey, "start");
+    const gLab = (x, px, py) => lab(px, py, x.temp !== null ? `${Math.round(x.temp)}°C` : x.w > 50 ? fmt(x.w) : "Off",
+      `${x.name} · ${x.collOn ? `collector on${x.collT !== null ? ` ${Math.round(x.collT)}°C` : ""}` : x.w > 50 ? `element ${fmt(x.w)}` : (x.status || "off").toLowerCase()}`,
+      x.collOn ? C.heat : x.w > 50 ? C[x.src] : C.grey, "start");
+    if (g1) labels += gLab(g1, 712, 214);
+    if (g2) labels += gLab(g2, 712, 266);
     if (f.battery) labels += lab(504, 636, soc !== null ? `${Math.round(soc)}%` : fmt(batt), `Battery${battTxt ? " · " + battTxt : ""}`, C.battery);
     if (hasBooster) labels += lab(914, 380, tank !== null ? `${Math.round(tank)}%` : bar !== null ? `${bar.toFixed(1)} bar` : "Water", `${boost ? "Booster on" : "Booster"}${bar !== null && tank !== null ? ` · ${bar.toFixed(1)} bar` : ""}`, C.water);
     if (watering) labels += lab(30, 662, "Watering", zNames.join(" + "), C.water, "start");
@@ -412,8 +432,9 @@ class HamletHomeProperty extends HTMLElement {
     const tile = (k, c, pill, pc, val, note) => `<div class="tile"><div class="k"><b><i style="background:${c}"></i>${esc(k)}</b><span class="pill ${pc}">${esc(pill)}</span></div><div class="v">${esc(val)}</div><div class="n">${esc(note)}</div></div>`;
     let tiles = tile("Energy", C.solar, !hasGrid ? "Off-grid" : down ? "Grid down" : "Grid on", down ? "warn" : "on", fmt(solar),
       `solar · house ${fmt(ess)}${f.battery && soc !== null ? ` · battery ${Math.round(soc)}%` : ""}`);
-    if (hasGey) tiles += tile("Geyser", C.heat, g?.decision?.status || (gw > 50 ? "Heating" : "Off"), gw > 50 || collOn ? "on" : g?.decision?.status === "Not responding" ? "warn" : "",
-      gTemp !== null ? `${gTemp.toFixed(0)}°C` : gw > 50 ? fmt(gw) : "Off", collOn ? "solar collector pump running" : gw > 50 ? `element from ${SRCNAME[g?.decision?.source === "solar" ? "solar" : gSrc] || "grid"}` : (g?.decision?.reason || "element off"));
+    G.forEach((x) => { tiles += tile(G.length > 1 ? x.name : "Geyser", C.heat, x.status || (x.w > 50 ? "Heating" : "Off"), x.w > 50 || x.collOn ? "on" : x.status === "Not responding" ? "warn" : "",
+      x.temp !== null ? `${x.temp.toFixed(0)}°C` : x.w > 50 ? fmt(x.w) : "Off",
+      x.collOn ? "solar collector pump running" : x.w > 50 ? `element ${fmt(x.w)} from ${SRCNAME[x.src] || "grid"}` : (x.reason || "element off")); });
     if (hasPool) tiles += tile("Pool", "#1c7fb8", pp ? "Pump on" : "Pump off", pp ? "on" : "", poolT !== null ? `${poolT.toFixed(1)}°C` : pp ? "Filtering" : "Off",
       [pp ? "filtering" : "", hpOn ? "heat pump on" : "", chl ? "salt cell on" : "", lights ? "lights on" : "", cleanOn ? "cleaner on" : ""].filter(Boolean).join(" · ") || "standing by");
     if (hasBooster || zones.length) tiles += tile("Water & irrigation", C.water, watering ? "Watering" : boost ? "Pump on" : W.tripped ? "Stopped" : "Standing by", W.tripped ? "warn" : watering || boost ? "on" : "",
