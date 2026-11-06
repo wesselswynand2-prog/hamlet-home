@@ -624,7 +624,7 @@ class HamletHomePanel extends HTMLElement {
     if (!el) { box.innerHTML = ""; this._flowBuilt = null; el = document.createElement("hamlet-home-scene"); box.appendChild(el); }
     el.hass = this._hass;
     const s = this._snap;
-    el.data = { live: s.live, features: s.features, extras: s.extras, battery: s.battery, entities: s.flow_entities };
+    el.data = { live: s.live, features: s.features, extras: s.extras, battery: s.battery, entities: s.flow_entities, geysers: s.geysers };
   }
 
   _renderFlow() {

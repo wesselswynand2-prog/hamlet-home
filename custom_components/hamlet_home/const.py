@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.17.1"
+VERSION = "0.17.2"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"

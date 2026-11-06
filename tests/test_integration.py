@@ -294,6 +294,8 @@ async def test_solar_priority_pool_and_geyser(enable_custom_integrations, hass: 
     assert "sensor.geyser_geyser_power" in hass.data[DOMAIN]["controller"].cost_loads
     # with the essential / non-essential split set up, the geyser lands under AC Loads by itself, named after it
     ctl = hass.data[DOMAIN]["controller"]
+    gi = ctl.snapshot()["geysers"]
+    assert len(gi) == 1 and gi[0]["name"] == "Geyser" and gi[0]["power"] == "sensor.geyser_geyser_power"
     real = ctl.entry
     ctl.entry = type("E", (), {"data": real.data, "options": {**real.options, "load_nonessential": ["sensor.grid"]}})()
     ctl._read_live()

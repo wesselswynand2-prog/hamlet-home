@@ -145,6 +145,19 @@ class EnergyController:
                 self._geyser_names[eid] = g.title    # "Geyser 1", not "Geyser 1 Geyser power"
         return out
 
+    def geyser_info(self) -> list[dict]:
+        """Each Hamlet Geyser with its own sensors, so the pictures can read the temperature directly."""
+        from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
+        reg = er.async_get(self.hass)
+        out = []
+        for g in self.hass.config_entries.async_entries("hamlet_geyser"):
+            c = {**g.data, **g.options}
+            meter = _list(c.get("geyser_power"))
+            est = reg.async_get_entity_id("sensor", "hamlet_geyser", f"{g.entry_id}_geyser_power")
+            out.append({"entry_id": g.entry_id, "name": g.title, "temp": c.get("geyser_temp") or None,
+                        "power": est or (meter[0] if meter else None), "switch": c.get("geyser_switch") or None})
+        return out
+
     def _grid_side_loads(self) -> list[str]:
         """Loads on the grid side (AC Loads): the chosen ones; with the essential / non-essential split
         set up, the geysers go there too unless they were put in the essential extra loads."""
@@ -539,6 +552,7 @@ class EnergyController:
             "note": self.backfill_note,
             "live": self.live,
             "extras": self.extras,
+            "geysers": self.geyser_info(),
             "today": self.today(),
             "tariff": self.tariff,
             "battery": self.outlook() if (c.get(CONF_BATTERY_SOC) and c.get(CONF_BATTERY_POWER)) else None,

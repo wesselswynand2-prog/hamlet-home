@@ -233,6 +233,8 @@ class HamletHomeScene extends HTMLElement {
     const fm = flowMix(L, lsplit);
     // the geyser: a load named "geyser" (from Hamlet Geyser or your extra loads); on the grid side when set so
     const geys = (d.extras || []).filter((e) => /geyser|geiser/i.test(`${e.name} ${e.entity_id || ""}`));
+    const temps = (d.geysers || []).map((g) => { const st = g.temp ? this._hass?.states?.[g.temp] : null; return st ? num(st.state) : null; }).filter((t) => t !== null);
+    const tTxt = temps.length ? temps.map((t) => `${Math.round(t)}°`).join(" · ") : "";
     const gw = geys.reduce((t, e) => t + Math.max(num(e.w) || 0, 0), 0);
     const geyGridSide = geys.some((e) => e.side === "noness");
     const geySrc = geyGridSide ? top(fm.noness, "grid") : top(fm.home, "solar");
@@ -259,7 +261,7 @@ class HamletHomeScene extends HTMLElement {
     const dc = split ? !!f.pv_dc : true;
     this._show("mppt", dc); ["w-pvdc", "f-pvdc", "g-pvdc", "w-mppt", "f-mppt", "g-mppt"].forEach((i) => this._show(i, dc));
     this._show("battery", !!f.battery); ["w-batt", "f-batt", "g-batt"].forEach((i) => this._show(i, !!f.battery));
-    this._show("geyser", geys.length > 0); ["w-gey", "f-gey", "g-gey"].forEach((i) => this._show(i, geys.length > 0));
+    this._show("geyser", geys.length > 0 || temps.length > 0); ["w-gey", "f-gey", "g-gey"].forEach((i) => this._show(i, geys.length > 0));
     $("gridx").setAttribute("opacity", hasGrid && down ? 1 : 0);
     $("pylon").setAttribute("stroke", down ? "#b0b6bd" : "#7b8592");
     const bd = $("badge");
@@ -304,7 +306,7 @@ class HamletHomeScene extends HTMLElement {
     let labels = "";
     if (hasGrid) labels += lab(250, 228, down ? "Down" : fmt(Math.abs(grid || 0)), down ? "Grid · no power" : (grid || 0) > 20 ? "Grid · buying" : (grid || 0) < -20 ? "Grid · selling" : "Grid · idle", C.grid);
     labels += lab(300, 146, fmt(solar), split ? `Solar · ${f.pv_ac ? `${fmt(pvac)} AC` : ""}${f.pv_ac && f.pv_dc ? " + " : ""}${f.pv_dc ? `${fmt(pvdc)} DC` : ""}` : "Solar", C.solar, "start");
-    if (geys.length) labels += lab(474, 548, heating ? fmt(gw) : "Off", geys.length > 1 ? `${geys.length} geysers${geyGridSide ? " · AC Loads" : ""}` : `${geys[0].name}${geyGridSide ? " · AC Loads" : ""}`, heating ? C[geySrc] : "#7b8592", "end");
+    if (geys.length || temps.length) labels += lab(474, 548, tTxt ? `${tTxt}${temps.length === 1 ? "C" : ""}` : heating ? fmt(gw) : "Off", (geys.length > 1 || temps.length > 1 ? `${Math.max(geys.length, temps.length)} geysers` : (geys[0]?.name || d.geysers?.[0]?.name || "Geyser")) + (heating && tTxt ? ` · ${fmt(gw)}` : heating ? "" : " · off") + (geyGridSide ? " · AC Loads" : ""), heating ? C[geySrc] : "#7b8592", "end");
     if (f.battery) labels += lab(484, 548, soc !== null ? `${Math.round(soc)}%` : fmt(batt), `Battery${battTxt ? " · " + battTxt : ""}`, C.battery, "start");
     labels += lab(760, 548, fmt(ess), lsplit ? "Essential loads" : "House", C[essSrc]);
     labels += lab(557, 300, inv !== null ? fmt(Math.abs(inv)) : fmt(Math.abs(batt || 0)), down ? "Inverter · off grid" : (batt || 0) > 30 ? "Inverter · charging" : (batt || 0) < -30 ? "Inverter · inverting" : "Inverter", "#2f6fd0");

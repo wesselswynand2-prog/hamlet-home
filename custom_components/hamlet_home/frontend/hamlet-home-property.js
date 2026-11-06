@@ -315,13 +315,20 @@ class HamletHomeProperty extends HTMLElement {
     // ---------- geysers: Hamlet Geyser first (one per geyser), else loads called "geyser"
     const geyLoads = (snap.extras || []).filter((e) => /geyser|geiser/i.test(`${e.name} ${e.entity_id || ""}`));
     const loadSrc = (side) => (side === "noness" ? top(fm.noness, "grid") : top(fm.home, "solar"));
+    const ginfo = snap.geysers || [];
+    const stNum = (eid) => { const st = eid ? this._hass?.states?.[eid] : null; return st ? num(st.state) : null; };
+    const stOn = (eid) => { const st = eid ? this._hass?.states?.[eid] : null; return st ? st.state === "on" : null; };
     const G = (this._gs.filter(Boolean).length ? this._gs.filter(Boolean) : []).map((g, i) => {
       const gl = g.live || {}, w = gl.is_on ? Math.max(num(gl.geyser_w) || 0, 0) : 0, coll = !!(g.features?.collector && g.features.collector !== "none");
       const ld = geyLoads[i];
-      return { name: g.name || `Geyser ${i + 1}`, temp: num(gl.temp), w, src: g.decision?.source === "solar" ? "solar" : loadSrc(ld?.side),
+      const gi = ginfo.find((x) => x.entry_id === g.entry_id) || ginfo[i] || {};
+      return { name: g.name || `Geyser ${i + 1}`, temp: num(gl.temp) ?? stNum(gi.temp), w, src: g.decision?.source === "solar" ? "solar" : loadSrc(ld?.side),
         coll, collOn: !!(coll && (g.pump?.on || gl.collector_pump_on || gl.pump_on)), collT: num(gl.collector_temp),
         status: g.decision?.status || "", reason: g.decision?.reason || "" };
     });
+    // no live link to Hamlet Geyser (yet): read each geyser's own sensors
+    if (!G.length) ginfo.slice(0, 2).forEach((gi) => { const w = stOn(gi.switch) === false ? 0 : Math.max(stNum(gi.power) || 0, 0);
+      G.push({ name: gi.name, temp: stNum(gi.temp), w, src: loadSrc((snap.extras || []).find((e) => e.entity_id === gi.power)?.side), coll: false, collOn: false, collT: null, status: "", reason: "" }); });
     if (!G.length) geyLoads.slice(0, 2).forEach((e) => G.push({ name: e.name, temp: null, w: Math.max(num(e.w) || 0, 0), src: loadSrc(e.side), coll: false, collOn: false, collT: null, status: "", reason: "" }));
     const hasGey = G.length > 0, g1 = G[0], g2 = G[1];
     const ci = G.findIndex((x) => x.coll), cg = ci >= 0 ? G[ci] : null;
