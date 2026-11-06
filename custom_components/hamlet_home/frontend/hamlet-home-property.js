@@ -382,7 +382,14 @@ class HamletHomeProperty extends HTMLElement {
     this._show(["jojo", "booster", "p-tankpump", "f-tankpump", "g-tankpump", "p-house", "f-house", "g-house"], hasBooster);
     this._show(["p-irr", "f-irr", "g-irr", "sprinklers"], zones.length > 0);
     this._show(["pool", "pooleq", "p-pool", "f-pool", "g-pool", "p-pool2", "f-pool2", "g-pool2", "p-poolret", "f-poolret", "g-poolret"], hasPool);
-    this._show("heatpump", !!hp); this._show("cleaner", cleaners.length > 0); this._show("aircon", !!ac);
+    this._show("heatpump", !!hp);
+    // no heat pump: the return pipe comes straight from the filter, without the loop to the heat pump
+    if (this._hpRoute !== !!hp) {
+      this._hpRoute = !!hp;
+      const ret = hp ? "M1580 640 V 736 H 1300 V 712" : "M1530 644 V 736 H 1300 V 712";
+      ["p-poolret", "f-poolret", "g-poolret"].forEach((id) => $(id)?.setAttribute("d", ret));
+    }
+    this._show(["p-pool2", "f-pool2", "g-pool2"], hasPool && !!hp); this._show("cleaner", cleaners.length > 0); this._show("aircon", !!ac);
     this._show(["w-yard", "f-yard", "g-yard"], hasPool || hasBooster);
     $("gridx").setAttribute("opacity", hasGrid && down ? 1 : 0); $("pylon").setAttribute("stroke", down ? "#b0b6bd" : "#7b8592");
     const bd = $("badge");
