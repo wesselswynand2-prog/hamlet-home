@@ -105,7 +105,10 @@
           "pv_forecast_today": "Solar forecast today (kWh) – Solcast Forecast Today",
           "pv_forecast_tomorrow": "Solar forecast tomorrow (kWh)",
           "pv_forecast_remaining": "Solar forecast remaining today (optional)",
-          "weather_extras": "Extra sensors to show (e.g. Forecast SOC, DOD, rain gauge)"
+          "weather_extras": "Extra sensors to show (e.g. Forecast SOC, DOD, rain gauge)",
+          "wind_speed": "Your own anemometer – wind speed (optional)",
+          "wind_gust": "Anemometer – wind gust (optional)",
+          "wind_direction": "Wind direction – degrees or N/NE/E… (optional)"
         }
       },
       "costs": {

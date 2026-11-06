@@ -1,6 +1,6 @@
 """Constants for Hamlet Home."""
 DOMAIN = "hamlet_home"
-VERSION = "0.16.0"
+VERSION = "0.17.0"
 
 PANEL_URL_PATH = "hamlet-home"
 PANEL_COMPONENT = "hamlet-home-panel"
@@ -53,7 +53,10 @@ CONF_PV_TODAY = "pv_forecast_today"
 CONF_PV_TOMORROW = "pv_forecast_tomorrow"
 CONF_PV_REMAINING = "pv_forecast_remaining"
 CONF_WEATHER_EXTRAS = "weather_extras"
-WEATHER_KEYS = (CONF_WEATHER, CONF_PV_TODAY, CONF_PV_TOMORROW, CONF_PV_REMAINING, CONF_WEATHER_EXTRAS)
+CONF_WIND_SPEED = "wind_speed"          # own anemometer (optional)
+CONF_WIND_GUST = "wind_gust"
+CONF_WIND_DIR = "wind_direction"
+WEATHER_KEYS = (CONF_WEATHER, CONF_PV_TODAY, CONF_PV_TOMORROW, CONF_PV_REMAINING, CONF_WEATHER_EXTRAS, CONF_WIND_SPEED, CONF_WIND_GUST, CONF_WIND_DIR)
 
 # Costs tab
 CONF_COST_LOADS = "cost_loads"   # power sensors (W) for the load breakdown, max 5

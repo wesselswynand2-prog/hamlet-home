@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_PV_REMAINING, CONF_PV_TODAY, CONF_PV_TOMORROW, CONF_WEATHER, CONF_WEATHER_EXTRAS, WEATHER_KEYS,
+    CONF_PV_REMAINING, CONF_PV_TODAY, CONF_PV_TOMORROW, CONF_WEATHER, CONF_WEATHER_EXTRAS, WEATHER_KEYS, CONF_WIND_SPEED, CONF_WIND_GUST, CONF_WIND_DIR,
     CONF_BATTERY_INVERT,
     CONF_BATTERY_POWER,
     CONF_BATTERY_SOC,
@@ -111,6 +111,9 @@ def _weather_schema() -> vol.Schema:
         vol.Optional(CONF_PV_TOMORROW): _sensor(),
         vol.Optional(CONF_PV_REMAINING): _sensor(),
         vol.Optional(CONF_WEATHER_EXTRAS): _sensor(multiple=True),
+        vol.Optional(CONF_WIND_SPEED): _sensor(),
+        vol.Optional(CONF_WIND_GUST): _sensor(),
+        vol.Optional(CONF_WIND_DIR): _sensor(),
     })
 
 

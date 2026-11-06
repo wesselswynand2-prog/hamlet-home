@@ -1,7 +1,7 @@
 // Hamlet Home – "Scene" power flow: the house drawn as a picture (roof solar, pylon, inverter, battery, geyser,
 // loads) with live readings. Wires carry dots in the colour of the source: amber solar, green battery, pink grid.
 import { flowMix } from "./hamlet-home-blocks.js";
-import { SKY_CSS, skyLayers, skyState, applySky } from "./hamlet-home-sky.js";
+import { SKY_CSS, skyLayers, skyState, applySky, WIND_CSS, anemoSvg, windState, applyWind, compass } from "./hamlet-home-sky.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v) => (v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
@@ -9,7 +9,7 @@ const fmt = (w) => (w === null ? "–" : Math.abs(w) >= 1000 ? `${(w / 1000).toF
 const C = { solar: "var(--c-solar, #e8a317)", grid: "var(--c-grid, #d6457f)", battery: "var(--c-batt, #19a974)", load: "var(--c-load, #2f7fd6)" };
 const top = (mix, dflt) => (mix && mix.length ? mix.slice().sort((a, b) => b[1] - a[1])[0][0] : dflt);
 
-const STYLE = SKY_CSS + `
+const STYLE = SKY_CSS + WIND_CSS + `
 :host { display: block; }
 * { box-sizing: border-box; }
 .scene { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line, #d3dbe4); }
@@ -193,7 +193,7 @@ class HamletHomeScene extends HTMLElement {
     </svg>
     </div><div class="cards" id="cards"></div>`;
     const $ = (id) => this.shadowRoot.getElementById(id);
-    { const L = skyLayers(1000, 600, 520); $("clouds").insertAdjacentHTML("afterend", L.back); $("labels").insertAdjacentHTML("beforebegin", L.front); }
+    { const L = skyLayers(1000, 600, 520); $("clouds").insertAdjacentHTML("afterend", L.back); $("labels").insertAdjacentHTML("beforebegin", L.front); $("wx-wrap").insertAdjacentHTML("beforebegin", anemoSvg(734, 196, 0.9)); }
     // roof panels
     const sl = (600 - 352) / (302 - 160), left = (y) => 600 - (y - 160) * sl; let h = "";
     for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
@@ -244,7 +244,14 @@ class HamletHomeScene extends HTMLElement {
     $("sun").setAttribute("transform", `translate(880 ${elev === null ? 80 : Math.round(170 - Math.min(Math.max(elev, 0), 60) * 1.6)})`);
     $("moon").setAttribute("opacity", night && st.cloud < 3 ? 1 : 0); $("stars").setAttribute("opacity", night && st.cloud < 2 ? 1 : 0);
     $("clouds").setAttribute("opacity", !night && st.cloud === 0 ? 0.35 : 0);
+    const wind = windState(this._hass, d.entities || {});
+    if (wind && wind.kmh !== null && wind.kmh >= 30) { st.windy = true; }
     applySky(this.shadowRoot, st);
+    applyWind(this.shadowRoot, wind);
+    if (wind) {
+      const chip = $("wxchip"); const ws = wind.value !== null ? `${Math.round(wind.value)} ${wind.unit}` : `gust ${Math.round(wind.gustValue)} ${wind.gustUnit}`;
+      chip.hidden = false; chip.textContent = `${chip.textContent ? chip.textContent + " · " : ""}wind ${ws}${wind.deg !== null ? " " + compass(wind.deg) : ""}`;
+    }
     this.shadowRoot.querySelector("#roofpv .shine").style.display = (solar || 0) > 300 ? "" : "none";
     // parts that this system has
     this._show("pylon", hasGrid); this._show("w-grid", hasGrid); this._show("f-grid", hasGrid); this._show("g-grid", hasGrid);

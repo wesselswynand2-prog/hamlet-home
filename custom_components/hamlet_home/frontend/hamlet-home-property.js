@@ -2,7 +2,7 @@
 // water tank + booster pump, irrigation zones, pool with pump / heat pump / salt cell / lights / cleaner, aircon.
 // Power wires carry dots in the source colour (amber solar, green battery, pink grid); pipes carry water (blue / orange hot).
 import { flowMix } from "./hamlet-home-blocks.js";
-import { SKY_CSS, skyLayers, skyState, applySky } from "./hamlet-home-sky.js";
+import { SKY_CSS, skyLayers, skyState, applySky, WIND_CSS, anemoSvg, windState, applyWind, compass } from "./hamlet-home-sky.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v) => (v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
@@ -11,7 +11,7 @@ const C = { solar: "var(--c-solar, #e8a317)", grid: "var(--c-grid, #d6457f)", ba
 const top = (mix, dflt) => (mix && mix.length ? mix.slice().sort((a, b) => b[1] - a[1])[0][0] : dflt);
 const SRCNAME = { solar: "solar", battery: "battery", grid: "grid" };
 
-const STYLE = SKY_CSS + `
+const STYLE = SKY_CSS + WIND_CSS + `
 :host { display: block; }
 * { box-sizing: border-box; }
 .scene { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line, #d3dbe4); background: #9bc77a; }
@@ -260,7 +260,7 @@ class HamletHomeProperty extends HTMLElement {
     </svg>
     </div></div><div class="hint">Swipe the picture sideways to see the yard and pool.</div><div class="tiles" id="tiles"></div>`;
     const $ = (id) => this.shadowRoot.getElementById(id);
-    { const L = skyLayers(1600, 760, 598); $("clouds").insertAdjacentHTML("afterend", L.back); $("labels").insertAdjacentHTML("beforebegin", L.front); }
+    { const L = skyLayers(1600, 760, 598); $("clouds").insertAdjacentHTML("afterend", L.back); $("labels").insertAdjacentHTML("beforebegin", L.front); $("wx-wrap").insertAdjacentHTML("beforebegin", anemoSvg(703, 262, 1)); }
     const sl = (540 - 282) / (382 - 232), left = (y) => 540 - (y - 232) * sl; let h = "";
     for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
       const y1 = 284 + r * 40, y2 = y1 + 36, a = left(y1) + 18 + c * 52, b = left(y2) + 18 + c * 52;
@@ -349,7 +349,14 @@ class HamletHomeProperty extends HTMLElement {
     $("moon").setAttribute("opacity", night && st.cloud < 3 ? 1 : 0); $("stars").setAttribute("opacity", night && st.cloud < 2 ? 1 : 0);
     $("sun").setAttribute("transform", `translate(1440 ${elev === null ? 100 : Math.round(200 - Math.min(Math.max(elev, 0), 60) * 1.8)})`);
     $("clouds").setAttribute("opacity", !night && st.cloud === 0 ? 0.35 : 0);
+    const wind = windState(this._hass, snap.flow_entities || {});
+    if (wind && wind.kmh !== null && wind.kmh >= 30) { st.windy = true; }
     applySky(this.shadowRoot, st);
+    applyWind(this.shadowRoot, wind);
+    if (wind) {
+      const chip = $("wxchip"); const ws = wind.value !== null ? `${Math.round(wind.value)} ${wind.unit}` : `gust ${Math.round(wind.gustValue)} ${wind.gustUnit}`;
+      chip.hidden = false; chip.textContent = `${chip.textContent ? chip.textContent + " · " : ""}wind ${ws}${wind.deg !== null ? " " + compass(wind.deg) : ""}`;
+    }
     $("pvshine").style.display = (solar || 0) > 500 ? "" : "none";
     // ---------- what this property has
     this._show(["pylon", "w-grid", "f-grid", "g-grid"], hasGrid);
@@ -420,8 +427,8 @@ class HamletHomeProperty extends HTMLElement {
     const gLab = (x, px, py) => lab(px, py, x.temp !== null ? `${Math.round(x.temp)}°C` : x.w > 50 ? fmt(x.w) : "Off",
       `${x.name} · ${x.collOn ? `collector on${x.collT !== null ? ` ${Math.round(x.collT)}°C` : ""}` : x.w > 50 ? `element ${fmt(x.w)}` : (x.status || "off").toLowerCase()}`,
       x.collOn ? C.heat : x.w > 50 ? C[x.src] : C.grey, "start");
-    if (g1) labels += gLab(g1, 712, 214);
-    if (g2) labels += gLab(g2, 712, 266);
+    if (g1) labels += gLab(g1, 740, 214);
+    if (g2) labels += gLab(g2, 740, 266);
     if (f.battery) labels += lab(504, 636, soc !== null ? `${Math.round(soc)}%` : fmt(batt), `Battery${battTxt ? " · " + battTxt : ""}`, C.battery);
     if (hasBooster) labels += lab(914, 380, tank !== null ? `${Math.round(tank)}%` : bar !== null ? `${bar.toFixed(1)} bar` : "Water", `${boost ? "Booster on" : "Booster"}${bar !== null && tank !== null ? ` · ${bar.toFixed(1)} bar` : ""}`, C.water);
     if (watering) labels += lab(30, 662, "Watering", zNames.join(" + "), C.water, "start");

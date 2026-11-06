@@ -90,3 +90,57 @@ export function applySky(root, st) {
   const chip = $("wxchip");
   if (chip) { const t = st.temp !== null ? ` · ${Math.round(st.temp)}°` : ""; chip.textContent = `${NICE[st.cond] || st.cond}${t}`; chip.hidden = !st.cond; }
 }
+
+/* ------------------------------------------------------------------ own anemometer */
+const TO_KMH = { "km/h": 1, kmh: 1, "m/s": 3.6, mph: 1.609344, kn: 1.852, kt: 1.852, knots: 1.852, "ft/s": 1.09728 };
+const POINTS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+export const compass = (deg) => (deg === null ? "" : POINTS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16]);
+const beaufort = [[1, "Calm"], [6, "Light air"], [12, "Light breeze"], [20, "Gentle breeze"], [29, "Moderate breeze"], [39, "Fresh breeze"],
+  [50, "Strong breeze"], [62, "Near gale"], [75, "Gale"], [89, "Strong gale"], [103, "Storm"], [118, "Violent storm"], [1e9, "Hurricane force"]];
+export const windWord = (kmh) => (kmh === null ? "" : beaufort.find(([m]) => kmh < m)[1]);
+
+// the anemometer's readings (speed and gust in km/h for the drawing, plus the sensor's own value and unit)
+export function windState(hass, ids = {}) {
+  const read = (eid) => {
+    const st = eid ? hass?.states?.[eid] : null;
+    if (!st || ["unavailable", "unknown", ""].includes(st.state)) return null;
+    return st;
+  };
+  const sp = read(ids.wind_speed), gu = read(ids.wind_gust), di = read(ids.wind_direction);
+  if (!sp && !gu) return null;
+  const kmh = (st) => { if (!st) return null; const v = num(st.state); if (v === null) return null; const u = (st.attributes?.unit_of_measurement || "km/h").trim(); return v * (TO_KMH[u] ?? TO_KMH[u.toLowerCase()] ?? 1); };
+  let deg = null;
+  if (di) { deg = num(di.state); if (deg === null) { const i = POINTS.indexOf(String(di.state).toUpperCase().trim()); deg = i >= 0 ? i * 22.5 : null; } }
+  return { kmh: kmh(sp), gust: kmh(gu), deg, value: sp ? num(sp.state) : null, unit: sp?.attributes?.unit_of_measurement || "km/h",
+    gustValue: gu ? num(gu.state) : null, gustUnit: gu?.attributes?.unit_of_measurement || "km/h", name: sp?.attributes?.friendly_name || "" };
+}
+
+export const WIND_CSS = `
+.anemo .cups { transform-box: view-box; animation: anspin var(--ans, 0s) linear infinite; }
+@keyframes anspin { to { transform: rotate(360deg); } }
+.anemo .vane { transition: transform 1.2s ease; }
+@media (prefers-reduced-motion: reduce) { .anemo .cups { animation: none; } }
+`;
+
+// an anemometer (three cups) with a wind vane, standing on a mast whose foot is at (x, y)
+export function anemoSvg(x, y, s = 1, id = "anemo") {
+  const top = y - 70 * s, cup = (a) => { const r = a * Math.PI / 180, cx = x + Math.cos(r) * 18 * s, cy = top + Math.sin(r) * 7 * s;
+    return `<line x1="${x}" y1="${top}" x2="${cx}" y2="${cy}" stroke="#4b5563" stroke-width="${2 * s}"/><ellipse cx="${cx}" cy="${cy}" rx="${5 * s}" ry="${4 * s}" fill="#e5e7eb" stroke="#4b5563" stroke-width="${1.5 * s}"/>`; };
+  return `<g class="anemo" id="${id}">
+    <line x1="${x}" y1="${y}" x2="${x}" y2="${top}" stroke="#6b7280" stroke-width="${3 * s}"/>
+    <g class="vane" id="${id}-vane" style="transform-origin:${x}px ${top + 22 * s}px"><path d="M${x - 16 * s} ${top + 22 * s} H ${x + 12 * s}" stroke="#4b5563" stroke-width="${2 * s}"/>
+      <path d="M${x + 12 * s} ${top + 17 * s} l ${8 * s} ${5 * s} l ${-8 * s} ${5 * s} z" fill="#e34948"/><rect x="${x - 22 * s}" y="${top + 15 * s}" width="${7 * s}" height="${14 * s}" rx="${1.5 * s}" fill="#9aa4b0"/></g>
+    <g class="cups" id="${id}-cups" style="transform-origin:${x}px ${top}px">${cup(0)}${cup(120)}${cup(240)}</g>
+    <circle cx="${x}" cy="${top}" r="${3 * s}" fill="#374151"/></g>`;
+}
+
+// spin the cups with the speed; turn the vane to point where the wind blows to (it comes from `deg`)
+export function applyWind(root, ws, id = "anemo") {
+  const g = root.getElementById(id); if (!g) return;
+  g.style.display = ws ? "" : "none";
+  if (!ws) return;
+  const k = ws.kmh ?? ws.gust ?? 0;
+  root.getElementById(`${id}-cups`).style.setProperty("--ans", k < 1 ? "0s" : `${Math.max(0.15, 6 / k).toFixed(2)}s`);
+  const vane = root.getElementById(`${id}-vane`);
+  if (vane) { vane.style.display = ws.deg === null ? "none" : ""; if (ws.deg !== null) vane.style.transform = `scaleX(${Math.cos(((ws.deg + 90) % 360) * Math.PI / 180) >= 0 ? 1 : -1})`; }
+}

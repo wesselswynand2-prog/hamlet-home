@@ -546,6 +546,7 @@ class EnergyController:
             "flow_entities": {
                 "solar_dc": _list(c.get(CONF_SOLAR_DC)), "solar_ac": _list(c.get(CONF_SOLAR_AC)), "solar": _list(c.get(CONF_SOLAR_POWER)),
                 **{k: c.get(k) for k in ("grid_voltage", "grid_current", "battery_voltage", "battery_current", "battery_temp", "inverter_state", "inverter_mode")}, "weather": self.conf.get("weather_entity"),
+                "wind_speed": self.conf.get("wind_speed"), "wind_gust": self.conf.get("wind_gust"), "wind_direction": self.conf.get("wind_direction"),
             },
             "flow_info_edit": bool(c.get("flow_info_clients_edit")),
             "features": {

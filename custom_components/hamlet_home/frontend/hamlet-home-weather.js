@@ -1,4 +1,5 @@
 // Hamlet Home – Weather tab: now, daily / hourly forecast, solar forecast vs actual.
+import { WIND_CSS, anemoSvg, windState, applyWind, windWord } from "./hamlet-home-sky.js";
 const DOMAIN = "hamlet_home";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v) => (v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
@@ -23,7 +24,16 @@ function rainConv(v, from, to) { if (num(v) === null) return null; if (to === "a
 function windConv(v, from, to) { if (num(v) === null) return null; if (to === "auto" || !WIND[from] || !WIND[to]) return Number(v); return (Number(v) * WIND[from]) / WIND[to]; }
 const fmt = (v, d = 0) => (num(v) === null ? "–" : Number(v).toFixed(d));
 
-const STYLE = `
+const STYLE = WIND_CSS + `
+.windgrid { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: center; }
+@media (max-width: 520px) { .windgrid { grid-template-columns: 110px minmax(0, 1fr); } }
+.windgrid svg { width: 100%; height: auto; display: block; }
+.wbig { font-size: 40px; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1; }
+.wbig small { font-size: 16px; color: var(--muted); margin-left: 4px; }
+.wrow { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 14px; }
+.wrow b { font-weight: 600; }
+.rose { width: 64px; height: 64px; }
+
 :host { display: contents; --c-hot: #d9531e; --c-cold: #2a78d6; --c-rain: #3d93d8; }
 :host([dark]) { --c-hot: #e8743b; --c-cold: #3987e5; --c-rain: #4fa3e6; }
 * { box-sizing: border-box; }
@@ -120,14 +130,31 @@ class HamletHomeWeather extends HTMLElement {
     this._unsubs = null;
     this._ro?.disconnect();
   }
-  _queue() { if (!this._raf) this._raf = requestAnimationFrame(() => { this._raf = null; this._renderNow(); this._renderExtras(); }); }
+  _queue() { if (!this._raf) this._raf = requestAnimationFrame(() => { this._raf = null; this._renderNow(); this._renderExtras(); this._renderWind(); }); }
+
+  // the client's own anemometer: speed, gust, direction, spinning cups
+  _renderWind() {
+    const card = this.shadowRoot.getElementById("cwind"); if (!card || !this._w) return;
+    const c = this._w.conf || {};
+    const ws = windState(this._hass, { wind_speed: c.wind_speed, wind_gust: c.wind_gust, wind_direction: c.wind_direction });
+    card.hidden = !ws;
+    applyWind(this.shadowRoot, ws, "wanemo");
+    if (!ws) return;
+    const v = ws.value ?? ws.gustValue, u = ws.value !== null ? ws.unit : ws.gustUnit;
+    this._set("wspeed", `${v === null ? "–" : v.toFixed(v < 10 ? 1 : 0)}<small>${esc(u)}</small>`);
+    this._set("wword", esc(windWord(ws.kmh ?? ws.gust)));
+    const dir = ws.deg !== null ? `<span>From <b>${compass(ws.deg)}</b> (${Math.round(ws.deg)}°)</span>` : "";
+    const gust = ws.gustValue !== null ? `<span>Gusts <b>${ws.gustValue.toFixed(ws.gustValue < 10 ? 1 : 0)} ${esc(ws.gustUnit)}</b></span>` : "";
+    this._set("wrow", dir + gust);
+    this._set("windsub", esc(ws.name));
+  }
   _set(id, html) { const el = this.shadowRoot.getElementById(id); if (el && this._html[id] !== html) { this._html[id] = html; el.innerHTML = html; } }
 
   async _load(refresh = false) {
     try { this._w = await this._hass.callWS({ type: `${DOMAIN}/weather` }); }
     catch (e) { this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card empty">Weather couldn't load: ${esc(e.message || e)}</div>`; return; }
     if (!refresh || !this._built) this._build();
-    this._renderNow(); this._renderSolar(); this._renderExtras(); this._renderSettings();
+    this._renderNow(); this._renderSolar(); this._renderExtras(); this._renderSettings(); this._renderWind();
     if (!this._unsubs && !this._solarOnly) this._subscribe();
   }
 
@@ -165,6 +192,9 @@ class HamletHomeWeather extends HTMLElement {
     this.shadowRoot.innerHTML = `<style>${STYLE}</style>
       <section class="card s7" id="cnow"><div id="now"></div><div id="nowstats" class="stats"></div></section>
       ${solarCard}
+      <section class="card" id="cwind" hidden><h2><ha-icon icon="mdi:weather-windy"></ha-icon>Wind at home <span class="sub" id="windsub"></span></h2>
+        <div class="windgrid"><svg viewBox="0 0 120 110" aria-hidden="true">${anemoSvg(60, 104, 1.25, "wanemo")}</svg>
+        <div><div class="wbig" id="wspeed"></div><div class="muted" id="wword"></div><div class="wrow" id="wrow"></div></div></div></section>
       <section class="card" id="cfc"><h2><ha-icon icon="mdi:calendar-week"></ha-icon>Forecast <span class="sub"><span class="seg" id="fcseg"></span></span></h2>
         <div class="fc" id="fc"><div class="empty">Loading forecast…</div></div>
         <div id="settings"></div></section>`;
