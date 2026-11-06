@@ -2,6 +2,7 @@
 // water tank + booster pump, irrigation zones, pool with pump / heat pump / salt cell / lights / cleaner, aircon.
 // Power wires carry dots in the source colour (amber solar, green battery, pink grid); pipes carry water (blue / orange hot).
 import { flowMix } from "./hamlet-home-blocks.js";
+import { SKY_CSS, skyLayers, skyState, applySky } from "./hamlet-home-sky.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v) => (v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
@@ -10,7 +11,7 @@ const C = { solar: "var(--c-solar, #e8a317)", grid: "var(--c-grid, #d6457f)", ba
 const top = (mix, dflt) => (mix && mix.length ? mix.slice().sort((a, b) => b[1] - a[1])[0][0] : dflt);
 const SRCNAME = { solar: "solar", battery: "battery", grid: "grid" };
 
-const STYLE = `
+const STYLE = SKY_CSS + `
 :host { display: block; }
 * { box-sizing: border-box; }
 .scene { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line, #d3dbe4); background: #9bc77a; }
@@ -95,7 +96,7 @@ class HamletHomeProperty extends HTMLElement {
   }
 
   _build() {
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="scene"><div class="badge" id="badge"></div><div class="scroll">
+    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="scene"><div class="badge" id="badge"></div><div class="wxchip" id="wxchip" hidden></div><div class="scroll">
     <svg viewBox="0 0 1600 760" role="img" aria-label="The whole property: grid pylon, house with roof solar and a solar collector, inverter, battery, geyser, water tank and booster pump, garden sprinklers, pool with pump, filter and heat pump" id="svg">
       <defs>
         <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop id="sk1" offset="0" stop-color="#7fbdf0"/><stop id="sk2" offset="1" stop-color="#d8eefc"/></linearGradient>
@@ -259,6 +260,7 @@ class HamletHomeProperty extends HTMLElement {
     </svg>
     </div></div><div class="hint">Swipe the picture sideways to see the yard and pool.</div><div class="tiles" id="tiles"></div>`;
     const $ = (id) => this.shadowRoot.getElementById(id);
+    { const L = skyLayers(1600, 760, 598); $("clouds").insertAdjacentHTML("afterend", L.back); $("labels").insertAdjacentHTML("beforebegin", L.front); }
     const sl = (540 - 282) / (382 - 232), left = (y) => 540 - (y - 232) * sl; let h = "";
     for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
       const y1 = 284 + r * 40, y2 = y1 + 36, a = left(y1) + 18 + c * 52, b = left(y2) + 18 + c * 52;
@@ -340,15 +342,14 @@ class HamletHomeProperty extends HTMLElement {
     const cleaners = poolDevs.filter((x) => x.kind === "cleaner"), cleanOn = cleaners.some((x) => x.on);
     const ac = devs.find((x) => x.kind === "aircon"), acOn = !!(ac && ac.on);
     const yardW = (pp ? num(WL.pool_w) || 0 : 0) + (boost ? num(WL.pump_w) || 0 : 0) + poolDevs.reduce((t, x) => t + (x.on ? num(x.w) || num(x.rated_w) || 0 : 0), 0);
-    // ---------- sky
-    const sun = this._hass?.states?.["sun.sun"], elev = num(sun?.attributes?.elevation), hr = new Date().getHours();
-    const night = sun ? sun.state === "below_horizon" : hr < 6 || hr >= 19;
-    const cloudy = !night && solar !== null && elev !== null && elev > 25 && solar < 300;
-    const sky = night ? ["#0d1b33", "#2d4568"] : cloudy ? ["#9aa9b8", "#d2dbe3"] : ["#7fbdf0", "#d8eefc"];
-    $("sk1").setAttribute("stop-color", sky[0]); $("sk2").setAttribute("stop-color", sky[1]);
-    $("sun").style.display = night ? "none" : ""; $("moon").setAttribute("opacity", night ? 1 : 0); $("stars").setAttribute("opacity", night ? 1 : 0);
+    // ---------- sky + live weather
+    const st = skyState(this._hass, snap.flow_entities?.weather, solar), night = st.night, elev = st.elev;
+    $("sk1").setAttribute("stop-color", st.sky[0]); $("sk2").setAttribute("stop-color", st.sky[1]);
+    $("sun").style.display = st.sunVisible ? "" : "none"; $("sun").setAttribute("opacity", st.cloud >= 2 ? 0.45 : 1);
+    $("moon").setAttribute("opacity", night && st.cloud < 3 ? 1 : 0); $("stars").setAttribute("opacity", night && st.cloud < 2 ? 1 : 0);
     $("sun").setAttribute("transform", `translate(1440 ${elev === null ? 100 : Math.round(200 - Math.min(Math.max(elev, 0), 60) * 1.8)})`);
-    $("clouds").setAttribute("opacity", cloudy ? 0.95 : night ? 0.15 : 0.35);
+    $("clouds").setAttribute("opacity", !night && st.cloud === 0 ? 0.35 : 0);
+    applySky(this.shadowRoot, st);
     $("pvshine").style.display = (solar || 0) > 500 ? "" : "none";
     // ---------- what this property has
     this._show(["pylon", "w-grid", "f-grid", "g-grid"], hasGrid);

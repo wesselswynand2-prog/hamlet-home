@@ -1,6 +1,7 @@
 // Hamlet Home – "Scene" power flow: the house drawn as a picture (roof solar, pylon, inverter, battery, geyser,
 // loads) with live readings. Wires carry dots in the colour of the source: amber solar, green battery, pink grid.
 import { flowMix } from "./hamlet-home-blocks.js";
+import { SKY_CSS, skyLayers, skyState, applySky } from "./hamlet-home-sky.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v) => (v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
@@ -8,7 +9,7 @@ const fmt = (w) => (w === null ? "–" : Math.abs(w) >= 1000 ? `${(w / 1000).toF
 const C = { solar: "var(--c-solar, #e8a317)", grid: "var(--c-grid, #d6457f)", battery: "var(--c-batt, #19a974)", load: "var(--c-load, #2f7fd6)" };
 const top = (mix, dflt) => (mix && mix.length ? mix.slice().sort((a, b) => b[1] - a[1])[0][0] : dflt);
 
-const STYLE = `
+const STYLE = SKY_CSS + `
 :host { display: block; }
 * { box-sizing: border-box; }
 .scene { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line, #d3dbe4); }
@@ -67,7 +68,7 @@ class HamletHomeScene extends HTMLElement {
   set data(d) { this._d = d; this._render(); }
 
   _build() {
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="scene"><div class="badge" id="badge"></div>
+    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="scene"><div class="badge" id="badge"></div><div class="wxchip" id="wxchip" hidden></div>
     <svg viewBox="0 0 1000 600" role="img" aria-label="Power flow picture" id="svg">
       
       <defs>
@@ -192,6 +193,7 @@ class HamletHomeScene extends HTMLElement {
     </svg>
     </div><div class="cards" id="cards"></div>`;
     const $ = (id) => this.shadowRoot.getElementById(id);
+    { const L = skyLayers(1000, 600, 520); $("clouds").insertAdjacentHTML("afterend", L.back); $("labels").insertAdjacentHTML("beforebegin", L.front); }
     // roof panels
     const sl = (600 - 352) / (302 - 160), left = (y) => 600 - (y - 160) * sl; let h = "";
     for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
@@ -235,18 +237,14 @@ class HamletHomeScene extends HTMLElement {
     const geyGridSide = geys.some((e) => e.side === "noness");
     const geySrc = geyGridSide ? top(fm.noness, "grid") : top(fm.home, "solar");
     const essSrc = top(fm.home, "grid");
-    // sky: night from the sun's position (or the clock), sun height from its elevation
-    const sun = this._hass?.states?.["sun.sun"];
-    const elev = num(sun?.attributes?.elevation);
-    const hr = new Date().getHours();
-    const night = sun ? sun.state === "below_horizon" : hr < 6 || hr >= 19;
-    const cloudy = !night && solar !== null && elev !== null && elev > 25 && solar < 300;
-    const sky = night ? ["#0d1b33", "#2d4568"] : cloudy ? ["#9aa9b8", "#d2dbe3"] : ["#7fbdf0", "#d8eefc"];
-    $("sk1").setAttribute("stop-color", sky[0]); $("sk2").setAttribute("stop-color", sky[1]); $("moonbite").setAttribute("fill", sky[0]);
-    $("sun").setAttribute("opacity", night ? 0 : 1);
+    // sky + live weather
+    const st = skyState(this._hass, d.entities?.weather, solar), night = st.night, elev = st.elev;
+    $("sk1").setAttribute("stop-color", st.sky[0]); $("sk2").setAttribute("stop-color", st.sky[1]); $("moonbite").setAttribute("fill", st.sky[0]);
+    $("sun").setAttribute("opacity", st.sunVisible ? (st.cloud >= 2 ? 0.45 : 1) : 0);
     $("sun").setAttribute("transform", `translate(880 ${elev === null ? 80 : Math.round(170 - Math.min(Math.max(elev, 0), 60) * 1.6)})`);
-    $("moon").setAttribute("opacity", night ? 1 : 0); $("stars").setAttribute("opacity", night ? 1 : 0);
-    $("clouds").setAttribute("opacity", cloudy ? 0.95 : night ? 0.15 : 0.35);
+    $("moon").setAttribute("opacity", night && st.cloud < 3 ? 1 : 0); $("stars").setAttribute("opacity", night && st.cloud < 2 ? 1 : 0);
+    $("clouds").setAttribute("opacity", !night && st.cloud === 0 ? 0.35 : 0);
+    applySky(this.shadowRoot, st);
     this.shadowRoot.querySelector("#roofpv .shine").style.display = (solar || 0) > 300 ? "" : "none";
     // parts that this system has
     this._show("pylon", hasGrid); this._show("w-grid", hasGrid); this._show("f-grid", hasGrid); this._show("g-grid", hasGrid);
