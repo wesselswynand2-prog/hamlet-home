@@ -98,6 +98,20 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
 .rrow { display: flex; align-items: center; gap: 6px; padding: 5px 0; }
 .rrow input { flex: 1; }
 .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+.alist { display: grid; gap: 2px; margin-top: 10px; max-height: 420px; overflow: auto; }
+.arow { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.arow .n { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arow > ha-icon { --mdc-icon-size: 22px; color: var(--muted); }
+.sheet { display: grid; gap: 8px; }
+.sheet .lab { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 6px; }
+.kinds, .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.kbtn { font: inherit; font-size: 13px; padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--primary-text-color); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.kbtn ha-icon { --mdc-icon-size: 16px; }
+.kbtn[aria-pressed="true"] { background: var(--accent, #1e9be4); border-color: transparent; color: #fff; }
+.btn.danger { color: var(--c-bad, #e34948); }
+#root.tweak .tile, #root.tweak .gate { outline: 2px dashed color-mix(in srgb, var(--accent, #1e9be4) 55%, transparent); outline-offset: -2px; cursor: pointer; }
+#root.tweak .tile *, #root.tweak .gate * { pointer-events: none; }
+#root.tweak .tile .tmain, #root.tweak .gate .gbtn { pointer-events: auto; }
 .sticky { position: sticky; bottom: 0; background: var(--card); padding-top: 10px; border-top: 1px solid var(--line); margin-top: 10px; }
 `;
 
@@ -219,16 +233,21 @@ class HamletHomeControls extends HTMLElement {
       const nothing = !L.rooms.length && !L.gates.length && !L.actions.length;
       this._root.innerHTML = `
         <div class="top"><div class="chips grow" id="quick"></div>
-          ${this._admin ? `<button class="btn sm" data-a="edit"><ha-icon icon="mdi:pencil" style="--mdc-icon-size:16px;vertical-align:-3px"></ha-icon> Edit page</button>` : ""}</div>
-        ${nothing ? `<section class="card empty">Nothing to show yet.${this._admin ? " Tap <b>Edit page</b> to choose devices, or give your devices an area in Settings → Areas." : ""}</section>` : ""}
+          ${this._admin ? `<button class="btn sm primary" data-a="addopen"><ha-icon icon="mdi:plus" style="--mdc-icon-size:16px;vertical-align:-3px"></ha-icon> Add</button>
+            <button class="btn sm" data-a="tweak" aria-pressed="${!!this._tweak}"><ha-icon icon="mdi:pencil" style="--mdc-icon-size:16px;vertical-align:-3px"></ha-icon> ${this._tweak ? "Done" : "Edit"}</button>` : ""}</div>
+        <div id="tools" style="display:contents"></div>
+        ${nothing ? `<section class="card empty">Nothing on this page yet.${this._admin ? " Tap <b>+ Add</b> to put switches, lights, gates and more here." : ""}</section>` : ""}
         <section class="card" id="sfav" hidden><h2><ha-icon icon="mdi:star"></ha-icon>Favourites</h2><div class="tiles" id="fav"></div></section>
         <section class="card" id="sgates" hidden><h2><ha-icon icon="mdi:gate"></ha-icon>Gates &amp; doors</h2><div class="gates" id="gates"></div></section>
         ${L.rooms.map((r, i) => `<section class="card ${L.rooms.length > 1 ? "s6" : ""}"><h2><ha-icon icon="${esc(r.icon || "mdi:floor-plan")}"></ha-icon>${esc(r.name)}
           <span class="sub" id="rs${i}"></span></h2><div class="tiles" id="room${i}"></div></section>`).join("")}`;
       this._sections = true;
       this._html = {};
+      this._toolsDrawn = false;
     }
     const set = (id, html) => { const el = this.shadowRoot.getElementById(id); if (el && this._html[id] !== html) { this._html[id] = html; el.innerHTML = html; } };
+    this._renderTools(!this._toolsDrawn); this._toolsDrawn = true;
+    this._root.classList.toggle("tweak", !!this._tweak);
 
     // quick actions + all lights off
     const lightsOn = L.rooms.flatMap((r) => r.items).filter((i) => i.kind === "light" && this._st(i.entity_id)?.state === "on");
@@ -344,6 +363,18 @@ class HamletHomeControls extends HTMLElement {
     const a = b.dataset.a, eid = b.dataset.e, item = eid ? this._item(eid) : null;
     if (this._edit) return this._editClick(b, a);
     if (a === "edit") { this._startEdit(); return; }
+    if (a === "addopen") { this._adding = !this._adding; this._sheet = null; return this._renderTools(true); }
+    if (a === "tweak") { this._tweak = !this._tweak; this._sheet = null; this._adding = false; this._sections = null; return this._render(); }
+    if (a === "addone") return this._addOne(b.dataset.e);
+    if (a === "sheetdone") return this._saveSheet();
+    if (a === "sheetremove") return this._removeOne(this._sheet);
+    if (a === "sheetclose") { this._sheet = null; return this._renderTools(true); }
+    if (a === "sheetkind") { this._sheetDraft.kind = b.dataset.k; this._sheetDraft.confirm = ["gate", "garage", "lock"].includes(b.dataset.k); return this._renderTools(true); }
+    if (a === "sheetfav") { this._sheetDraft.fav = !this._sheetDraft.fav; return this._renderTools(true); }
+    if (a === "sheetconfirm") { this._sheetDraft.confirm = !this._sheetDraft.confirm; return this._renderTools(true); }
+    if (a === "alldevices") { this._adding = false; this._sheet = null; return this._startEdit(); }
+    // in Edit mode a tap on any control opens its settings instead of switching it
+    if (this._tweak && eid) { this._openSheet(eid); return; }
     if (a === "alloff") return this._call("homeassistant", "turn_off", { entity_id: b.dataset.ids.split(",") });
     if (a === "run") {
       const d = eid.split(".")[0];
@@ -393,7 +424,107 @@ class HamletHomeControls extends HTMLElement {
       this._call("light", "turn_on", { entity_id: t.dataset.e, brightness_pct: Number(t.value) });
     }
   }
-  _input(ev) { if (this._edit) this._editInput(ev.target); }
+  _input(ev) {
+    if (this._edit) return this._editInput(ev.target);
+    const t = ev.target;
+    if (t.id === "addq") { this._addQ = t.value; this._filterAdd(); }
+    if (t.id === "sheetname" && this._sheetDraft) this._sheetDraft.name = t.value;
+  }
+
+  /* --------------------------------------------- simple add / edit tools */
+  _settingsCopy() {
+    const s = this._lay.settings || {};
+    return { hidden: [...(s.hidden || [])], added: [...(s.added || [])], names: { ...(s.names || {}) }, kinds: { ...(s.kinds || {}) },
+      favourites: [...(s.favourites || [])], confirm: { ...(s.confirm || {}) }, room_order: [...(s.room_order || [])],
+      room_names: { ...(s.room_names || {}) }, pulse_seconds: s.pulse_seconds ?? 1 };
+  }
+  async _saveSettings(settings, msg) {
+    try {
+      this._lay = await this._hass.callWS({ type: `${DOMAIN}/controls_settings`, settings });
+      this._sections = null; this._render();
+      if (msg) this._toast(msg);
+      return true;
+    } catch (e) { this._toast(e.message || "Could not save"); return false; }
+  }
+  async _addOne(eid) {
+    const s = this._settingsCopy();
+    s.hidden = s.hidden.filter((x) => x !== eid);
+    if (!s.added.includes(eid)) s.added.push(eid);
+    const it = (this._lay.all || []).find((i) => i.entity_id === eid);
+    if (await this._saveSettings(s)) { this._adding = false; this._openSheet(eid, true); this._toast(`Added ${it?.full_name || eid}`); }
+  }
+  async _removeOne(eid) {
+    const s = this._settingsCopy();
+    s.added = s.added.filter((x) => x !== eid);
+    if (!s.hidden.includes(eid)) s.hidden.push(eid);
+    s.favourites = s.favourites.filter((x) => x !== eid);
+    this._sheet = null;
+    await this._saveSettings(s, "Removed from the page – add it back any time with + Add");
+  }
+  _openSheet(eid, fresh = false) {
+    const it = (this._lay.all || []).find((i) => i.entity_id === eid); if (!it) return;
+    const s = this._lay.settings || {};
+    this._sheet = eid; this._sheetFresh = fresh;
+    this._sheetDraft = { name: (s.names || {})[eid] || "", kind: it.kind, fav: !!it.favourite, confirm: !!it.confirm };
+    this._renderTools(true);
+    this.shadowRoot.getElementById("sheetname")?.focus();
+  }
+  async _saveSheet() {
+    const eid = this._sheet, d = this._sheetDraft, s = this._settingsCopy();
+    if (d.name.trim()) s.names[eid] = d.name.trim(); else delete s.names[eid];
+    s.kinds[eid] = d.kind;
+    s.confirm[eid] = d.confirm;
+    s.favourites = s.favourites.filter((x) => x !== eid); if (d.fav) s.favourites.push(eid);
+    this._sheet = null;
+    await this._saveSettings(s);
+  }
+  _filterAdd() {
+    const q = (this._addQ || "").trim().toLowerCase();
+    let any = false;
+    this.shadowRoot.querySelectorAll(".arow").forEach((r) => { const ok = !q || r.dataset.q.includes(q); r.hidden = !ok; if (ok) any = true; });
+    const none = this.shadowRoot.getElementById("anone"); if (none) none.hidden = any;
+  }
+  // the "+ Add" picker and the settings sheet for one control, above the rooms
+  _renderTools(force) {
+    const el = this.shadowRoot.getElementById("tools"); if (!el) return;
+    if (!force && this._toolsKey === `${this._adding}|${this._sheet}|${this._tweak}`) return;
+    this._toolsKey = `${this._adding}|${this._sheet}|${this._tweak}`;
+    let h = "";
+    if (this._tweak && !this._sheet) h += `<section class="card" style="padding:12px 16px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <ha-icon icon="mdi:gesture-tap"></ha-icon><span style="flex:1;min-width:200px"><b>Tap any control</b> to rename it, change its type, make it a favourite or remove it.</span>
+      <button class="btn sm" data-a="alldevices">All devices &amp; rooms…</button><button class="btn sm primary" data-a="tweak">Done</button></div></section>`;
+    if (this._adding) {
+      const cand = (this._lay.all || []).filter((i) => !i.shown).sort((a, b) => a.full_name.localeCompare(b.full_name));
+      h += `<section class="card"><h2><ha-icon icon="mdi:plus-circle-outline"></ha-icon>Add to Controls <span class="sub">${cand.length} not on the page yet</span></h2>
+        <input type="search" id="addq" placeholder="Search switches, lights, gates…" value="${esc(this._addQ || "")}" style="width:100%">
+        <div class="alist">${cand.map((i) => `<div class="arow" data-q="${esc((i.full_name + " " + i.entity_id + " " + (i.room || "")).toLowerCase())}">
+          <ha-icon icon="${esc((ICON[i.kind] || ICON.switch)[0])}"></ha-icon>
+          <div style="flex:1;min-width:0"><div class="n">${esc(i.full_name)}</div><div class="muted small">${esc([i.room, KIND_LABEL[i.kind] || ""].filter(Boolean).join(" · "))}</div></div>
+          <button class="btn sm primary" data-a="addone" data-e="${esc(i.entity_id)}">Add</button></div>`).join("")}
+          <div class="empty" id="anone" ${cand.length ? "hidden" : ""}>${cand.length ? "Nothing matches." : "Everything is already on the page."}</div></div>
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="muted small" style="align-self:center">Rooms come from Home Assistant's areas (Settings → Areas).</span>
+          <button class="btn sm" data-a="addopen">Close</button></div></section>`;
+    }
+    if (this._sheet) {
+      const it = (this._lay.all || []).find((i) => i.entity_id === this._sheet), d = this._sheetDraft;
+      if (it) h += `<section class="card"><h2><ha-icon icon="${esc((ICON[d.kind] || ICON.switch)[1])}"></ha-icon>${this._sheetFresh ? "Added – set it up" : "Edit control"} <span class="sub">${esc(it.entity_id)}</span></h2>
+        <div class="sheet">
+          <label class="lab" for="sheetname">Name on the page</label>
+          <input type="text" id="sheetname" maxlength="40" value="${esc(d.name)}" placeholder="${esc(it.name)}">
+          <div class="lab">Type</div>
+          <div class="kinds">${Object.keys(KIND_LABEL).map((k) => `<button class="kbtn" data-a="sheetkind" data-k="${k}" aria-pressed="${d.kind === k}"><ha-icon icon="${ICON[k][1]}"></ha-icon>${KIND_LABEL[k]}</button>`).join("")}</div>
+          <div class="opts">
+            <button class="kbtn" data-a="sheetfav" aria-pressed="${d.fav}"><ha-icon icon="${d.fav ? "mdi:star" : "mdi:star-outline"}"></ha-icon>Favourite (top of the page)</button>
+            ${["gate", "garage", "lock"].includes(d.kind) ? `<button class="kbtn" data-a="sheetconfirm" aria-pressed="${d.confirm}"><ha-icon icon="mdi:hand-back-right-outline"></ha-icon>Ask “tap again” first</button>` : ""}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:12px">
+          <button class="btn sm danger" data-a="sheetremove"><ha-icon icon="mdi:delete-outline" style="--mdc-icon-size:16px;vertical-align:-3px"></ha-icon> Remove from page</button>
+          <span style="display:flex;gap:8px"><button class="btn sm" data-a="sheetclose">Cancel</button><button class="btn sm primary" data-a="sheetdone">Save</button></span></div></section>`;
+    }
+    el.innerHTML = h;
+    this._filterAdd();
+  }
 
   /* --------------------------------------------------------------- edit */
   _startEdit() {
