@@ -196,12 +196,15 @@ class HamletHomeProperty extends HTMLElement {
       <g id="geyser"><rect x="322" y="474" width="50" height="112" rx="22" fill="url(#tankg)" stroke="#6b5a4b" stroke-width="2.5"/>
         <rect x="330" y="486" width="5" height="60" rx="2.5" fill="#fff" opacity=".3"/>
         <path class="elem" id="elem" d="M332 572 h30 v4 h-30 v4 h30" fill="none" stroke="#ff5a36" stroke-width="2.5"/>
+        <text id="gt1" x="347" y="528" text-anchor="middle" font-size="17" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="2" paint-order="stroke"></text>
+        <text id="gn1" x="347" y="546" text-anchor="middle" font-size="10" font-weight="600" fill="#fff" opacity=".9"></text>
         <g id="geyheat"><path class="heat" d="M338 566 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2"/><path class="heat" d="M354 568 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2" style="animation-delay:.8s"/></g></g>
       <g id="geyser2"><rect x="576" y="474" width="46" height="112" rx="21" fill="url(#tankg)" stroke="#6b5a4b" stroke-width="2.5"/>
         <rect x="583" y="486" width="5" height="60" rx="2.5" fill="#fff" opacity=".3"/>
         <path class="elem" id="elem2" d="M584 572 h28 v4 h-28 v4 h28" fill="none" stroke="#ff5a36" stroke-width="2.5"/>
         <g><path class="heat" d="M590 566 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2"/><path class="heat" d="M605 568 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2" style="animation-delay:.8s"/></g>
-        <text x="599" y="530" text-anchor="middle" font-size="13" font-weight="700" fill="#fff" opacity=".9">2</text></g>
+        <text id="gt2" x="599" y="528" text-anchor="middle" font-size="17" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="2" paint-order="stroke"></text>
+        <text id="gn2" x="599" y="546" text-anchor="middle" font-size="10" font-weight="600" fill="#fff" opacity=".9"></text></g>
       <g id="loads"><ellipse id="lampglowe" cx="700" cy="480" rx="64" ry="70" fill="url(#lampglow)" opacity="0"/>
         <line x1="700" y1="394" x2="700" y2="430" stroke="#555" stroke-width="2"/><path d="M684 430 h32 l-6 16 h-20 z" fill="#c9b27c"/><circle id="bulb" cx="700" cy="450" r="5" fill="#ccc"/>
         <rect x="640" y="514" width="74" height="46" rx="4" fill="#1d2026"/><rect id="tv" x="644" y="518" width="66" height="38" rx="2" fill="#30343c"/>
@@ -330,6 +333,7 @@ class HamletHomeProperty extends HTMLElement {
     if (!G.length) ginfo.slice(0, 2).forEach((gi) => { const w = stOn(gi.switch) === false ? 0 : Math.max(stNum(gi.power) || 0, 0);
       G.push({ name: gi.name, temp: stNum(gi.temp), w, src: loadSrc((snap.extras || []).find((e) => e.entity_id === gi.power)?.side), coll: false, collOn: false, collT: null, status: "", reason: "" }); });
     if (!G.length) geyLoads.slice(0, 2).forEach((e) => G.push({ name: e.name, temp: null, w: Math.max(num(e.w) || 0, 0), src: loadSrc(e.side), coll: false, collOn: false, collT: null, status: "", reason: "" }));
+    G.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
     const hasGey = G.length > 0, g1 = G[0], g2 = G[1];
     const ci = G.findIndex((x) => x.coll), cg = ci >= 0 ? G[ci] : null;
     // ---------- water
@@ -403,6 +407,12 @@ class HamletHomeProperty extends HTMLElement {
     $("boostimp").classList.toggle("on", boost); $("poolimp").classList.toggle("on", pp);
     $("hpfan").classList.toggle("on", hpOn); $("hpled").setAttribute("fill", hpOn ? "#eb6834" : "#9aa4b0");
     $("acfan").classList.toggle("on", acOn);
+    // temperature inside each tank, with a short name under it when there are two
+    const shortName = (n) => { const m = String(n || "").match(/\d+$/); return m ? `#${m[0]}` : String(n || "").slice(0, 8); };
+    [[g1, "gt1", "gn1"], [g2, "gt2", "gn2"]].forEach(([x, t, n]) => {
+      $(t).textContent = x && x.temp !== null ? `${Math.round(x.temp)}°` : x ? "–" : "";
+      $(n).textContent = x && G.length > 1 ? shortName(x.name) : "";
+    });
     [[g1, "elem", "geyser"], [g2, "elem2", "geyser2"]].forEach(([x, e, t]) => {
       const on = !!(x && x.w > 50);
       $(e).classList.toggle("on", on); $(e).setAttribute("stroke", on ? "#ff5a36" : "#6b5a4b");

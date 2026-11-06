@@ -173,6 +173,7 @@ class HamletHomeScene extends HTMLElement {
         <rect x="396" y="404" width="50" height="104" rx="22" fill="url(#tankg)" stroke="#6b5a4b" stroke-width="2.5"/>
         <rect x="404" y="416" width="5" height="60" rx="2.5" fill="#fff" opacity=".3"/>
         <path class="elem" id="elem" d="M406 494 h30 v4 h-30 v4 h30" fill="none" stroke="#ff5a36" stroke-width="2.5"/>
+        <text id="gtemp" x="421" y="462" text-anchor="middle" font-size="17" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="2" paint-order="stroke"></text>
         <g id="heatwaves" opacity="0"><path class="heat" d="M412 488 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2"/><path class="heat" d="M428 490 q4 -6 0 -12 t0 -12" fill="none" stroke="#fff" stroke-width="2" style="animation-delay:.8s"/></g>
       </g>
       <!-- essential loads: lamp, TV, fridge -->
@@ -281,6 +282,7 @@ class HamletHomeScene extends HTMLElement {
     this._tick = (this._tick || 0) + 1;
     $("tvscreen").setAttribute("fill", (ess || 0) > 150 ? (this._tick % 2 ? "#3b6fb6" : "#4a86d4") : "#30343c");
     const heating = gw > 50;
+    $("gtemp").textContent = temps.length ? `${Math.round(temps[0])}°` : "";
     $("elem").classList.toggle("on", heating); $("elem").setAttribute("stroke", heating ? "#ff5a36" : "#6b5a4b");
     $("heatwaves").setAttribute("opacity", heating ? 1 : 0);
     $("pvled").setAttribute("fill", (pvac || 0) > 20 ? "#2ecc71" : down ? "#e74c3c" : "#f1c40f");
