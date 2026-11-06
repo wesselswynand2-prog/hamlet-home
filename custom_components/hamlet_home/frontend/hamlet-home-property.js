@@ -429,6 +429,10 @@ class HamletHomeProperty extends HTMLElement {
       x.collOn ? C.heat : x.w > 50 ? C[x.src] : C.grey, "start");
     if (g1) labels += gLab(g1, 740, 214);
     if (g2) labels += gLab(g2, 740, 266);
+    // house load: the essential side when split (with the AC Loads on the grid side shown separately), else the whole house
+    const noness = lsplit ? num(L.load_noness) : null;
+    labels += lab(700, 636, fmt(ess), lsplit ? "House · essential loads" : "House load", C[essSrc] || C.grid);
+    if (lsplit && noness !== null) labels += lab(296, 372, down ? "Off" : fmt(noness), "AC Loads · grid side", C[top(fm.noness, "grid")] || C.grid, "end");
     if (f.battery) labels += lab(504, 636, soc !== null ? `${Math.round(soc)}%` : fmt(batt), `Battery${battTxt ? " · " + battTxt : ""}`, C.battery);
     if (hasBooster) labels += lab(914, 380, tank !== null ? `${Math.round(tank)}%` : bar !== null ? `${bar.toFixed(1)} bar` : "Water", `${boost ? "Booster on" : "Booster"}${bar !== null && tank !== null ? ` · ${bar.toFixed(1)} bar` : ""}`, C.water);
     if (watering) labels += lab(30, 662, "Watering", zNames.join(" + "), C.water, "start");
@@ -439,7 +443,7 @@ class HamletHomeProperty extends HTMLElement {
     // ---------- tiles
     const tile = (k, c, pill, pc, val, note) => `<div class="tile"><div class="k"><b><i style="background:${c}"></i>${esc(k)}</b><span class="pill ${pc}">${esc(pill)}</span></div><div class="v">${esc(val)}</div><div class="n">${esc(note)}</div></div>`;
     let tiles = tile("Energy", C.solar, !hasGrid ? "Off-grid" : down ? "Grid down" : "Grid on", down ? "warn" : "on", fmt(solar),
-      `solar · house ${fmt(ess)}${f.battery && soc !== null ? ` · battery ${Math.round(soc)}%` : ""}`);
+      `solar · house load ${fmt(ess)}${lsplit && num(L.load_noness) !== null ? ` + AC ${fmt(num(L.load_noness))}` : ""}${f.battery && soc !== null ? ` · battery ${Math.round(soc)}%` : ""}`);
     G.forEach((x) => { tiles += tile(G.length > 1 ? x.name : "Geyser", C.heat, x.status || (x.w > 50 ? "Heating" : "Off"), x.w > 50 || x.collOn ? "on" : x.status === "Not responding" ? "warn" : "",
       x.temp !== null ? `${x.temp.toFixed(0)}°C` : x.w > 50 ? fmt(x.w) : "Off",
       x.collOn ? "solar collector pump running" : x.w > 50 ? `element ${fmt(x.w)} from ${SRCNAME[x.src] || "grid"}` : (x.reason || "element off")); });
