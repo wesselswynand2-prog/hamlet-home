@@ -231,6 +231,14 @@ The Controls tab lets you switch lights, gates, aircons and plugs, grouped by ro
 - **Aircons:** tap the tile to switch on or off, use **−** and **+** for the temperature, and tap a mode such as Cool or Heat.
 - **Lights off** in each room switches off that room's lights only; fridges and other plugs stay on.
 
+**Setting up (installer):**
+
+- **+ Add**: search for a switch, light, gate or anything else and tap **Add**. It goes into its room straight away; then give it a shorter name, pick its type (for example turn a switch into a gate) and star it as a favourite.
+- **Edit**: the controls get a dashed outline. Tap any of them to rename it, change its type, star it or **Remove** it from the page. Tap **Done** when finished.
+- **All devices & rooms…** (under Edit): the full list, to show or hide many at once, set the room order and names, and the gate pulse length.
+
+Rooms come from Home Assistant's Areas (**Settings → Areas**).
+
 During a power outage, devices without power show **No power**. The pool pump, booster pump, irrigation valves, geyser and devices on the Devices tab are not on this tab, because the app runs them.
 
 ## During load-shedding or a power outage

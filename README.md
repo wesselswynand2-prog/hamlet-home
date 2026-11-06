@@ -95,7 +95,7 @@ The **Controls** tab fills itself from Home Assistant: every light, switch, plug
 - **Aircons**: on/off, − / + temperature and the modes the unit supports. **Lights**: tap to switch, slider for dimmable lights. **Plugs** show their watts when the Shelly has a power sensor.
 - **Quick actions** (scenes / scripts) and *All lights off* sit at the top; each room has *Lights off*.
 - During load-shedding, devices that lost power show **No power** instead of *Offline*.
-- **Edit page** (admin): tick what clients see, give shorter names, change the tile type (e.g. make a switch a gate), ★ favourites (shown at the top), room order and names, Confirm on / off, gate pulse length. Search helps when the inverter brings dozens of switches.
+- **+ Add** (admin): search and add a switch, light, gate … in one tap, then name it, set its type, ★ favourite. **Edit**: tap any control to rename / change type / favourite / remove. **All devices & rooms…** (the full list): tick what clients see, give shorter names, change the tile type (e.g. make a switch a gate), ★ favourites (shown at the top), room order and names, Confirm on / off, gate pulse length. Search helps when the inverter brings dozens of switches.
 
 ## Water & pump setup
 Settings → Devices & services → Hamlet Home → Configure → **Water & pump**. Everything is optional:
