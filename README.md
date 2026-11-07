@@ -124,6 +124,7 @@ Add valves straight on the page (admin): **Edit valves → + Add valve**, pick t
 - **Run** a single valve, **Run all now**, **Next valve**, **Stop**.
 - **Programs**: start time + days; waters the chosen valves (or all) one after another. **▶ Now** runs a program straight away.
 - **Watering amount %** scales every valve's time (e.g. 60 % in winter).
+- **Pressure per valve** (bar, optional): when the booster's set point (Configure → Water, pump & pool → water set point) is a `number`/`input_number` – e.g. the VFD's set point – each valve can have its own pressure. It's set when the valve opens and the normal value is put back when watering ends (also after a restart). kPa, psi and bar set points are converted.
 - **Rain**: skip programs when the rain sensor is wet or the weather entity says rain; **Rain delay** 24 / 48 / 72 h.
 - **Pump / master valve** (optional): switched on with the first valve and off before the last valve closes; between valves the next one opens before the previous closes, so the pump never pushes against closed valves.
 - **Safety**: a valve opened by hand (or left open over a restart) closes after its own time; no valve runs longer than the maximum (default 120 min); the booster pump's "running non-stop" alert is muted while irrigation runs.

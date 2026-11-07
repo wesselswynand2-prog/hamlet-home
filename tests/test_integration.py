@@ -471,3 +471,44 @@ async def test_battery_backup_and_full_times(enable_custom_integrations, hass: H
     o = c.outlook()
     assert o["state"] == "charging" and o["full_h"] == 1 and o["backup_h"] is None
     await hass.config_entries.async_unload(c.entry.entry_id)
+
+
+async def test_irrigation_station_setpoint(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    """Each station can run the booster at its own pressure; afterwards the normal set point comes back."""
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    for mod in ("http", "frontend"):
+        assert await async_setup_component(hass, mod, {})
+    async_mock_service(hass, "homeassistant", "turn_on")
+    async_mock_service(hass, "homeassistant", "turn_off")
+    sets = async_mock_service(hass, "number", "set_value")
+    hass.states.async_set("sensor.pv", "0", {"unit_of_measurement": "W"})
+    for v in ("roses", "lawn"):
+        hass.states.async_set(f"switch.{v}", "off")
+    hass.states.async_set("number.booster_sp", "350", {"unit_of_measurement": "kPa"})   # 3.5 bar
+    entry = MockConfigEntry(domain=DOMAIN, title="Huis", data={"name": "Huis", "preset": "victron", "solar_power": ["sensor.pv"]},
+                            options={"water_setpoint": "number.booster_sp"})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": f"{DOMAIN}/irrigation_settings", "settings": {
+        "zones": [{"name": "Roses", "entity": "switch.roses", "minutes": 5, "setpoint": 2.5},
+                  {"name": "Lawn", "entity": "switch.lawn", "minutes": 5, "setpoint": None}]}})
+    assert (await ws.receive_json())["success"]
+    await hass.async_block_till_done()
+    irr = hass.data[DOMAIN]["irrigation"]
+    assert irr.snapshot()["setpoint_ok"] and irr.zones[0]["setpoint"] == 2.5 and irr.zones[1]["setpoint"] is None
+    roses = irr.zones[0]["id"]
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 2, "type": f"{DOMAIN}/irrigation_action", "action": "run_zone", "zone": roses, "minutes": 3})
+    assert (await ws.receive_json())["success"]
+    assert sets[-1].data == {"entity_id": "number.booster_sp", "value": 250.0} and irr.settings["sp_restore"] == 3.5
+    hass.states.async_set("number.booster_sp", "250", {"unit_of_measurement": "kPa"})
+    await ws.send_json({"id": 3, "type": f"{DOMAIN}/irrigation_action", "action": "stop"})
+    assert (await ws.receive_json())["success"]
+    assert sets[-1].data == {"entity_id": "number.booster_sp", "value": 350.0} and irr.settings["sp_restore"] is None
+    # a station set point out of range is refused
+    await ws.send_json({"id": 4, "type": f"{DOMAIN}/irrigation_settings", "settings": {"zones": [{"id": roses, "name": "Roses", "entity": "switch.roses", "minutes": 5, "setpoint": 40}]}})
+    assert not (await ws.receive_json())["success"]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

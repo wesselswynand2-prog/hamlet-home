@@ -8,13 +8,14 @@ from datetime import datetime, timedelta
 RAINY = {"rainy", "pouring", "lightning-rainy", "snowy-rainy", "hail"}
 
 DEFAULT_IRRIGATION: dict = {
-    "zones": [],              # [{"id", "name", "entity", "minutes", "enabled"}]
+    "zones": [],              # [{"id", "name", "entity", "minutes", "enabled", "setpoint" (bar or None)}]
     "programs": [],           # [{"id", "enabled", "days", "start", "zones": [ids] (empty = all)}]
     "amount": 100,            # watering amount % applied to every zone time
     "pump_entity": "",        # pump / master valve that runs while a valve is open
     "rain_entity": "",        # rain sensor (binary_sensor / sensor) or weather entity
     "skip_when_raining": True,
     "rain_delay_until": None,  # ISO time – programs skipped until then
+    "sp_restore": None,        # booster set point (bar) to go back to after a station with its own set point
     "manual_auto_off": True,  # valve opened by hand closes after its zone time
     "max_minutes": 120,       # hard limit per zone run
 }
@@ -98,6 +99,16 @@ def rain_reason(rain_state: str | None, rain_domain: str | None, delay_until: da
 _ENTITY_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 
 
+def _setpoint(z: dict) -> float | None:
+    v = z.get("setpoint")
+    if v in (None, ""):
+        return None
+    v = float(v)
+    if not 0.3 <= v <= 12:
+        raise ValueError("Pressure set point must be 0.3–12 bar (leave empty to keep the pump's own)")
+    return round(v, 2)
+
+
 def validate(new: dict, current: dict, admin: bool) -> dict:
     """Clean a settings update. Non-admins may change times, programs, amount and rain delay only."""
     out: dict = {}
@@ -114,11 +125,12 @@ def validate(new: dict, current: dict, admin: bool) -> dict:
                 if entity and not _ENTITY_RE.match(entity):
                     raise ValueError(f"Not a valid entity: {entity}")
                 zones.append({"id": zid, "name": str(z.get("name") or "Zone")[:40], "entity": entity,
-                              "minutes": minutes, "enabled": bool(z.get("enabled", True))})
+                              "minutes": minutes, "enabled": bool(z.get("enabled", True)), "setpoint": _setpoint(z)})
             else:
                 if zid not in old:
                     raise ValueError("Only an administrator can add or remove valves")
-                zones.append({**old[zid], "minutes": minutes, "enabled": bool(z.get("enabled", old[zid].get("enabled", True)))})
+                zones.append({**old[zid], "minutes": minutes, "enabled": bool(z.get("enabled", old[zid].get("enabled", True))),
+                              "setpoint": _setpoint(z) if "setpoint" in z else old[zid].get("setpoint")})
         if not admin and len(zones) != len(old):
             raise ValueError("Only an administrator can add or remove valves")
         out["zones"] = zones

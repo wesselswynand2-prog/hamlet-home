@@ -189,6 +189,8 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .prog i { display: block; height: 100%; background: var(--c-load); border-radius: 3px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .zgrid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0 12px; align-items: center; }
+.zgrid.sp { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+@media (max-width: 520px) { .zgrid.sp input[type=number] { width: 56px; } .zgrid.sp .btn { padding: 6px 8px; } }
 .zrow { display: contents; }
 .zgrid input[type=number] { width: 70px; }
 .zrow > * { padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -198,7 +200,8 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .zdot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
 .zdot.on { background: var(--c-load); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-load) 25%, transparent); animation: pulse 1.6s infinite; }
 .zdot.na { background: var(--c-warn); }
-.zedit { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.zedit { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) auto auto auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.zedit input[type=number] { width: 70px; }
 @media (max-width: 640px) { .zedit { grid-template-columns: 1fr 1fr; } }
 .zedit select, .irrform select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--secondary-background-color, transparent); color: var(--primary-text-color); max-width: 100%; }
 .zedit input[type=text] { width: 100%; }
@@ -1777,7 +1780,7 @@ Object.assign(HamletHomePanel.prototype, {
     const ir = this._irr || { zones: [], settings: {} };
     const st = ir.settings || {};
     return JSON.parse(JSON.stringify({
-      zones: ir.zones.map((z) => ({ id: z.id, name: z.name, entity: z.entity, minutes: z.minutes, enabled: z.enabled !== false })),
+      zones: ir.zones.map((z) => ({ id: z.id, name: z.name, entity: z.entity, minutes: z.minutes, enabled: z.enabled !== false, setpoint: z.setpoint ?? null })),
       programs: st.programs || [], amount: st.amount ?? 100, skip_when_raining: st.skip_when_raining !== false,
       pump_entity: st.pump_entity || "", rain_entity: st.rain_entity || "", manual_auto_off: st.manual_auto_off !== false, max_minutes: st.max_minutes ?? 120,
     }));
@@ -1792,7 +1795,7 @@ Object.assign(HamletHomePanel.prototype, {
     card.hidden = !ir.zones.length && !this._isAdmin;
     if (card.hidden) return;
     this._renderIrrLive();
-    const key = JSON.stringify([ir.zones.map((z) => [z.id, z.name, z.entity, z.minutes, z.enabled]), ir.settings, !!this._irrOpts, this._irrEdit]);
+    const key = JSON.stringify([ir.zones.map((z) => [z.id, z.name, z.entity, z.minutes, z.enabled, z.setpoint]), ir.settings, !!this._irrOpts, this._irrEdit, ir.setpoint_ok]);
     const a = this.shadowRoot.activeElement;
     if (this._irrDirty || (a && a.closest && a.closest("#irrform")) || this._irrShown === key) return;
     this._irrShown = key;
@@ -1817,7 +1820,7 @@ Object.assign(HamletHomePanel.prototype, {
     if (run) {
       const pct = run.secs ? Math.min(100, 100 * (1 - (run.remaining || 0) / run.secs)) : 0;
       status = `<div class="grow"><div class="big"><span class="zdot on" style="display:inline-block;margin-right:8px"></span>Watering ${esc(run.name)} · ${mmss(run.remaining || 0)} left</div>
-        <div class="small">${esc(run.by)} · valve ${run.index} of ${run.total}${run.next.length ? ` · then ${esc(run.next.join(", "))}` : ""}${ir.pump_on ? " · pump on" : ""}</div>
+        <div class="small">${esc(run.by)} · valve ${run.index} of ${run.total}${run.next.length ? ` · then ${esc(run.next.join(", "))}` : ""}${ir.pump_on ? " · pump on" : ""}${(() => { const z = ir.zones.find((x) => x.id === run.zone); return z && z.setpoint ? ` · pressure ${z.setpoint.toFixed(1)} bar` : ""; })()}</div>
         <div class="prog"><i style="width:${pct.toFixed(1)}%"></i></div></div>
         <button class="btn" data-irr="skip">Next valve</button><button class="btn danger" data-irr="stop">Stop</button>`;
     } else if (manual.length) {
@@ -1848,6 +1851,7 @@ Object.assign(HamletHomePanel.prototype, {
     const el = this.shadowRoot.getElementById("irrform"); if (!el) return;
     const d = this._irrDraft, admin = this._isAdmin, opts = this._irrOpts || { valves: [], rain: [] };
     const edit = admin && (this._irrEdit || !d.zones.length);
+    const spOk = !!(this._irr && this._irr.setpoint_ok);
     const sel = (key, list, val, empty) => `<select data-ik="${key}">${`<option value="">${empty}</option>`}${list.map((o) => `<option value="${esc(o.id)}" ${o.id === val ? "selected" : ""}>${esc(o.name)} (${esc(o.id)})</option>`).join("")}
       ${val && !list.some((o) => o.id === val) ? `<option value="${esc(val)}" selected>${esc(val)}</option>` : ""}</select>`;
     let zones;
@@ -1857,12 +1861,14 @@ Object.assign(HamletHomePanel.prototype, {
           <select data-zk="entity" aria-label="Valve switch"><option value="">Pick the valve switch…</option>${opts.valves.map((o) => `<option value="${esc(o.id)}" ${o.id === z.entity ? "selected" : ""}>${esc(o.name)}</option>`).join("")}
             ${z.entity && !opts.valves.some((o) => o.id === z.entity) ? `<option value="${esc(z.entity)}" selected>${esc(z.entity)}</option>` : ""}</select>
           <span class="ctl"><input type="number" data-zk="minutes" value="${z.minutes}" min="0" max="240" step="1" aria-label="Minutes">min</span>
+          ${spOk ? `<span class="ctl" title="Booster pressure while this valve waters – empty = normal"><input type="number" data-zk="setpoint" value="${z.setpoint ?? ""}" min="0.3" max="12" step="0.1" placeholder="—" aria-label="Pressure set point in bar">bar</span>` : ""}
           <span class="chips"><button class="iconbtn" data-irr="zup" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button><button class="iconbtn" data-irr="zdown" ${i === d.zones.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button><button class="iconbtn" data-irr="zdel" aria-label="Remove valve"><ha-icon icon="mdi:delete-outline"></ha-icon></button></span></div>`).join("")
         + `<div class="actions" style="justify-content:flex-start"><button class="btn" data-irr="zadd">+ Add valve</button>${d.zones.length ? `<button class="btn" data-irr="editdone" style="margin-left:auto">Done editing</button>` : ""}</div>`;
     } else {
-      zones = `<div class="zgrid">${d.zones.map((z, i) => `<div class="zrow" data-zi="${i}">
+      zones = `<div class="zgrid ${spOk ? "sp" : ""}">${d.zones.map((z, i) => `<div class="zrow" data-zi="${i}">
           <div class="zname" data-zlive="${esc(z.id)}"><span class="zdot"></span><div style="min-width:0"><div class="t">${esc(z.name)}</div><div class="z2"></div></div></div>
           <span class="ctl"><input type="number" data-zk="minutes" value="${z.minutes}" min="0" max="240" step="1" aria-label="${esc(z.name)} minutes">min</span>
+          ${spOk ? `<span class="ctl" title="Booster pressure while this valve waters – empty = normal"><input type="number" data-zk="setpoint" value="${z.setpoint ?? ""}" min="0.3" max="12" step="0.1" placeholder="—" aria-label="${esc(z.name)} pressure set point in bar">bar</span>` : ""}
           <button class="btn" data-irr="runzone" data-zid="${esc(z.id)}" aria-label="Run ${esc(z.name)} now">▶ Run</button></div>`).join("")}</div>
         ${admin ? `<div class="actions" style="justify-content:flex-start"><button class="btn" data-irr="editzones">Edit valves</button></div>` : ""}`;
     }
@@ -1875,7 +1881,7 @@ Object.assign(HamletHomePanel.prototype, {
         <div class="chips" style="grid-column:2/-1"><button class="pchip" data-irr="pzall" aria-pressed="${!p.zones.length}">All valves</button>
           ${d.zones.map((z) => `<button class="pchip" data-irr="pz" data-zid="${esc(z.id)}" aria-pressed="${p.zones.includes(z.id)}">${esc(z.name)}</button>`).join("")}</div></div>`).join("");
     el.innerHTML = `
-      <div class="sub2">Valves <span class="r muted small">${edit ? "name · valve switch · minutes" : "minutes per valve"}</span></div>${zones}
+      <div class="sub2">Valves <span class="r muted small">${edit ? `name · valve switch · minutes${spOk ? " · pressure" : ""}` : `minutes${spOk ? " · pressure set point (empty = normal)" : ""} per valve`}</span></div>${zones}
       ${d.zones.length ? `<div class="sub2">Programs <span class="r muted small">waters the valves one after another</span></div>
       ${progs || `<div class="muted small" style="padding:6px 0">No programs – valves only run when you press Run.</div>`}
       <div class="actions" style="justify-content:flex-start"><button class="btn" data-irr="padd">+ Add program</button></div>
@@ -1889,7 +1895,7 @@ Object.assign(HamletHomePanel.prototype, {
       <div class="sub2">Today</div><div class="logl" id="irrlog"></div>` : ""}`;
     el.querySelectorAll("[data-zk]").forEach((inp) => {
       const up = () => { const z = d.zones[Number(inp.closest("[data-zi]").dataset.zi)]; const k = inp.dataset.zk; if (k === "minutes" && inp.value === "") return;
-        z[k] = k === "minutes" ? Number(inp.value) : inp.value;
+        z[k] = k === "minutes" ? Number(inp.value) : k === "setpoint" ? (inp.value === "" ? null : Number(inp.value)) : inp.value;
         if (k === "entity" && !z.name) { const o = (this._irrOpts?.valves || []).find((x) => x.id === inp.value); if (o) { z.name = o.name; inp.closest(".zedit").querySelector("[data-zk=name]").value = o.name; } }
         this._irrChanged(); };
       inp.addEventListener("input", up); inp.addEventListener("change", up);

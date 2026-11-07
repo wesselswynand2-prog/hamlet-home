@@ -30,6 +30,7 @@ class IrrigationController:
         self.last_watered: dict[str, str] = {}   # zone id -> iso time
         self.run: dict | None = None             # {"queue", "current", "end", "by", "total", "done"}
         self.manual_off: dict[str, datetime] = {}
+        self.sp_note = ""
         self.last_note = ""
         self._expect: dict[str, tuple[bool, datetime]] = {}
         self._last_check: datetime | None = None
@@ -104,6 +105,62 @@ class IrrigationController:
         else:
             await self.hass.services.async_call("homeassistant", "turn_on" if on else "turn_off", {"entity_id": entity_id}, blocking=False)
 
+    # ------------------------------------------------- pressure set point per station
+    def _sp_entity(self) -> str | None:
+        water = self.hass.data.get(DOMAIN, {}).get("water")
+        eid = (water.conf.get("water_setpoint") if water is not None else None) or None
+        return eid if eid and eid.split(".")[0] in ("number", "input_number") else None
+
+    @staticmethod
+    def _to_unit(bar: float, unit: str) -> float:
+        u = (unit or "bar").strip().lower()
+        return round(bar * 100, 1) if u == "kpa" else round(bar * 14.5038, 1) if u == "psi" else round(bar * 1e5) if u == "pa" else round(bar, 2)
+
+    @staticmethod
+    def _from_unit(v: float, unit: str) -> float:
+        u = (unit or "bar").strip().lower()
+        return v / 100 if u == "kpa" else v / 14.5038 if u == "psi" else v / 1e5 if u == "pa" else v
+
+    async def _sync_setpoint(self) -> None:
+        """While a station with its own set point waters, the booster runs at that pressure; afterwards it goes back."""
+        eid = self._sp_entity()
+        if not eid:
+            return
+        st = self.hass.states.get(eid)
+        if st is None or st.state in BAD:
+            return
+        unit = st.attributes.get("unit_of_measurement") or "bar"
+        try:
+            cur = float(st.state)
+        except ValueError:
+            return
+        want = None
+        if self.run and self.run.get("current"):
+            want = (self._zone(self.run["current"]) or {}).get("setpoint")
+        if want is None:
+            for z in self.zones:
+                if z.get("setpoint") and z.get("entity") and self._is_on(z["entity"]):
+                    want = z["setpoint"]
+                    break
+        if want is not None:
+            if self.settings.get("sp_restore") is None:
+                self.settings["sp_restore"] = round(self._from_unit(cur, unit), 2)   # the house pressure, to go back to
+                self._save()
+            target = self._to_unit(want, unit)
+        elif self.settings.get("sp_restore") is not None:
+            target = self._to_unit(self.settings["sp_restore"], unit)
+            self.settings["sp_restore"] = None
+            self._save()
+        else:
+            return
+        if abs(target - cur) < 1e-6:
+            return
+        try:
+            await self.hass.services.async_call(eid.split(".")[0], "set_value", {"entity_id": eid, "value": target}, blocking=False)
+            self.sp_note = f"Pump set point {self._from_unit(target, unit):.1f} bar"
+        except Exception as err:  # noqa: BLE001 - watering must carry on even if the set point can't be changed
+            _LOGGER.warning("Hamlet Home: could not set %s to %s: %s", eid, target, err)
+
     def _zone(self, zid: str) -> dict | None:
         return next((z for z in self.zones if z["id"] == zid), None)
 
@@ -148,6 +205,7 @@ class IrrigationController:
             if prev is not None and prev["entity"] != z["entity"]:
                 await self._set(prev["entity"], False)
             run.update(current=zid, end=now + timedelta(seconds=secs), started=now, secs=secs)
+            await self._sync_setpoint()
             return
         # finished: pump off first, then the last valve
         if self.settings.get("pump_entity"):
@@ -156,6 +214,7 @@ class IrrigationController:
             await self._set(prev["entity"], False)
         self.last_note = f"Finished {run['by']} – {run['done']} valve{'s' if run['done'] != 1 else ''}"
         self.run = None
+        await self._sync_setpoint()
         self._save()
 
     def _log(self, z: dict, run: dict) -> None:
@@ -178,6 +237,7 @@ class IrrigationController:
             await self._set(cur["entity"], False)
         self.run = None
         self.last_note = f"Stopped ({why})"
+        await self._sync_setpoint()
         self._save()
 
     # ------------------------------------------------------------------ tick
@@ -228,6 +288,8 @@ class IrrigationController:
             if entity_id == run_entity and not ours:
                 # closed by hand during a run: carry on with the next valve
                 await self._advance(dt_util.now())
+        if self._zone_by_entity(entity_id) is not None:
+            await self._sync_setpoint()
         self._notify_ui()
 
     # --------------------------------------------------------------- actions
@@ -301,6 +363,8 @@ class IrrigationController:
             "today": [{**e} for e in self.log.get(today, [])],
             "today_minutes": round(sum(e["secs"] for e in self.log.get(today, [])) / 60),
             "pump_on": self._is_on(self.settings["pump_entity"]) if self.settings.get("pump_entity") else None,
+            # per-station set point works when the booster's set point can be written (a number / input_number)
+            "setpoint_ok": self._sp_entity() is not None, "sp_note": self.sp_note,
         }
 
     def entity_options(self) -> dict:

@@ -132,6 +132,7 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 - Run all valves, one valve, or a program by hand, and tap **Stop** to end it.
 - **Rain delay** skips watering for the hours you choose. If a rain sensor is fitted, watering is skipped after rain by itself.
 - A valve you open by hand closes again by itself after its set time, so it can't be left running.
+- **Pressure per valve:** give a valve its own pressure (bar). While that valve waters, the booster pump runs at that pressure; afterwards it goes back to the normal pressure. Leave it empty to use the normal pressure. This column only shows when the pump's pressure set point can be changed from Home Assistant.
 
 ## Pool tab
 
