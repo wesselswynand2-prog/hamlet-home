@@ -205,6 +205,14 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 @media (max-width: 640px) { .zedit { grid-template-columns: 1fr 1fr; } }
 .zedit select, .irrform select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--secondary-background-color, transparent); color: var(--primary-text-color); max-width: 100%; }
 .zedit input[type=text] { width: 100%; }
+.vpick { position: relative; min-width: 0; }
+.vpick .vq { width: 100%; box-sizing: border-box; }
+.vlist { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); max-height: 260px; overflow-y: auto; background: var(--card-background-color, #1c1f2b); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+.vlist .vo { display: block; width: 100%; text-align: left; padding: 7px 10px; border: 0; background: none; color: var(--primary-text-color); font: inherit; font-size: 14px; cursor: pointer; }
+.vlist .vo small { display: block; opacity: .6; font-size: 11px; }
+.vlist .vo.on, .vlist .vo:hover { background: rgba(80,140,255,.18); }
+.vlist .vo.cur { font-weight: 600; }
+.vlist .none { padding: 8px 10px; opacity: .65; font-size: 13px; }
 .sub2 { font-size: 14px; font-weight: 500; margin: 18px 0 4px; display: flex; align-items: center; gap: 8px; }
 .sub2 .r { margin-left: auto; font-weight: 400; }
 .pchip { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
@@ -1786,6 +1794,38 @@ Object.assign(HamletHomePanel.prototype, {
     }));
   },
 
+  _valvePicker(pk) {
+    const q = pk.querySelector(".vq"), hid = pk.querySelector("[data-zk=entity]"), list = pk.querySelector(".vlist");
+    const all = () => this._irrOpts?.valves || [];
+    let hi = 0, shown = [];
+    const name = (id) => (all().find((o) => o.id === id) || {}).name || id;
+    const draw = () => {
+      const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+      const typed = words.length && q.value !== name(hid.value);
+      shown = all().filter((o) => !typed || words.every((w) => (o.name + " " + o.id + " " + (o.area || "")).toLowerCase().includes(w))).slice(0, 60);
+      hi = Math.min(hi, Math.max(0, shown.length - 1));
+      list.innerHTML = shown.length ? shown.map((o, i) => `<button type="button" class="vo ${i === hi ? "on" : ""} ${o.id === hid.value ? "cur" : ""}" data-i="${i}" role="option">${esc(o.name)}<small>${o.area ? esc(o.area) + " · " : ""}${esc(o.id)}</small></button>`).join("")
+        : `<div class="none">Nothing matches “${esc(q.value)}”</div>`;
+      list.hidden = false;
+      const on = list.querySelector(".vo.on"); if (on) on.scrollIntoView({ block: "nearest" });
+    };
+    const pick = (o) => {
+      hid.value = o.id; q.value = o.name; list.hidden = true;
+      hid.dispatchEvent(new Event("change"));
+    };
+    q.addEventListener("focus", () => { q.select(); hi = Math.max(0, all().findIndex((o) => o.id === hid.value)); draw(); });
+    q.addEventListener("input", () => { hi = 0; draw(); });
+    q.addEventListener("keydown", (e) => {
+      if (list.hidden && e.key !== "Escape") draw();
+      if (e.key === "ArrowDown") { hi = Math.min(hi + 1, shown.length - 1); draw(); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { hi = Math.max(hi - 1, 0); draw(); e.preventDefault(); }
+      else if (e.key === "Enter") { if (shown[hi]) pick(shown[hi]); e.preventDefault(); }
+      else if (e.key === "Escape") { list.hidden = true; q.value = hid.value ? name(hid.value) : ""; }
+    });
+    list.addEventListener("mousedown", (e) => e.preventDefault());   // keep focus while tapping a choice
+    list.addEventListener("click", (e) => { const b = e.target.closest(".vo"); if (b) pick(shown[Number(b.dataset.i)]); });
+    q.addEventListener("blur", () => { list.hidden = true; q.value = hid.value ? name(hid.value) : ""; });
+  },
   _irrChanged() { this._irrDirty = true; const a = this.shadowRoot.getElementById("irract"); if (a) a.hidden = false; const m = this.shadowRoot.getElementById("irrmsg"); if (m) m.textContent = ""; },
 
   _renderIrr() {
@@ -1858,8 +1898,7 @@ Object.assign(HamletHomePanel.prototype, {
     if (edit) {
       zones = d.zones.map((z, i) => `<div class="zedit" data-zi="${i}">
           <input type="text" data-zk="name" value="${esc(z.name)}" aria-label="Valve name" placeholder="Name, e.g. Binne Tuin">
-          <select data-zk="entity" aria-label="Valve switch"><option value="">Pick the valve switch…</option>${opts.valves.map((o) => `<option value="${esc(o.id)}" ${o.id === z.entity ? "selected" : ""}>${esc(o.name)}</option>`).join("")}
-            ${z.entity && !opts.valves.some((o) => o.id === z.entity) ? `<option value="${esc(z.entity)}" selected>${esc(z.entity)}</option>` : ""}</select>
+          <div class="vpick"><input type="text" class="vq" autocomplete="off" spellcheck="false" aria-label="Valve switch – type to search" placeholder="Type to search the valve switch…" value="${esc(z.entity ? ((opts.valves.find((o) => o.id === z.entity) || {}).name || z.entity) : "")}"><input type="hidden" data-zk="entity" value="${esc(z.entity || "")}"><div class="vlist" role="listbox" hidden></div></div>
           <span class="ctl"><input type="number" data-zk="minutes" value="${z.minutes}" min="0" max="240" step="1" aria-label="Minutes">min</span>
           ${spOk ? `<span class="ctl" title="Booster pressure while this valve waters – empty = normal"><input type="number" data-zk="setpoint" value="${z.setpoint ?? ""}" min="0.3" max="12" step="0.1" placeholder="—" aria-label="Pressure set point in bar">bar</span>` : ""}
           <span class="chips"><button class="iconbtn" data-irr="zup" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button><button class="iconbtn" data-irr="zdown" ${i === d.zones.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button><button class="iconbtn" data-irr="zdel" aria-label="Remove valve"><ha-icon icon="mdi:delete-outline"></ha-icon></button></span></div>`).join("")
@@ -1900,6 +1939,7 @@ Object.assign(HamletHomePanel.prototype, {
         this._irrChanged(); };
       inp.addEventListener("input", up); inp.addEventListener("change", up);
     });
+    el.querySelectorAll(".vpick").forEach((pk) => this._valvePicker(pk));
     el.querySelectorAll("[data-pk2]").forEach((inp) => {
       const up = () => { const p = d.programs[Number(inp.closest("[data-pi]").dataset.pi)]; p[inp.dataset.pk2] = inp.type === "checkbox" ? inp.checked : inp.value; this._irrChanged(); };
       inp.addEventListener("input", up); inp.addEventListener("change", up);

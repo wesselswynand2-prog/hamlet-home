@@ -120,7 +120,7 @@ Energy tab → **Solar priority**. Every geyser (with solar heating on) and the 
 - Switch *Share spare solar by priority* off to let each load use its own solar settings again.
 
 ## Irrigation (Water tab)
-Add valves straight on the page (admin): **Edit valves → + Add valve**, pick the valve's switch (switch, valve or input_boolean), give it a name and minutes. Reorder with ↑ ↓.
+Add valves straight on the page (admin): **Edit valves → + Add valve**, type a few letters of the valve's switch to search (by name, area or entity id; switch, valve or input_boolean) and tap it, give it a name and minutes. Reorder with ↑ ↓.
 - **Run** a single valve, **Run all now**, **Next valve**, **Stop**.
 - **Programs**: start time + days; waters the chosen valves (or all) one after another. **▶ Now** runs a program straight away.
 - **Watering amount %** scales every valve's time (e.g. 60 % in winter).

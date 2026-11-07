@@ -369,12 +369,24 @@ class IrrigationController:
 
     def entity_options(self) -> dict:
         """Candidates for valves, pump and rain sensor (admin pickers)."""
+        from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+        ents, devs, areas = er.async_get(self.hass), dr.async_get(self.hass), ar.async_get(self.hass)
+
+        def area_of(eid: str) -> str:
+            e = ents.async_get(eid)
+            aid = e.area_id if e else None
+            if e and not aid and e.device_id:
+                d = devs.async_get(e.device_id)
+                aid = d.area_id if d else None
+            a = areas.async_get_area(aid) if aid else None
+            return a.name if a else ""
+
         valves, rain = [], []
         for st in self.hass.states.async_all():
             domain = st.domain
             name = st.attributes.get("friendly_name") or st.entity_id
             if domain in ("switch", "valve", "input_boolean"):
-                valves.append({"id": st.entity_id, "name": name})
+                valves.append({"id": st.entity_id, "name": name, "area": area_of(st.entity_id)})
             if domain == "weather" or (domain in ("binary_sensor", "sensor") and any(w in st.entity_id for w in ("rain", "reen", "moist", "wet", "precip"))):
                 rain.append({"id": st.entity_id, "name": name})
         return {"valves": sorted(valves, key=lambda x: x["name"].lower()), "rain": sorted(rain, key=lambda x: x["name"].lower())}

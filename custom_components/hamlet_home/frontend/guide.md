@@ -129,6 +129,7 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 **Irrigation**
 
 - The valves water one after another; the next one opens just before the previous one closes.
+- **Adding a valve (admin):** tap **Edit valves → + Add valve**, then type a few letters of the valve's switch – its name, room or entity id – and tap it in the list. Arrow keys and Enter work too.
 - Run all valves, one valve, or a program by hand, and tap **Stop** to end it.
 - **Rain delay** skips watering for the hours you choose. If a rain sensor is fitted, watering is skipped after rain by itself.
 - A valve you open by hand closes again by itself after its set time, so it can't be left running.
