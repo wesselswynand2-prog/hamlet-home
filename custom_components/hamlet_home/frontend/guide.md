@@ -19,6 +19,7 @@ Hamlet Home runs your solar, battery, geyser, pumps and devices from one page in
 | Geyser | Heating times, solar heating, temperature |
 | Devices | Heat pumps, heaters and other devices on a timer or solar |
 | Controls | Lights, gates, garage doors, aircons and plugs by room |
+| 🔔 Alarms | The bell at the top: pop-up and phone alarms you set up yourself |
 
 You only see the tabs your installer has set up. On a phone the tabs show icons only – tap one to open it.
 
@@ -240,6 +241,19 @@ The Controls tab lets you switch lights, gates, aircons and plugs, grouped by ro
 Rooms come from Home Assistant's Areas (**Settings → Areas**). A room appears once it has a control in it. When you add or edit a control you can pick its **Room** from all your areas, even one that has nothing in it yet.
 
 During a power outage, devices without power show **No power**. The pool pump, booster pump, irrigation valves, geyser and devices on the Devices tab are not on this tab, because the app runs them.
+
+## Alarms
+
+Tap the **bell** at the top right to set up alarms. When an alarm goes off, a red pop-up appears on whatever page you have open, the bell rings and shows a red dot, Home Assistant shows a notification, and the phones you tick get a push message.
+
+- **Switch on** the alarms you want and set the limit and for how long, for example *Too much load – above 7000 W for 2 min*.
+- Ready-made alarms: battery current or power too high, too much load, battery low, grid power off, geyser not hot enough by a certain time, booster pump tripped, inverter fault.
+- **+ Add an alarm** adds another one, or **Own alarm** for any sensor or switch (above, below, on, off or equals), for example *fridge temperature above 8 °C for 15 min*.
+- **Send to phones:** tick the phones (they appear once the Home Assistant app is installed and logged in), then **Send a test**.
+- Tap **OK, seen** to close the pop-up. The alarm stays on the bell until the problem clears by itself.
+- **Recent** shows the last alarms and when they cleared.
+
+Alarms greyed out need a sensor your installer hasn't set up yet.
 
 ## During load-shedding or a power outage
 

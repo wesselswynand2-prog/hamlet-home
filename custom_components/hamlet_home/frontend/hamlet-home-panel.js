@@ -54,6 +54,21 @@ const STYLE = `
 .helpbtn { background: transparent; border: 0; color: inherit; opacity: .8; cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex: none; }
 .helpbtn ha-icon { --mdc-icon-size: 24px; }
 .helpbtn:hover, .helpbtn[aria-pressed="true"] { opacity: 1; background: rgba(255,255,255,.15); }
+.bell { position: relative; }
+.bdot { position: absolute; top: 2px; right: 2px; min-width: 10px; height: 10px; padding: 0 3px; border-radius: 999px; background: #e34948; color: #fff; font-size: 9px; line-height: 10px; font-weight: 700; text-align: center; }
+.bell.ringing ha-icon { animation: ring 1.2s ease-in-out infinite; transform-origin: 50% 10%; }
+@keyframes ring { 0%, 50%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(14deg); } 20%, 40% { transform: rotate(-14deg); } }
+.apop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.apop[hidden] { display: none; }
+.apbox { background: var(--card); color: var(--primary-text-color); width: min(440px, 100%); border-radius: 16px; padding: 18px; box-shadow: 0 16px 48px rgba(0,0,0,.35); border-top: 6px solid #e34948; animation: pop .25s ease-out; }
+@keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
+.aphd { display: flex; align-items: center; gap: 10px; font-size: 18px; margin-bottom: 10px; }
+.aphd ha-icon { color: #e34948; --mdc-icon-size: 28px; animation: ring 1.2s ease-in-out infinite; }
+.apitem { border-left: 4px solid; padding: 6px 10px; margin: 8px 0; font-size: 14px; } .apitem div { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.apbtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.apb { font: inherit; font-size: 14px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--primary-text-color); cursor: pointer; }
+.apb.primary { background: #e34948; border-color: transparent; color: #fff; }
+@media (prefers-reduced-motion: reduce) { .bell.ringing ha-icon, .aphd ha-icon, .apbox { animation: none; } }
 @media (max-width: 560px) { .tabs button span { display: none; } .tabs button { padding: 0 12px; } }
 main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--ha-card-border-color, var(--line));
@@ -307,7 +322,7 @@ class HamletHomePanel extends HTMLElement {
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
     if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene, hamlet-home-property").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene, hamlet-home-property, hamlet-home-alarms").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -333,7 +348,10 @@ class HamletHomePanel extends HTMLElement {
     const root = this.shadowRoot;
     root.innerHTML = `<style>${STYLE}</style>
       <div class="toolbar"><span id="menu"></span><div class="title" id="apptitle">${esc(this._panel?.config?.title || "Hamlet Home")}</div><div class="tabs" role="tablist" id="tabs"></div>
+        <button class="helpbtn bell" id="bellbtn" aria-label="Alarms" title="Alarms"><ha-icon icon="mdi:bell-outline"></ha-icon><span class="bdot" id="bdot" hidden></span></button>
         <button class="helpbtn" id="helpbtn" aria-label="Help" title="Help"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button></div>
+      <div class="apop" id="apop" hidden role="alertdialog" aria-modal="true" aria-labelledby="apoptitle"><div class="apbox"><div class="aphd"><ha-icon icon="mdi:alarm-light"></ha-icon><b id="apoptitle">Alarm</b></div>
+        <div id="apoplist"></div><div class="apbtns"><button class="apb" id="apopen">Alarm settings</button><button class="apb primary" id="apok">OK, seen</button></div></div></div>
       <main id="main"><div class="loading">Loading…</div></main>
       <footer class="foot"><button class="footbtn" id="footbtn" title="Help and contact details">
         <span>Installed and supported by</span><img src="/hamlet_home_static/logo.png?v=${VERSION}" alt="Hamlet Elektries" height="26" loading="lazy"></button></footer>`;
@@ -349,6 +367,9 @@ class HamletHomePanel extends HTMLElement {
       this._buildTab();
     });
     root.getElementById("helpbtn").addEventListener("click", () => { this._tab = "help"; this._buildTab(); });
+    root.getElementById("bellbtn").addEventListener("click", () => { this._tab = "alarms"; this._buildTab(); });
+    root.getElementById("apok").addEventListener("click", () => this._ackAlarms());
+    root.getElementById("apopen").addEventListener("click", () => { this._ackAlarms(); this._tab = "alarms"; this._buildTab(); });
     root.getElementById("footbtn").addEventListener("click", () => { this._tab = "help"; this._buildTab(); window.scrollTo({ top: 0, behavior: "smooth" }); });
     this.shadowRoot.addEventListener("hamlet-help-contact", (ev) => { this._helpContact = ev.detail; });
     this._main.addEventListener("click", (ev) => this._click(ev));
@@ -395,7 +416,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
     if ((this._devices || []).some((d) => d.area !== "pool") || this._isAdmin) tabs.push(["devices", "mdi:power-plug", "Devices"]);
     tabs.push(["controls", "mdi:light-switch", "Controls"]);
-    if (!tabs.some((t) => t[0] === this._tab) && this._tab !== "help") this._tab = "energy";
+    if (!tabs.some((t) => t[0] === this._tab) && this._tab !== "help" && this._tab !== "alarms") this._tab = "energy";
     this.shadowRoot.getElementById("tabs").innerHTML = tabs.length < 2 ? "" : tabs.map(([id, icon, label]) =>
       `<button role="tab" data-tab="${id}" aria-selected="${this._tab === id}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("");
   }
@@ -405,6 +426,7 @@ class HamletHomePanel extends HTMLElement {
     this._ro?.disconnect();
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === this._tab));
     this.shadowRoot.getElementById("helpbtn")?.setAttribute("aria-pressed", this._tab === "help");
+    this.shadowRoot.getElementById("bellbtn")?.setAttribute("aria-pressed", this._tab === "alarms");
     if (this._tab === "geyser") return this._buildGeyser();
     if (this._tab === "water") return this._buildWater();
     if (this._tab === "pool") return this._buildPool();
@@ -414,6 +436,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._tab === "costs") return this._buildModule("costs");
     if (this._tab === "devices") return this._buildModule("devices");
     if (this._tab === "help") return this._buildModule("help");
+    if (this._tab === "alarms") return this._buildModule("alarms");
     this._main.innerHTML = `
       <div class="card note" id="note" hidden style="grid-column:1/-1"></div>
       <div id="updbar" style="display:contents"></div>
@@ -457,6 +480,29 @@ class HamletHomePanel extends HTMLElement {
     el.setAttribute("section", "solar");
     el.hass = this._hass;
     holder.appendChild(el);
+  }
+
+  // alarms: red dot on the bell, and a pop-up for anything not yet seen (on every tab)
+  _renderAlarms(active) {
+    const $ = (id) => this.shadowRoot.getElementById(id);
+    const list = active || [];
+    const dot = $("bdot"); if (!dot) return;
+    dot.hidden = !list.length;
+    dot.textContent = list.length > 1 ? String(list.length) : "";
+    $("bellbtn").classList.toggle("ringing", list.some((a) => !a.acked));
+    const fresh = list.filter((a) => !a.acked);
+    const pop = $("apop");
+    if (!fresh.length) { pop.hidden = true; return; }
+    const col = { critical: "#e34948", warning: "#eda100", info: "#2a78d6" };
+    $("apoptitle").textContent = fresh.length > 1 ? `${fresh.length} alarms` : fresh[0].name;
+    const html = fresh.map((a) => `<div class="apitem" style="border-color:${col[a.level] || col.info}"><b>${esc(a.name)}</b><div>${esc(a.text)}</div></div>`).join("");
+    if (this._apopHtml !== html) { this._apopHtml = html; $("apoplist").innerHTML = html; }
+    pop.hidden = false;
+  }
+
+  async _ackAlarms() {
+    this.shadowRoot.getElementById("apop").hidden = true;
+    try { const r = await this._hass.callWS({ type: `${DOMAIN}/alarms_ack` }); this._renderAlarms(r.active); } catch (e) { /* ignore */ }
   }
 
   async _buildModule(name) {
@@ -565,11 +611,12 @@ class HamletHomePanel extends HTMLElement {
     if (s.solar_loads !== undefined) this._solar = s.solar_loads;
     if (s.irrigation !== undefined) this._irr = s.irrigation;
     if (s.devices !== undefined) this._devices = s.devices;
+    if (s.alarms) { this._renderAlarms(s.alarms.active); if (this._tab === "alarms") this.shadowRoot.querySelector("hamlet-home-alarms")?.update?.(s); }
     if (this._tab === "water") return this._renderWater();
     if (this._tab === "property") return this._renderProperty();
     if (this._tab === "pool") { this._renderWater(); const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
     if (this._tab === "devices") { const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
-    if (this._tab === "weather" || this._tab === "costs" || this._tab === "help") return;
+    if (this._tab === "weather" || this._tab === "costs" || this._tab === "help" || this._tab === "alarms") return;
     if (this._tab === "controls") {
       const c = this.shadowRoot.querySelector("hamlet-home-controls");
       if (c) c.gridAvailable = s.live?.grid_available;

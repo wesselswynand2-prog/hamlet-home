@@ -20,6 +20,7 @@ from .solar_manager import SolarManager
 from .irrigation_controller import IrrigationController
 from .controls_manager import ControlsManager
 from .devices_controller import DevicesController
+from .alarms_controller import AlarmsController
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -32,7 +33,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                     ws_irrigation_action, ws_irrigation_settings, ws_irrigation_entities, ws_battery_settings,
                     ws_controls, ws_controls_settings, ws_controls_pulse, ws_weather, ws_weather_settings,
                     ws_costs, ws_costs_settings,
-                    ws_devices_save, ws_devices_remove, ws_devices_entities, ws_update_check, ws_help_contact):
+                    ws_devices_save, ws_devices_remove, ws_devices_entities, ws_update_check, ws_help_contact,
+                    ws_alarms, ws_alarms_save, ws_alarms_ack, ws_alarms_test):
         websocket_api.async_register_command(hass, handler)
     return True
 
@@ -50,12 +52,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]["solar"] = solar
     ctrl = ControlsManager(hass, entry, water, irrigation)
     hass.data[DOMAIN]["controls"] = ctrl
+    alarms = AlarmsController(hass, entry, notify=controller._notify)
+    hass.data[DOMAIN]["alarms"] = alarms
     await controller.async_start()
     await irrigation.async_start()
     await water.async_start()
     await devices.async_start()
     await solar.async_start()
     await ctrl.async_start()
+    await alarms.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await _async_register_panel(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
@@ -75,6 +80,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hass.data[DOMAIN].pop("water").async_stop()
         await hass.data[DOMAIN].pop("irrigation").async_stop()
         await hass.data[DOMAIN].pop("devices").async_stop()
+        if (al := hass.data[DOMAIN].pop("alarms", None)) is not None:
+            await al.async_stop()
         hass.data[DOMAIN].pop("updates", None)
         hass.data[DOMAIN].pop("controls", None)
         if hass.data[DOMAIN].pop("_panel", False):
@@ -130,6 +137,7 @@ async def ws_state(hass, connection, msg):
                                            "solar_loads": hass.data[DOMAIN]["solar"].snapshot(),
                                            "irrigation": hass.data[DOMAIN]["irrigation"].snapshot(),
                                            "devices": hass.data[DOMAIN]["devices"].snapshot(),
+                                           "alarms": hass.data[DOMAIN]["alarms"].snapshot(),
                                            "is_admin": connection.user.is_admin,
                                            "geyser_available": geyser_available,
                                            "geyser_version": geyser_version,
@@ -152,7 +160,8 @@ def ws_subscribe(hass, connection, msg):
         connection.send_message(websocket_api.event_message(msg["id"], {**c.snapshot(), "water": hass.data[DOMAIN]["water"].snapshot(),
                                                                          "solar_loads": hass.data[DOMAIN]["solar"].snapshot(),
                                                                          "irrigation": hass.data[DOMAIN]["irrigation"].snapshot(),
-                                                                         "devices": hass.data[DOMAIN]["devices"].snapshot()}))
+                                                                         "devices": hass.data[DOMAIN]["devices"].snapshot(),
+                                                                         "alarms": hass.data[DOMAIN]["alarms"].snapshot()}))
 
     connection.subscriptions[msg["id"]] = c.add_listener(forward)
     connection.send_result(msg["id"])
@@ -530,3 +539,45 @@ async def ws_help_contact(hass, connection, msg):
         connection.send_error(msg["id"], "invalid", str(err))
         return
     connection.send_result(msg["id"], c.help_contact)
+
+
+# ------------------------------------------------------------------ alarms (clients may set them up)
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/alarms"})
+@websocket_api.async_response
+async def ws_alarms(hass, connection, msg):
+    if _controller(hass, connection, msg) is None:
+        return
+    connection.send_result(msg["id"], hass.data[DOMAIN]["alarms"].snapshot(full=True))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/alarms_save", vol.Required("rules"): list, vol.Optional("targets"): list})
+@websocket_api.async_response
+async def ws_alarms_save(hass, connection, msg):
+    if _controller(hass, connection, msg) is None:
+        return
+    a: AlarmsController = hass.data[DOMAIN]["alarms"]
+    try:
+        await a.async_save(msg["rules"], msg.get("targets"))
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], a.snapshot(full=True))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/alarms_ack", vol.Optional("alarm"): str})
+@websocket_api.async_response
+async def ws_alarms_ack(hass, connection, msg):
+    if _controller(hass, connection, msg) is None:
+        return
+    a: AlarmsController = hass.data[DOMAIN]["alarms"]
+    a.acknowledge(msg.get("alarm"))
+    connection.send_result(msg["id"], a.snapshot())
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/alarms_test"})
+@websocket_api.async_response
+async def ws_alarms_test(hass, connection, msg):
+    if _controller(hass, connection, msg) is None:
+        return
+    await hass.data[DOMAIN]["alarms"].async_test()
+    connection.send_result(msg["id"], {"ok": True})
