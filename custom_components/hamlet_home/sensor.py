@@ -21,6 +21,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         from .const import CONF_POOL_POWER, CONF_POOL_SWITCH, CONF_PUMP_HZ, CONF_PUMP_POWER, CONF_PUMP_SWITCH  # noqa: PLC0415
         if any(w.conf.get(k) for k in (CONF_PUMP_SWITCH, CONF_PUMP_POWER, CONF_PUMP_HZ)):
             entities += [PumpToday(c, w, "pump", "hours", "mdi:pump"), PumpToday(c, w, "pump", "starts", "mdi:counter")]
+        if w.conf.get("water_pressure") or w.settings.get("flow_sensor"):
+            entities += [WaterUse(c, w, "water_flow"), WaterUse(c, w, "water_today"), WaterUse(c, w, "water_total")]
         if any(w.conf.get(k) for k in (CONF_POOL_SWITCH, CONF_POOL_POWER)):
             entities.append(PumpToday(c, w, "pool", "hours", "mdi:pool"))
     if c.conf.get("battery_soc") and c.conf.get("battery_power"):
@@ -122,6 +124,41 @@ class PumpToday(_Base):
         if self.kind == "hours":
             return round(d.get("seconds", 0) / 3600, 3)
         return int(d.get("starts", 0))
+
+
+class WaterUse(_Base):
+    """Water from the booster pump: flow now (L/min), today (L) and a lifetime total (m³, for the Energy dashboard → Water)."""
+
+    def __init__(self, controller, water, key: str):
+        super().__init__(controller, key)
+        self.w = water
+        self._attr_unique_id = f"{controller.entry.entry_id}_{key}"
+        self._attr_translation_key = key
+        if key == "water_flow":
+            self._attr_device_class = SensorDeviceClass.VOLUME_FLOW_RATE
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement = "L/min"
+            self._attr_icon = "mdi:water-pump"
+            self._attr_suggested_display_precision = 1
+        else:
+            self._attr_device_class = SensorDeviceClass.WATER
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_native_unit_of_measurement = "L" if key == "water_today" else "m³"
+            self._attr_icon = "mdi:water"
+            self._attr_suggested_display_precision = 0 if key == "water_today" else 3
+
+    @property
+    def available(self) -> bool:
+        return bool(self.w.settings.get("flow_enabled")) and (self.key != "water_flow" or self.w.live.get("flow_lpm") is not None)
+
+    @property
+    def native_value(self):
+        if self.key == "water_flow":
+            return self.w.live.get("flow_lpm")
+        if self.key == "water_today":
+            from homeassistant.util import dt as dt_util  # noqa: PLC0415
+            return round(self.w.meter.days.get(dt_util.now().date().isoformat(), {}).get("l", 0.0), 1)
+        return round(self.w.meter.total_l / 1000, 3)
 
 
 class IrrigationStatus(_Base):

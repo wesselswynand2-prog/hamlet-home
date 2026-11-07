@@ -200,6 +200,15 @@
       },
       "battery_full_in": {
         "name": "Battery full in"
+      },
+      "water_flow": {
+        "name": "Water flow"
+      },
+      "water_today": {
+        "name": "Water used today"
+      },
+      "water_total": {
+        "name": "Water used total"
       }
     }
   }

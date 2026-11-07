@@ -2,6 +2,7 @@
 const DOMAIN = "hamlet_home";
 const VERSION = new URL(import.meta.url).searchParams.get("v") || String(Date.now());
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtL = (l) => (l === null || l === undefined ? "–" : l >= 10000 ? `${(l / 1000).toFixed(1)} kL` : l >= 1000 ? `${(l / 1000).toFixed(2)} kL` : `${Math.round(l)} L`);
 const num = (v) => (v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
 const fmtW = (w, signed = false) => {
   w = num(w); if (w === null) return "–";
@@ -197,6 +198,9 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .zname { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .zname .t { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zname .z2 { font-size: 12px; color: var(--muted); }
+.fcurve { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.fpt { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.fpt input, #wflowbody .ctl input { width: 76px; }
 .zdot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
 .zdot.on { background: var(--c-load); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-load) 25%, transparent); animation: pulse 1.6s infinite; }
 .zdot.na { background: var(--c-warn); }
@@ -1313,7 +1317,9 @@ Object.assign(HamletHomePanel.prototype, {
         <div class="legend" style="margin:0 0 6px"><span class="key"><i style="background:var(--c-load)"></i>Pressure (bar)</span><span class="key"><i style="background:var(--accent);opacity:.25"></i>Booster pump running</span></div>
         <div class="chartwrap" id="wchart"></div></section>
       <section class="card" id="wprot" hidden><h2>Protection &amp; alerts <span class="sub">admin only</span></h2><div id="wprotbody"></div>
-        <div class="actions"><span class="msg" id="wprotmsg"></span><button class="btn primary" data-w="protsave">Save</button></div></section>`;
+        <div class="actions"><span class="msg" id="wprotmsg"></span><button class="btn primary" data-w="protsave">Save</button></div></section>
+      <section class="card" id="wflow" hidden><h2>Water use <span class="sub">admin only · how the litres are worked out</span></h2><div id="wflowbody"></div>
+        <div class="actions"><span class="msg" id="wflowmsg"></span><button class="btn primary" data-w="flowsave">Save</button></div></section>`;
     this._wShown = {};
     this._ro = new ResizeObserver(() => this._renderPressure());
     this._ro.observe(this.shadowRoot.getElementById("wchart"));
@@ -1390,6 +1396,7 @@ Object.assign(HamletHomePanel.prototype, {
     hide("wpump", !hasPump);
     hide("wchartcard", !f.water_pressure);
     hide("wprot", !this._isAdmin || !hasPump);
+    hide("wflow", !this._isAdmin || !hasPump);
 
     // alarm
     const al = $("walarm");
@@ -1431,6 +1438,12 @@ Object.assign(HamletHomePanel.prototype, {
       const mins = (sec) => (sec >= 3600 ? `${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min` : `${Math.round((sec || 0) / 60)} min`);
       const startsPerHour = (t.starts || 0) / Math.max(new Date().getHours() + new Date().getMinutes() / 60, 1);
       tiles.push(["Run time today", mins(t.seconds)], ["Starts today", `${t.starts || 0}`], ["Longest run", mins(t.longest)]);
+      const u = w.usage;
+      if (u) {
+        const irrToday = Math.max(u.today - u.house_today, 0);
+        tiles.push(["Flow now", L.flow_lpm === null || L.flow_lpm === undefined ? "–" : `${L.flow_lpm.toFixed(1)} L/min`], ["Water today", fmtL(u.today)],
+          ["House today", fmtL(u.house_today)], ["Irrigation today", fmtL(irrToday)], ["This month", fmtL(u.month)], ["Total", `${u.total_m3.toFixed(1)} m³`]);
+      }
       this._setHTML($("wpumpbody"), `<div class="${gauge ? "pgrid" : ""}">${gauge}<div>
           <div class="row2"><span class="badge ${badge[2] ? "pulse" : ""}" style="--bc:${badge[0]}"><span class="dot"></span>${badge[1]}</span>
             ${f.pump_switch && !w.tripped ? `<button class="btn ${L.pump_switch ? "" : "primary"}" data-w="${L.pump_switch ? "pumpoff" : "pumpon"}" style="margin-left:auto">${L.pump_switch ? "Switch off" : "Switch on"}</button>` : ""}</div>
@@ -1456,6 +1469,39 @@ Object.assign(HamletHomePanel.prototype, {
       if (f.pool_switch) this._renderPoolSched();
     }
     this._renderProt();
+    this._renderFlow();
+  },
+
+  _renderFlow(force) {
+    const el = this.shadowRoot.getElementById("wflowbody"); if (!el || !this._isAdmin || !this._water) return;
+    const st = this._water.settings, f = this._water.features || {};
+    const key = JSON.stringify([st.flow_enabled, st.flow_sensor, st.flow_curve, st.flow_rated_hz, st.flow_min_hz, st.flow_suction_m, st.flow_cal]);
+    const a = this.shadowRoot.activeElement;
+    if (!force && ((a && a.closest && a.closest("#wflowbody")) || this._wShown.flow === key)) return;
+    this._wShown.flow = key;
+    if (force !== "keep") this._flowCurve = JSON.parse(JSON.stringify(st.flow_curve || []));
+    const fld = (k, label, hint, unit, step, v = st[k]) => `<div class="field"><label for="wf-${k}">${label}${hint ? `<span class="hint">${hint}</span>` : ""}</label><span class="ctl"><input id="wf-${k}" type="number" data-wf="${k}" value="${v}" step="${step}">${unit}</span></div>`;
+    const lpm = this._water.live?.flow_lpm;
+    el.innerHTML = `
+      <div class="field"><label for="wf-on">Count the water<span class="hint">litres per day for the house and for every irrigation valve${f.water_pressure ? "" : " · needs a pressure sensor or a flow meter"}</span></label><span class="switch"><input id="wf-on" type="checkbox" data-wf="flow_enabled" ${st.flow_enabled ? "checked" : ""}><span></span></span></div>
+      <div class="field"><label for="wf-flow_sensor">Flow meter (optional)<span class="hint">a real water meter sensor is used instead of the pump curve · L/min, L/h or m³/h</span></label><input id="wf-flow_sensor" type="text" data-wf="flow_sensor" value="${esc(st.flow_sensor || "")}" placeholder="sensor.water_flow"></div>
+      <div ${st.flow_sensor ? "hidden" : ""}>
+        <div class="sub2">Pump curve <span class="muted small">from the pump's datasheet, at its rated frequency – default DAB K 35/40 T</span></div>
+        <div class="fcurve">${this._flowCurve.map((p, i) => `<div class="fpt" data-ci="${i}"><span class="ctl"><input type="number" data-cq="0" value="${p[0]}" step="0.1" min="0" aria-label="Flow point ${i + 1}">m³/h</span><span class="ctl"><input type="number" data-cq="1" value="${p[1]}" step="0.5" min="0" aria-label="Head point ${i + 1}">m</span><button class="iconbtn" data-w="cdel" aria-label="Remove point"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`).join("")}</div>
+        <div class="actions" style="justify-content:flex-start"><button class="btn" data-w="cadd">+ Add point</button><button class="btn" data-w="cdef">DAB K 35/40 T</button></div>
+        <div class="cols2"><div>
+          ${fld("flow_rated_hz", "Rated frequency", "the curve's frequency", "Hz", 1)}
+          ${fld("flow_min_hz", "Stopped below", "", "Hz", 1)}
+        </div><div>
+          ${fld("flow_suction_m", "Suction lift", "+ m when the pump lifts from a tank below it, − when the inlet is under pressure", "m", 0.5)}
+          ${fld("flow_cal", "Correction factor", "from a bucket test – 1 = datasheet", "×", 0.01)}
+        </div></div>
+        <div class="sub2">Bucket test</div>
+        <p class="muted small" style="margin:2px 0 8px">Open a tap, fill a bucket of known size and time it. Do it while only that tap runs. Now: <b>${lpm === null || lpm === undefined ? "pump not running" : `${lpm.toFixed(1)} L/min estimated`}</b>.</p>
+        <div class="row2" style="flex-wrap:wrap;gap:8px"><span class="ctl"><input type="number" id="wf-bl" min="0" step="0.5" placeholder="20">litres in</span><span class="ctl"><input type="number" id="wf-bs" min="0" step="0.5" placeholder="30">seconds</span><button class="btn" data-w="bucket">Work out the factor</button></div>
+      </div>
+      <p class="muted small" style="margin:10px 0 0">Adds the sensors <b>Water flow</b>, <b>Water used today</b> and <b>Water used total</b> – put the total on Home Assistant's Energy dashboard under Water. When more valves are open together their water is shared equally; with no valve open it counts as house.</p>`;
+    el.querySelectorAll(".fpt input").forEach((inp) => inp.addEventListener("input", () => { this._flowCurve[Number(inp.closest(".fpt").dataset.ci)][Number(inp.dataset.cq)] = Number(inp.value); }));
   },
 
   _renderPoolSched(force) {
@@ -1565,6 +1611,24 @@ Object.assign(HamletHomePanel.prototype, {
         this.shadowRoot.activeElement?.blur?.();
         this._wShown.psolar = null;
         if (await call({ type: `${DOMAIN}/water_settings`, settings }, $("psmsg"))) { const m = $("psmsg"); if (m) { m.textContent = "Saved"; m.className = "msg ok"; } }
+        return;
+      }
+      case "cadd": { const c = this._flowCurve, l = c[c.length - 1] || [0, 40]; c.push([+(l[0] + 1).toFixed(1), Math.max(l[1] - 5, 0)]); return this._renderFlow("keep"); }
+      case "cdel": this._flowCurve.splice(Number(b.closest(".fpt").dataset.ci), 1); return this._renderFlow("keep");
+      case "cdef": this._flowCurve = [[0, 43.5], [1.2, 41.5], [1.8, 40], [2.4, 38], [3.6, 33], [4.8, 23.5]]; return this._renderFlow("keep");
+      case "bucket": {
+        const lit = Number($("wf-bl").value), sec = Number($("wf-bs").value), est = this._water.live?.flow_lpm, m = $("wflowmsg");
+        if (!(lit > 0 && sec > 0)) { m.textContent = "Fill in litres and seconds"; m.className = "msg err"; return; }
+        if (!(est > 0)) { m.textContent = "Do the test while the pump runs and Count the water is on"; m.className = "msg err"; return; }
+        const real = lit / sec * 60, cal = Math.min(Math.max(Number(this._water.settings.flow_cal || 1) * real / est, 0.2), 5);
+        $("wf-flow_cal").value = cal.toFixed(2); m.textContent = `Measured ${real.toFixed(1)} L/min – factor ${cal.toFixed(2)}, tap Save`; m.className = "msg ok"; return;
+      }
+      case "flowsave": {
+        const settings = { flow_curve: this._flowCurve };
+        this.shadowRoot.querySelectorAll("[data-wf]").forEach((inp) => { settings[inp.dataset.wf] = inp.type === "checkbox" ? inp.checked : inp.type === "text" ? inp.value.trim() : Number(inp.value); });
+        this.shadowRoot.activeElement?.blur?.();
+        this._wShown.flow = null;
+        if (await call({ type: `${DOMAIN}/water_settings`, settings }, $("wflowmsg"))) { const m = $("wflowmsg"); m.textContent = "Saved"; m.className = "msg ok"; this._renderFlow(true); }
         return;
       }
       case "protsave": {
@@ -1881,7 +1945,9 @@ Object.assign(HamletHomePanel.prototype, {
     this.shadowRoot.querySelectorAll("[data-zlive]").forEach((el) => {
       const z = ir.zones.find((x) => x.id === el.dataset.zlive); if (!z) return;
       el.querySelector(".zdot").className = `zdot ${z.on ? "on" : z.available ? "" : "na"}`;
-      el.querySelector(".z2").textContent = z.on ? "open" : !z.available ? "valve unavailable" : z.last ? `last ${fmtT(z.last)}` : "not watered yet";
+      const zu = this._water?.usage?.zones?.[z.id];
+      const use = zu ? (z.on ? ` · ${fmtL(zu.last || 0)} so far` : ` · today ${fmtL(zu.today)} · month ${fmtL(zu.month)}${zu.last ? ` · last run ${fmtL(zu.last)}` : ""}`) : "";
+      el.querySelector(".z2").textContent = (z.on ? "open" : !z.available ? "valve unavailable" : z.last ? `last ${fmtT(z.last)}` : "not watered yet") + use;
     });
     const log = $("irrlog");
     if (log) this._setHTML(log, (ir.today || []).length ? (ir.today.slice().reverse().map((e) => `<span>${new Date(e.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span><span>${esc(e.name)} · ${esc(e.by)}</span><span>${Math.round(e.secs / 60)} min</span>`).join("")) : `<span class="muted">Nothing yet today</span>`);

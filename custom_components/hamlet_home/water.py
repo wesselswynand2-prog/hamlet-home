@@ -30,6 +30,14 @@ DEFAULT_WATER_SETTINGS: dict = {
     "low_pressure_bar": 0.0,     # alert when pressure stays below this (0 = off)
     "notify_service": "",        # e.g. notify.mobile_app_wynand – persistent notification always
     "running_watts": 20,         # power above this counts as running
+    # water use (estimated from the pump curve, or a flow meter)
+    "flow_enabled": False,
+    "flow_sensor": "",           # a real flow meter (L/min, m³/h …) – used instead of the curve
+    "flow_curve": [[0, 43.5], [1.2, 41.5], [1.8, 40], [2.4, 38], [3.6, 33], [4.8, 23.5]],  # [m³/h, head m] at rated Hz – DAB K 35/40 T
+    "flow_rated_hz": 50,
+    "flow_min_hz": 20,           # below this the pump counts as stopped
+    "flow_suction_m": 0.0,       # + metres if the pump lifts from a tank below it, - if the inlet is pressurised
+    "flow_cal": 1.0,             # correction from a bucket test
 }
 USER_KEYS = {"pool_mode", "pool_schedules", "pool_solar_start_w", "pool_solar_keep_w", "pool_hours",
              "pool_stop_deficit_min", "pool_stop_discharge_min", "pool_discharge_w"}
@@ -280,6 +288,28 @@ def validate_water_settings(new: dict, admin: bool) -> dict:
             if value not in POOL_MODES:
                 raise ValueError("Unknown pool mode")
             clean[key] = value
+        elif key == "flow_curve":
+            clean[key] = validate_curve(value)
+        elif key == "flow_sensor":
+            value = str(value or "").strip()
+            if value and not value.startswith(("sensor.", "input_number.", "number.")):
+                raise ValueError("The flow meter must be a sensor")
+            clean[key] = value
+        elif key == "flow_suction_m":
+            v = float(value)
+            if not -50 <= v <= 100:
+                raise ValueError("Suction lift must be -50 … 100 m")
+            clean[key] = v
+        elif key == "flow_cal":
+            v = float(value)
+            if not 0.2 <= v <= 5:
+                raise ValueError("Correction factor must be 0.2 … 5")
+            clean[key] = round(v, 3)
+        elif key in ("flow_rated_hz", "flow_min_hz"):
+            v = float(value)
+            if not 0 <= v <= 120:
+                raise ValueError("Frequency must be 0 … 120 Hz")
+            clean[key] = v
         elif key == "notify_service":
             value = str(value or "").strip()
             if value and not value.startswith("notify."):
@@ -293,3 +323,98 @@ def validate_water_settings(new: dict, admin: bool) -> dict:
                 raise ValueError(f"{key} out of range")
             clean[key] = v
     return clean
+
+
+# ----------------------------------------------------------------- water use
+def validate_curve(points) -> list[list[float]]:
+    """Pump curve as [[flow m³/h, head m], …] – flow rising, head falling."""
+    out = []
+    for pt in points or []:
+        q, h = float(pt[0]), float(pt[1])
+        if not (0 <= q <= 500 and 0 <= h <= 1000):
+            raise ValueError("Curve points: flow 0–500 m³/h, head 0–1000 m")
+        out.append([q, h])
+    out.sort(key=lambda x: x[0])
+    if len(out) < 2:
+        raise ValueError("The pump curve needs at least 2 points")
+    for a, b in zip(out, out[1:]):
+        if b[0] == a[0] or b[1] > a[1]:
+            raise ValueError("Pump curve: each point needs more flow and the same or less head than the one before")
+    return out
+
+
+def estimate_flow(hz: float | None, bar: float | None, curve: list, rated_hz: float = 50, min_hz: float = 20,
+                  suction_m: float = 0.0, cal: float = 1.0) -> float | None:
+    """Flow in m³/h from pump speed and pressure using the affinity laws on the datasheet curve.
+
+    Head scales with speed², flow with speed: at speed ratio r the measured head H corresponds to H/r² on the
+    rated-speed curve; read the flow there and scale it back by r. None = can't tell (no pressure)."""
+    if bar is None or hz is None:
+        return None
+    if hz < min_hz or hz <= 0:
+        return 0.0
+    head = bar * 10.197 + suction_m
+    r = hz / (rated_hz or 50)
+    h50 = head / (r * r)
+    q = [p[0] for p in curve]
+    h = [p[1] for p in curve]
+    if h50 >= h[0]:
+        return 0.0           # pressure above shut-off head: nothing flows
+    if h50 <= h[-1]:
+        return round(q[-1] * r * cal, 4)
+    for i in range(1, len(h)):
+        if h50 >= h[i]:
+            q50 = q[i - 1] + (h[i - 1] - h50) / (h[i - 1] - h[i]) * (q[i] - q[i - 1])
+            return round(q50 * r * cal, 4)
+    return 0.0
+
+
+FLOW_UNITS = {"m³/h": 1.0, "m3/h": 1.0, "L/min": 0.06, "l/min": 0.06, "L/h": 0.001, "l/h": 0.001, "L/s": 3.6, "l/s": 3.6,
+              "gal/min": 0.227125, "ft³/min": 1.699011}
+
+
+@dataclass
+class WaterMeter:
+    """Adds up litres per day: total, per irrigation valve and 'house' (no valve open), plus a lifetime total."""
+    days: dict[str, dict] = field(default_factory=dict)   # date -> {"l": L, "zones": {zid: L}, "house": L}
+    total_l: float = 0.0
+    last: dict[str, dict] = field(default_factory=dict)   # zid -> {"l": L of its latest run, "at": iso}
+    _t: datetime | None = None
+    _q: float = 0.0               # m³/h at _t
+    _zones: tuple = ()
+    _running: set = field(default_factory=set)
+
+    def update(self, t: datetime, flow_m3h: float | None, zones_open: tuple, max_gap: float = 300) -> None:
+        """Left-Riemann: the flow and open valves seen at the previous update count until now."""
+        if self._t is not None and t > self._t and self._q > 0:
+            secs = min((t - self._t).total_seconds(), max_gap)
+            litres = self._q * 1000 * secs / 3600
+            self._add(self._t, litres, self._zones)
+        for z in zones_open:
+            if z not in self._running:          # a new run starts at zero
+                self.last[z] = {"l": 0.0, "at": t.isoformat()}
+        self._running = set(zones_open)
+        self._t, self._q, self._zones = t, max(flow_m3h or 0.0, 0.0), tuple(zones_open)
+
+    def _add(self, t: datetime, litres: float, zones: tuple) -> None:
+        d = self.days.setdefault(t.date().isoformat(), {"l": 0.0, "zones": {}, "house": 0.0})
+        d["l"] += litres
+        self.total_l += litres
+        if zones:
+            share = litres / len(zones)
+            for z in zones:
+                d["zones"][z] = d["zones"].get(z, 0.0) + share
+                if z in self.last:
+                    self.last[z]["l"] += share
+        else:
+            d["house"] += litres
+
+    def period(self, first_day: str, last_day: str) -> dict:
+        out = {"l": 0.0, "house": 0.0, "zones": {}}
+        for day, d in self.days.items():
+            if first_day <= day <= last_day:
+                out["l"] += d["l"]
+                out["house"] += d.get("house", 0.0)
+                for z, v in d.get("zones", {}).items():
+                    out["zones"][z] = out["zones"].get(z, 0.0) + v
+        return out

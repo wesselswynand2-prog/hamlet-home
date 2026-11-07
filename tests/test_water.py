@@ -97,3 +97,40 @@ def test_pool_solar_mode():
     on, why = water.pool_desired("solar", sch, T0.replace(hour=18), True, "", 1, 6)
     assert not on and "Outside solar hours" in why
     assert water.pool_solar_wants([], noon, 0, 0) == (True, "")   # no hours set -> any time
+
+
+def test_flow_estimate_from_curve():
+    c = water.DEFAULT_WATER_SETTINGS["flow_curve"]
+    assert water.estimate_flow(50, 3.5, c) == 2.9545               # 35.7 m head on the 50 Hz curve
+    assert water.estimate_flow(50, 4.5, c) == 0.0                  # above shut-off head: nothing flows
+    assert water.estimate_flow(15, 2.0, c) == 0.0                  # below the minimum frequency
+    assert water.estimate_flow(50, 1.0, c) == 4.8                  # off the end of the curve: max flow
+    assert water.estimate_flow(40, 2.5, c) == 1.4803               # affinity laws at 40 Hz
+    assert water.estimate_flow(50, None, c) is None
+    assert water.estimate_flow(50, 3.5, c, cal=1.1) == round(2.9545 * 1.1, 4) or abs(water.estimate_flow(50, 3.5, c, cal=1.1) - 3.25) < 0.01
+
+
+def test_flow_settings_validation():
+    assert water.validate_water_settings({"flow_curve": [[2, 30], [0, 40]]}, True)["flow_curve"] == [[0, 40], [2, 30]]
+    for bad in ({"flow_curve": [[0, 40]]}, {"flow_curve": [[0, 30], [2, 40]]}, {"flow_cal": 9}, {"flow_sensor": "switch.x"}):
+        try:
+            water.validate_water_settings(bad, True)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+
+
+def test_water_meter_per_valve_and_house():
+    m = water.WaterMeter()
+    m.update(T0, 1.2, ("roses",))                                 # 20 L/min
+    m.update(T0 + timedelta(minutes=5), 1.2, ("roses",))
+    m.update(T0 + timedelta(minutes=10), 1.2, ("roses", "lawn"))  # 200 L on roses
+    m.update(T0 + timedelta(minutes=11), 1.2, ())                 # 10 L each while both open
+    m.update(T0 + timedelta(minutes=12), 0.0, ())                 # 20 L house
+    d = m.days[T0.date().isoformat()]
+    assert round(d["l"]) == 240 and round(d["zones"]["roses"]) == 210 and round(d["zones"]["lawn"]) == 10 and round(d["house"]) == 20
+    assert round(m.last["roses"]["l"]) == 210 and round(m.total_l) == 240
+    m.update(T0 + timedelta(hours=5), 1.2, ("roses",))              # long gap with no flow: nothing added
+    assert round(m.total_l) == 240 and m.last["roses"]["l"] == 0   # a new run starts at zero
+    p = m.period(T0.date().isoformat(), T0.date().isoformat())
+    assert round(p["l"]) == 240 and round(p["zones"]["roses"]) == 210

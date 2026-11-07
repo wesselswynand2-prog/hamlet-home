@@ -51,6 +51,7 @@ class WaterController:
         self.pump = water.RunCounter()
         self.pool = water.RunCounter()
         self.buckets = water.PressureBuckets()
+        self.meter = water.WaterMeter()
         self.live: dict[str, Any] = {}
         self.pool_reason = ""
         self._pool_last_desired: bool | None = None
@@ -76,6 +77,8 @@ class WaterController:
         self.pump.days = data.get("pump_days", {})
         self.pool.days = data.get("pool_days", {})
         self.buckets.data = {d: {int(k): v for k, v in slots.items()} for d, slots in data.get("buckets", {}).items()}
+        m = data.get("meter") or {}
+        self.meter.days, self.meter.total_l, self.meter.last = m.get("days", {}), float(m.get("total_l", 0.0)), m.get("last", {})
         g = data.get("guard", {})
         if g.get("tripped"):
             self.guard.tripped = True
@@ -100,9 +103,12 @@ class WaterController:
         self.pump.days = {d: v for d, v in self.pump.days.items() if d >= cutoff}
         self.pool.days = {d: v for d, v in self.pool.days.items() if d >= cutoff}
         self.buckets.data = {d: v for d, v in self.buckets.data.items() if d in keep}
+        mcut = (today - timedelta(days=400)).isoformat()
+        self.meter.days = {d: v for d, v in self.meter.days.items() if d >= mcut}
         return {
             "settings": self.settings, "pump_days": self.pump.days, "pool_days": self.pool.days,
             "buckets": {d: {str(k): v for k, v in slots.items()} for d, slots in self.buckets.data.items()},
+            "meter": {"days": self.meter.days, "total_l": self.meter.total_l, "last": self.meter.last},
             "guard": {"tripped": self.guard.tripped, "tripped_at": self.guard.tripped_at.isoformat() if self.guard.tripped_at else None},
         }
 
@@ -157,6 +163,35 @@ class WaterController:
         live["pool_running"] = water.is_running(pool_sw, pool_w, None, s["running_watts"]) if (pool_sw is not None or pool_w is not None) else None
         return live
 
+    def _flow(self, live: dict) -> float | None:
+        """Water flow now in m³/h: the flow meter if there is one, else the pump curve."""
+        s = self.settings
+        if s.get("flow_sensor"):
+            st = self.hass.states.get(s["flow_sensor"])
+            if st is None or st.state in BAD:
+                return None
+            try:
+                v = float(st.state)
+            except ValueError:
+                return None
+            return max(v * water.FLOW_UNITS.get((st.attributes.get("unit_of_measurement") or "").strip(), 0.06), 0.0)
+        if live["pump_running"] is False:
+            return 0.0
+        hz = live["pump_hz"]
+        if hz is None and live["pump_running"]:      # fixed-speed pump: runs at its rated frequency
+            hz = float(s["flow_rated_hz"])
+        return water.estimate_flow(hz, live["pressure"], s["flow_curve"], float(s["flow_rated_hz"]), float(s["flow_min_hz"]),
+                                   float(s["flow_suction_m"]), float(s["flow_cal"]))
+
+    def _open_zones(self) -> tuple:
+        irr = self.hass.data.get(DOMAIN, {}).get("irrigation")
+        out = []
+        for z in getattr(irr, "zones", None) or []:
+            st = self.hass.states.get(z.get("entity") or "")
+            if st is not None and st.state in ("on", "open", "opening"):
+                out.append(z["id"])
+        return tuple(out)
+
     # ---------------------------------------------------------------- control
     async def _on_change(self, event: Event) -> None:
         await self.async_evaluate()
@@ -205,6 +240,11 @@ class WaterController:
         self.pump.update(now, bool(live["pump_running"]) if live["pump_running"] is not None else None)
         self.pool.update(now, bool(live["pool_running"]) if live["pool_running"] is not None else None)
         self.buckets.set(now, live["pressure"], bool(live["pump_running"]), bool(live["pool_running"]))
+        if self.settings.get("flow_enabled"):
+            q = self._flow(live)
+            live["flow_m3h"] = q
+            live["flow_lpm"] = round(q * 1000 / 60, 1) if q is not None else None
+            self.meter.update(now, q, self._open_zones())
         self.live = live
         self._notify_ui()
 
@@ -304,8 +344,27 @@ class WaterController:
             "settings": self.settings,
             "features": {k: bool(c.get(k)) for k in WATER_KEYS},
         }
+        if self.settings.get("flow_enabled"):
+            snap["usage"] = self.usage()
         if history:
             y = (today - timedelta(days=1)).isoformat()
             snap["rows"] = {"today": self.buckets.rows(t), "yesterday": self.buckets.rows(y)}
+            if self.settings.get("flow_enabled"):
+                snap["usage_week"] = [{"day": (today - timedelta(days=n)).isoformat(), "l": round(self.meter.days.get((today - timedelta(days=n)).isoformat(), {}).get("l", 0.0), 1)} for n in range(6, -1, -1)]
             snap["pump_week"] = [{"day": (today - timedelta(days=n)).isoformat(), **self.pump.days.get((today - timedelta(days=n)).isoformat(), {})} for n in range(6, -1, -1)]
         return snap
+
+    def usage(self) -> dict:
+        """Litres used: today, this month, per valve, house, and the lifetime total (m³)."""
+        today = dt_util.now().date()
+        t, m0 = today.isoformat(), today.replace(day=1).isoformat()
+        d, mo = self.meter.period(t, t), self.meter.period(m0, t)
+        r = lambda v: round(v, 1)  # noqa: E731
+        zones = {}
+        for z in set(d["zones"]) | set(mo["zones"]) | set(self.meter.last):
+            last = self.meter.last.get(z) or {}
+            zones[z] = {"today": r(d["zones"].get(z, 0.0)), "month": r(mo["zones"].get(z, 0.0)),
+                        "last": r(last.get("l", 0.0)) if last else None, "last_at": last.get("at")}
+        return {"today": r(d["l"]), "month": r(mo["l"]), "house_today": r(d["house"]), "house_month": r(mo["house"]),
+                "total_m3": round(self.meter.total_l / 1000, 3), "zones": zones,
+                "source": "meter" if self.settings.get("flow_sensor") else "curve"}

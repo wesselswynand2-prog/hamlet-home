@@ -274,6 +274,9 @@ class IrrigationController:
         if new is None or new.state in BAD:
             return
         on = new.state in ON_STATES
+        wc = self.hass.data.get(DOMAIN, {}).get("water")
+        if wc is not None and getattr(wc, "enabled", False):   # book the water up to now on the valves that were open
+            await wc.async_evaluate()
         expected = self._expect.get(entity_id)
         ours = expected is not None and expected[0] == on and (dt_util.now() - expected[1]).total_seconds() < 60
         run_entity = (self._zone(self.run["current"]) or {}).get("entity") if self.run and self.run.get("current") else None

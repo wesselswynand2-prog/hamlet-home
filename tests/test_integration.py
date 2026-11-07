@@ -512,3 +512,45 @@ async def test_irrigation_station_setpoint(enable_custom_integrations, hass: Hom
     assert not (await ws.receive_json())["success"]
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_water_use_house_and_valves(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user, freezer):
+    """Water use from the pump curve: litres per day, per irrigation valve and for the house, plus the sensors."""
+    freezer.move_to(dt_util.start_of_local_day() + timedelta(hours=9))
+    entry, on, off, _ = await _water_entry(hass)
+    w = hass.data[DOMAIN]["water"]
+    hass.states.async_set("sensor.druk_hz", "50", {"unit_of_measurement": "Hz"})
+    hass.states.async_set("sensor.water_druk", "350", {"unit_of_measurement": "kPa"})   # 3.5 bar -> 2.95 m³/h ≈ 49 L/min
+    hass.states.async_set("switch.roses", "off")
+    refresh = await hass.auth.async_create_refresh_token(hass_admin_user, CLIENT_ID)
+    client = await hass_ws_client(hass, access_token=hass.auth.async_create_access_token(refresh))
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/water_settings", "settings": {"flow_enabled": True}})
+    assert (await client.receive_json())["success"]
+    await client.send_json({"id": 2, "type": f"{DOMAIN}/irrigation_settings", "settings": {
+        "zones": [{"name": "Roses", "entity": "switch.roses", "minutes": 5}]}})
+    assert (await client.receive_json())["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
+    w = hass.data[DOMAIN]["water"]                       # the first valve reloads the app
+    assert w.live["flow_lpm"] == pytest.approx(49.2, abs=0.1)
+    roses = hass.data[DOMAIN]["irrigation"].zones[0]["id"]
+
+    freezer.tick(timedelta(minutes=2))                  # 2 min of house use
+    hass.states.async_set("switch.roses", "on")         # valve opens -> house water booked up to now
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(minutes=3))                  # 3 min of roses
+    hass.states.async_set("switch.roses", "off")
+    await hass.async_block_till_done()
+    u = w.usage()
+    assert u["house_today"] == pytest.approx(98.5, abs=1) and u["zones"][roses]["today"] == pytest.approx(147.7, abs=1)
+    assert u["zones"][roses]["last"] == pytest.approx(147.7, abs=1) and u["today"] == pytest.approx(246.2, abs=1)
+
+    await client.send_json({"id": 3, "type": f"{DOMAIN}/state"})
+    ws = (await client.receive_json())["result"]["water"]
+    assert ws["usage"]["zones"][roses]["month"] == pytest.approx(147.7, abs=1)
+    await hass.config_entries.async_reload(entry.entry_id)     # sensors are made when a pressure sensor is set
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert float(hass.states.get("sensor.huis_water_used_today").state) == pytest.approx(246.2, abs=1)
+    assert float(hass.states.get("sensor.huis_water_used_total").state) == pytest.approx(0.246, abs=0.002)
+    assert hass.states.get("sensor.huis_water_flow").attributes["unit_of_measurement"] == "L/min"
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

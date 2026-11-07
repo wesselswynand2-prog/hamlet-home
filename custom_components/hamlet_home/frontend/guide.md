@@ -126,6 +126,13 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 - **Dry-run protection:** if the pump runs without building pressure (for example the tank is empty), the app switches it off to protect it and sends you a message. Fix the water supply first, then tap **Reset** to switch it back on.
 - You may also get a message if the pump runs non-stop for a long time – check for a leak or a tap left open.
 
+**Water use**
+
+- With **Count the water** switched on (installer, Water use card), the pump card shows the flow now and the water used today – for the house and for irrigation – this month and in total.
+- Each valve shows its water today, this month and on its last run. While a valve waters you see the litres so far.
+- Water used while no valve is open counts as **house**. When two valves overlap for a moment, their water is shared.
+- The litres are worked out from the pump's speed and pressure on its datasheet curve, or from a real flow meter if one is fitted. To make it more exact, do the **bucket test**: fill a bucket of known size, time it, and tap **Work out the factor**.
+
 **Irrigation**
 
 - The valves water one after another; the next one opens just before the previous one closes.
