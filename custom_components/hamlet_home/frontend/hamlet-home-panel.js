@@ -268,6 +268,25 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
   background: var(--card); border: 2px solid var(--line); color: var(--muted); transition: border-color .3s, color .3s; }
 .wdia .ic ha-icon { --mdc-icon-size: 19px; }
 .wdia .ic.on { border-color: var(--c-water); color: var(--c-water); }
+.wdia .wzhit { position: absolute; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
+.wdia .wzhit:hover, .wdia .wzhit:focus-visible { background: color-mix(in srgb, var(--c-water) 10%, transparent); outline: none; }
+.wdia .wzhit:active { background: color-mix(in srgb, var(--c-water) 18%, transparent); }
+#zsheet { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+#zsheet .zback { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+#zsheet .zbox { position: relative; width: min(380px, calc(100% - 24px)); margin-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--card); color: var(--primary-text-color);
+  border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px 12px; box-shadow: 0 10px 40px rgba(0,0,0,.4); display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 700px) { #zsheet { align-items: center; } }
+#zsheet .zhd { display: flex; align-items: center; gap: 10px; font-size: 17px; }
+#zsheet .zhd ha-icon { color: #1f8fd0; } #zsheet .zhd b { flex: 1; font-weight: 600; }
+#zsheet .zst { margin: 0; color: #1f8fd0; font-weight: 500; } #zsheet .zst.bad { color: var(--c-bad, #d33); }
+#zsheet .zmin { display: flex; align-items: center; justify-content: center; gap: 22px; font-size: 18px; }
+#zsheet .zmin b { font-size: 34px; font-variant-numeric: tabular-nums; }
+#zsheet .btn.round { width: 48px; height: 48px; border-radius: 50%; font-size: 24px; padding: 0; }
+#zsheet .zquick { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+#zsheet .zquick .pchip { min-width: 46px; min-height: 36px; }
+#zsheet .btn.big { min-height: 50px; font-size: 16px; width: 100%; }
+#zsheet .btn.danger { background: var(--c-bad, #d33); color: #fff; border-color: transparent; }
+#zsheet .zmsg { margin: 0; min-height: 0; } #zsheet .zmsg:empty { display: none; }
 .wdia .ic.bad { border-color: var(--c-bad); color: var(--c-bad); }
 /* pool diagram */
 .pdia { position: relative; width: 100%; margin: 4px auto 0; --c-water: #1f8fd0; --c-heat: #eb6834; }
@@ -1781,7 +1800,7 @@ Object.assign(HamletHomePanel.prototype, {
     const lastOn = moving ? Math.max(0, ...[house ? 0 : -1, ...zOn.map((o, i) => (o ? i + 1 : -1))]) : 0;
     const name = (t, max = 11) => { t = String(t || ""); return t.length > max ? t.slice(0, max - 1) + "…" : t; };
     // geometry: wide = a row of drops off a horizontal main line; narrow (phone) = branches off a vertical riser
-    let Wd, H, yMain, tank0, pump, pipeIn, trunk, branch, icon, label, spray;
+    let Wd, H, yMain, tank0, pump, pipeIn, trunk, branch, icon, label, spray, hit;
     if (!narrow) {
       const step = 76, x0 = 210, yTop = 46; yMain = 112;
       Wd = Math.max(420, x0 + n * step - step / 2 + 30); H = 150;
@@ -1794,6 +1813,7 @@ Object.assign(HamletHomePanel.prototype, {
       icon = (i) => [bx(i), yTop];
       label = (i) => [bx(i), yMain + 22, "middle", 11];
       spray = (i) => [bx(i), yTop - 22];
+      hit = (i) => [bx(i) - step / 2, yTop - 24, step, yMain + 34 - (yTop - 24)];
     } else {
       const xr = 170, y0 = 112, step = 46;
       Wd = 340; H = y0 + (n - 1) * step + 26; yMain = 40;
@@ -1806,8 +1826,9 @@ Object.assign(HamletHomePanel.prototype, {
       icon = (i) => [228, by(i)];
       label = (i) => [252, by(i) + 4, "start", 13];
       spray = (i) => [228, by(i) - 22];
+      hit = (i) => [200, by(i) - step / 2, Wd - 200, step];
     }
-    const key = JSON.stringify([narrow, Wd, zones.map((z, i) => [z.name, zOn[i], z.available]), pumpRun, house, w.tripped, tank === null ? null : Math.round(tank / 5), bar === null ? null : bar.toFixed(1), f.tank_level]);
+    const key = JSON.stringify([narrow, Wd, zones.map((z, i) => [z.id, z.name, zOn[i], z.available]), pumpRun, house, w.tripped, tank === null ? null : Math.round(tank / 5), bar === null ? null : bar.toFixed(1), f.tank_level]);
     if (el._key === key) return;
     el._key = key;
     const seg = (d, on, cls = "") => `<g class="${on ? "on" : ""} ${cls}"><path class="pipe" d="${d}"/><path class="wet" d="${d}"/><path class="drops" d="${d}"/></g>`;
@@ -1843,8 +1864,37 @@ Object.assign(HamletHomePanel.prototype, {
     // icons on top of the drops (HTML so ha-icon works)
     let icons = `<div class="ic ${house ? "on" : ""}" style="${pct(...icon(0))}"><ha-icon icon="mdi:home-variant"></ha-icon></div>`;
     zones.forEach((z, i) => { icons += `<div class="ic ${zOn[i] ? "on" : ""} ${z.available === false ? "bad" : ""}" style="${pct(...icon(i + 1))}" title="${esc(z.name)}"><ha-icon icon="mdi:sprinkler-variant"></ha-icon></div>`; });
-    el.innerHTML = `<div class="wdia" style="max-width:${Math.round(Wd * 1.25)}px" role="img" aria-label="${esc(pumpRun ? "Pump running" : "Pump standing by")}${anyZone ? ", watering " + zones.filter((_, i) => zOn[i]).map((z) => z.name).join(", ") : house ? ", water to the house" : ""}">
+    // the whole valve (icon + pipe + name) is one big tap target – easy on a phone
+    zones.forEach((z, i) => {
+      const [hx, hy, hw, hh] = hit(i + 1);
+      icons += `<button class="wzhit" data-irr="zpop" data-zid="${esc(z.id)}" style="left:${(hx / Wd) * 100}%;top:${(hy / H) * 100}%;width:${(hw / Wd) * 100}%;height:${(hh / H) * 100}%" aria-label="${esc(z.name)}: ${zOn[i] ? "watering – tap to stop" : "tap to water"}"></button>`;
+    });
+    el.innerHTML = `<div class="wdia" style="max-width:${Math.round(Wd * 1.25)}px" aria-label="${esc(pumpRun ? "Pump running" : "Pump standing by")}${anyZone ? ", watering " + zones.filter((_, i) => zOn[i]).map((z) => z.name).join(", ") : house ? ", water to the house" : ""}">
       <svg viewBox="0 0 ${Wd} ${H}">${svg}</svg>${icons}</div>`;
+  },
+
+  // tap a valve on the drawing: a small sheet to water it (minutes adjustable) or stop it
+  _zonePop(zid) {
+    let sh = this.shadowRoot.getElementById("zsheet");
+    if (zid === null) { if (sh) sh.remove(); this._zpop = null; return; }
+    const ir = this._irr || { zones: [] }, z = (ir.zones || []).find((x) => x.id === zid);
+    if (!z) return this._zonePop(null);
+    if (this._zpop?.id !== zid) this._zpop = { id: zid, minutes: z.minutes || 10 };
+    const on = !!z.on || (ir.run && ir.run.zone === zid);
+    this._zpop.on = on;
+    if (!sh) { sh = document.createElement("div"); sh.id = "zsheet"; this._main.appendChild(sh); }
+    const m = this._zpop.minutes;
+    sh.innerHTML = `<div class="zback" data-irr="zpopclose"></div>
+      <div class="zbox" role="dialog" aria-label="${esc(z.name)}">
+        <div class="zhd"><ha-icon icon="mdi:sprinkler-variant"></ha-icon><b>${esc(z.name)}</b><button class="iconbtn" data-irr="zpopclose" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+        ${on ? `<p class="zst">Watering now${ir.run && ir.run.zone === zid && ir.run.left ? ` · ${esc(String(ir.run.left))} left` : ""}</p>
+          <button class="btn danger big" data-irr="zpopstop">Stop watering</button>`
+        : `${z.available === false ? `<p class="zst bad">The valve switch is unavailable</p>` : ""}
+          <div class="zmin"><button class="btn round" data-irr="zpopm" data-d="-5" aria-label="5 minutes less">−</button><span><b>${m}</b> min</span><button class="btn round" data-irr="zpopm" data-d="5" aria-label="5 minutes more">+</button></div>
+          <div class="zquick">${[5, 10, 15, 20, 30].map((q) => `<button class="pchip" data-irr="zpopset" data-m="${q}" aria-pressed="${q === m}">${q}</button>`).join("")}</div>
+          <button class="btn primary big" data-irr="zpoprun" ${z.available === false ? "disabled" : ""}>Water for ${m} min</button>`}
+        <p class="zmsg msg" id="zpopmsg"></p>
+      </div>`;
   },
 
   /* ------------------------------------------------------------ irrigation */
@@ -1908,6 +1958,10 @@ Object.assign(HamletHomePanel.prototype, {
   },
 
   _renderIrrLive() {
+    if (this._zpop && this.shadowRoot.getElementById("zsheet")) {      // the open valve sheet follows the valve (started / finished)
+      const ir = this._irr || {}, z = (ir.zones || []).find((x) => x.id === this._zpop.id);
+      if (z && (!!z.on || (ir.run && ir.run.zone === z.id)) !== this._zpop.on) this._zonePop(z.id);
+    }
     const $ = (id) => this.shadowRoot.getElementById(id);
     if (this._tab === "property") this._renderProperty();
     if (this._water && $("wpumpdia")) this._renderWaterDiagram();
@@ -2028,6 +2082,20 @@ Object.assign(HamletHomePanel.prototype, {
     const zi = () => Number(b.closest("[data-zi]").dataset.zi), pi = () => Number(b.closest("[data-pi]").dataset.pi);
     const redraw = () => { this._irrChanged(); this._renderIrrForm(); };
     switch (act) {
+      case "zpop": return this._zonePop(b.dataset.zid);
+      case "zpopclose": return this._zonePop(null);
+      case "zpopm": if (this._zpop) { this._zpop.minutes = Math.max(1, Math.min(240, this._zpop.minutes + Number(b.dataset.d))); this._zonePop(this._zpop.id); } return;
+      case "zpopset": if (this._zpop) { this._zpop.minutes = Number(b.dataset.m); this._zonePop(this._zpop.id); } return;
+      case "zpoprun": case "zpopstop": {
+        const p = this._zpop; if (!p) return;
+        b.disabled = true;
+        try {
+          this._irr = await this._hass.callWS(act === "zpoprun" ? { type: `${DOMAIN}/irrigation_action`, action: "run_zone", zone: p.id, minutes: p.minutes }
+            : { type: `${DOMAIN}/irrigation_action`, action: "stop" });
+          this._zonePop(null); this._renderIrr();
+        } catch (e) { b.disabled = false; const m = $("zpopmsg"); if (m) { m.textContent = e.message || "Failed"; m.className = "zmsg msg err"; } }
+        return;
+      }
       case "runall": return action("run_all");
       case "stop": return action("stop");
       case "skip": return action("skip_zone");

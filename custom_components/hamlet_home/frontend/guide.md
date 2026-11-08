@@ -126,6 +126,8 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 - **Dry-run protection:** if the pump runs without building pressure (for example the tank is empty), the app switches it off to protect it and sends you a message. Fix the water supply first, then tap **Reset** to switch it back on.
 - You may also get a message if the pump runs non-stop for a long time – check for a leak or a tap left open.
 
+- **Tap a valve on the pump drawing** to water it: choose the minutes (− / + or 5–30) and tap **Water for … min**. Tap a valve that is watering to stop it.
+
 **Water use**
 
 - With **Count the water** switched on (installer, Water use card), the pump card shows the flow now and the water used today – for the house and for irrigation – this month and in total.
