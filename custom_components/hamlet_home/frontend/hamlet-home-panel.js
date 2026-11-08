@@ -1469,10 +1469,10 @@ Object.assign(HamletHomePanel.prototype, {
       if (f.pool_switch) this._renderPoolSched();
     }
     this._renderProt();
-    this._renderFlow();
+    this._renderWaterUse();
   },
 
-  _renderFlow(force) {
+  _renderWaterUse(force) {
     const el = this.shadowRoot.getElementById("wflowbody"); if (!el || !this._isAdmin || !this._water) return;
     const st = this._water.settings, f = this._water.features || {};
     const key = JSON.stringify([st.flow_enabled, st.flow_sensor, st.flow_curve, st.flow_rated_hz, st.flow_min_hz, st.flow_suction_m, st.flow_cal]);
@@ -1613,9 +1613,9 @@ Object.assign(HamletHomePanel.prototype, {
         if (await call({ type: `${DOMAIN}/water_settings`, settings }, $("psmsg"))) { const m = $("psmsg"); if (m) { m.textContent = "Saved"; m.className = "msg ok"; } }
         return;
       }
-      case "cadd": { const c = this._flowCurve, l = c[c.length - 1] || [0, 40]; c.push([+(l[0] + 1).toFixed(1), Math.max(l[1] - 5, 0)]); return this._renderFlow("keep"); }
-      case "cdel": this._flowCurve.splice(Number(b.closest(".fpt").dataset.ci), 1); return this._renderFlow("keep");
-      case "cdef": this._flowCurve = [[0, 43.5], [1.2, 41.5], [1.8, 40], [2.4, 38], [3.6, 33], [4.8, 23.5]]; return this._renderFlow("keep");
+      case "cadd": { const c = this._flowCurve, l = c[c.length - 1] || [0, 40]; c.push([+(l[0] + 1).toFixed(1), Math.max(l[1] - 5, 0)]); return this._renderWaterUse("keep"); }
+      case "cdel": this._flowCurve.splice(Number(b.closest(".fpt").dataset.ci), 1); return this._renderWaterUse("keep");
+      case "cdef": this._flowCurve = [[0, 43.5], [1.2, 41.5], [1.8, 40], [2.4, 38], [3.6, 33], [4.8, 23.5]]; return this._renderWaterUse("keep");
       case "bucket": {
         const lit = Number($("wf-bl").value), sec = Number($("wf-bs").value), est = this._water.live?.flow_lpm, m = $("wflowmsg");
         if (!(lit > 0 && sec > 0)) { m.textContent = "Fill in litres and seconds"; m.className = "msg err"; return; }
@@ -1628,7 +1628,7 @@ Object.assign(HamletHomePanel.prototype, {
         this.shadowRoot.querySelectorAll("[data-wf]").forEach((inp) => { settings[inp.dataset.wf] = inp.type === "checkbox" ? inp.checked : inp.type === "text" ? inp.value.trim() : Number(inp.value); });
         this.shadowRoot.activeElement?.blur?.();
         this._wShown.flow = null;
-        if (await call({ type: `${DOMAIN}/water_settings`, settings }, $("wflowmsg"))) { const m = $("wflowmsg"); m.textContent = "Saved"; m.className = "msg ok"; this._renderFlow(true); }
+        if (await call({ type: `${DOMAIN}/water_settings`, settings }, $("wflowmsg"))) { const m = $("wflowmsg"); m.textContent = "Saved"; m.className = "msg ok"; this._renderWaterUse(true); }
         return;
       }
       case "protsave": {
