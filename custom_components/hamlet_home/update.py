@@ -1,6 +1,7 @@
 """'Update available' for Hamlet Home and Hamlet Geyser straight from GitHub releases (no HACS needed)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from pathlib import Path
@@ -17,6 +18,7 @@ from homeassistant.loader import IntegrationNotFound, async_get_integration
 from . import updater
 from .const import DOMAIN, VERSION
 
+RETRY_WAIT = 3   # seconds before trying a download again
 _LOGGER = logging.getLogger(__name__)
 CHECK_EVERY = timedelta(hours=6)
 NAMES = {"hamlet_home": "Hamlet Home", "hamlet_geyser": "Hamlet Geyser"}
@@ -122,6 +124,7 @@ class HamletUpdate(UpdateEntity):
         self._github = latest
         self._managed = hacs_shows(self.hass, self.repo, self.entity_id)
         self._asset = updater.pick_asset(rel, self.domain)
+        self._urls = updater.asset_urls(rel, self.domain)
         self._notes = rel.get("body") or ""
         self._attr_release_url = rel.get("html_url") or self._attr_release_url
         self._attr_release_summary = (self._notes.strip().splitlines() or [""])[0][:250] or None
@@ -145,13 +148,28 @@ class HamletUpdate(UpdateEntity):
         cfg = config_dir(self.hass)
         dl = cfg / "hamlet_backup" / f".{self.domain}.download.zip"
         session = async_get_clientsession(self.hass)
-        try:
-            async with session.get(self._asset, timeout=aiohttp.ClientTimeout(total=300)) as resp:
-                if resp.status != 200:
-                    raise HomeAssistantError(f"Download failed (HTTP {resp.status})")
-                data = await resp.read()
-        except (aiohttp.ClientError, TimeoutError) as err:
-            raise HomeAssistantError(f"Download failed: {err}") from err
+        data, problems = None, []
+        for url in getattr(self, "_urls", None) or [self._asset]:
+            headers = {"User-Agent": "Hamlet-Home-updater"}
+            if url.startswith("https://api.github.com/"):
+                headers["Accept"] = "application/octet-stream"
+            for attempt in range(2):          # GitHub sometimes answers 502/503/504 for a moment
+                try:
+                    async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=300)) as resp:
+                        if resp.status == 200:
+                            data = await resp.read()
+                            break
+                        problems.append(f"HTTP {resp.status}")
+                        if resp.status not in (502, 503, 504):
+                            break
+                except (aiohttp.ClientError, TimeoutError) as err:
+                    problems.append(str(err) or type(err).__name__)
+                if attempt == 0:
+                    await asyncio.sleep(RETRY_WAIT)
+            if data is not None:
+                break
+        if data is None:
+            raise HomeAssistantError(f"Download failed ({', '.join(dict.fromkeys(problems))}) – GitHub may be having trouble, try again in a few minutes")
 
         def _install() -> str:
             dl.parent.mkdir(parents=True, exist_ok=True)

@@ -23,6 +23,23 @@ def pick_asset(release: dict, domain: str) -> str | None:
     return None
 
 
+def asset_urls(release: dict, domain: str) -> list[str]:
+    """Ways to download the release zip, best first: GitHub's API asset link, then the normal download link.
+
+    github.com/…/releases/download sometimes answers 504 while the API route still works."""
+    want = REPOS[domain].split("/")[1] + ".zip"
+    out = []
+    for a in release.get("assets", []):
+        if a.get("name") != want:
+            continue
+        api = str(a.get("url", ""))
+        if api.startswith(f"https://api.github.com/repos/{REPOS[domain]}/releases/assets/"):
+            out.append(api)
+        if str(a.get("browser_download_url", "")).startswith(ALLOWED_HOSTS):
+            out.append(a["browser_download_url"])
+    return out
+
+
 def install_zip(zip_path: Path, domain: str, config_dir: Path, target: Path, expect_version: str | None) -> str:
     """Unpack custom_components/<domain> from the zip over `target`, keeping a backup.
 

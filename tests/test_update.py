@@ -59,18 +59,24 @@ def test_pick_asset():
                       {"name": "other.zip", "browser_download_url": "https://github.com/o.zip"}]}
     assert updater.pick_asset(rel, "hamlet_home").endswith("hamlet-home.zip")
     assert updater.pick_asset({"assets": [{"name": "hamlet-home.zip", "browser_download_url": "https://evil.example/hamlet-home.zip"}]}, "hamlet_home") is None
+    rel["assets"][0]["url"] = "https://api.github.com/repos/wesselswynand2-prog/hamlet-home/releases/assets/5"
+    assert updater.asset_urls(rel, "hamlet_home") == [rel["assets"][0]["url"], rel["assets"][0]["browser_download_url"]]
+    assert updater.asset_urls({"assets": [{"name": "hamlet-home.zip", "url": "https://api.github.com/repos/evil/x/releases/assets/5"}]}, "hamlet_home") == []
 
 
 async def test_update_entity_installs_and_restarts(enable_custom_integrations, hass: HomeAssistant, aioclient_mock, tmp_path, monkeypatch, freezer):
     from custom_components.hamlet_home import update as upd  # loaded by HA already
     monkeypatch.setattr(upd, "config_dir", lambda h: tmp_path)
+    monkeypatch.setattr(upd, "RETRY_WAIT", 0)
     for mod in ("http", "frontend", "homeassistant"):
         assert await async_setup_component(hass, mod, {})
     asset = "https://github.com/wesselswynand2-prog/hamlet-home/releases/download/v9.9.9/hamlet-home.zip"
+    api_asset = "https://api.github.com/repos/wesselswynand2-prog/hamlet-home/releases/assets/123"
     aioclient_mock.get("https://api.github.com/repos/wesselswynand2-prog/hamlet-home/releases/latest",
                        json={"tag_name": "v9.9.9", "body": "Controls tab\n- more", "html_url": "https://github.com/r/v9.9.9",
-                             "assets": [{"name": "hamlet-home.zip", "browser_download_url": asset}]})
+                             "assets": [{"name": "hamlet-home.zip", "browser_download_url": asset, "url": api_asset}]})
     aioclient_mock.get("https://api.github.com/repos/wesselswynand2-prog/hamlet-geyser/releases/latest", status=404)
+    aioclient_mock.get(api_asset, status=504)        # GitHub hiccup on the first route -> retried, then the other route
     aioclient_mock.get(asset, content=make_zip())
     restart = async_mock_service(hass, "homeassistant", "restart")
     hass.states.async_set("sensor.pv", "1", {"unit_of_measurement": "kW"})
