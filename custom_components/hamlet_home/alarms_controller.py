@@ -93,6 +93,9 @@ class AlarmsController:
             "geysers": geys,
             "pump_tripped": bool(water.guard.tripped) if has_pump and hasattr(water, "guard") else None,
             "inverter_state": inv.state if inv is not None and inv.state not in ("unavailable", "unknown") else None,
+            "tank": (water.live.get("tank") if hasattr(water, "live") else None),
+            "borehole_long": (water.live.get("borehole_long") if hasattr(water, "live") and water.settings.get("borehole_entity") and water.settings.get("tank_size_l") else None),
+            "borehole_min": (water.live.get("borehole_min") if hasattr(water, "live") else None),
             "minutes_now": now.hour * 60 + now.minute,
             "states": states,
         }
@@ -103,6 +106,7 @@ class AlarmsController:
             "load_high": ctx["load"] is not None, "soc_low": ctx["soc"] is not None,
             "grid_down": ctx["grid_available"] is not None, "geyser_cold": any(g["temp"] is not None for g in ctx["geysers"]),
             "pump_trip": ctx["pump_tripped"] is not None, "inverter_fault": ctx["inverter_state"] is not None, "sensor": True,
+            "tank_low": ctx["tank"] is not None, "borehole_long": ctx["borehole_long"] is not None,
         }
 
     # ------------------------------------------------------------ checking

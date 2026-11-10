@@ -128,6 +128,13 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 
 - **Tap a valve on the pump drawing** to water it: choose the minutes (− / + or 5–30) and tap **Water for … min**. Tap a valve that is watering to stop it.
 
+**Tank & borehole** (no level sensor needed)
+
+- The installer sets the tank size, the borehole pump's switch (or power sensor) and the level where the float switches the borehole on (1/3 down from the top = 67 %).
+- When the borehole switches on, the tank is at that level; when it switches off, the tank is full. In between the app takes off the water the house and garden use and adds what the borehole pumps – it learns the borehole's L/min from each fill.
+- The tank on the pump drawing shows the % and litres, and the borehole pipe runs while it fills. The first level shows after the borehole has switched on or off once.
+- Alarms: **Water tank low** and **Borehole running too long** (it may be running dry).
+
 **Water use**
 
 - With **Count the water** switched on (installer, Water use card), the pump card shows the flow now and the water used today – for the house and for irrigation – this month and in total.

@@ -134,3 +134,26 @@ def test_water_meter_per_valve_and_house():
     assert round(m.total_l) == 240 and m.last["roses"]["l"] == 0   # a new run starts at zero
     p = m.period(T0.date().isoformat(), T0.date().isoformat())
     assert round(p["l"]) == 240 and round(p["zones"]["roses"]) == 210
+
+
+def test_tank_from_borehole_float():
+    t = water.TankModel()
+    m = lambda n: T0 + timedelta(minutes=n)  # noqa: E731
+    t.update(m(0), False, 0, 2500, 67)
+    assert t.level_l is None                                   # unknown until the float switches
+    t.update(m(1), True, 0, 2500, 67)                          # borehole on: tank at 2/3
+    assert t.filling and round(t.level_l) == 1675
+    t.update(m(11), True, 100, 2500, 67)                       # 100 L used meanwhile, no yield learnt yet
+    assert round(t.level_l) == 1575
+    t.update(m(41), False, 100, 2500, 67)                      # full after 40 min: (825 + 100) L in
+    assert t.level_l == 2500 and not t.filling and t.inflow_lpm == round(925 / 40, 2)
+    t.update(m(60), False, 700, 2500, 67)                      # house used 600 L
+    assert round(t.level_l) == 1900
+    t.update(m(61), True, 700, 2500, 67)                       # float drops: snaps to the refill level
+    assert round(t.level_l) == 1675
+    t.update(m(63), True, 700, 2500, 67)                       # learnt yield adds ~23 L/min
+    assert round(t.level_l) == round(1675 + 2 * 925 / 40)
+    t.update(m(62 + 40), False, 700, 2500, 67)
+    assert len(t.fills) == 2 and t.usual_fill_min() >= 40
+    d = t.to_dict(); t2 = water.TankModel(); t2.load(d)
+    assert t2.level_l == 2500 and t2.inflow_lpm == t.inflow_lpm and t2.fills == t.fills

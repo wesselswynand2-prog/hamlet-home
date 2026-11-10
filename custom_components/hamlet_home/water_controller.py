@@ -52,6 +52,7 @@ class WaterController:
         self.pool = water.RunCounter()
         self.buckets = water.PressureBuckets()
         self.meter = water.WaterMeter()
+        self.tank = water.TankModel()
         self.live: dict[str, Any] = {}
         self.pool_reason = ""
         self._pool_last_desired: bool | None = None
@@ -79,6 +80,7 @@ class WaterController:
         self.buckets.data = {d: {int(k): v for k, v in slots.items()} for d, slots in data.get("buckets", {}).items()}
         m = data.get("meter") or {}
         self.meter.days, self.meter.total_l, self.meter.last = m.get("days", {}), float(m.get("total_l", 0.0)), m.get("last", {})
+        self.tank.load(data.get("tank") or {})
         g = data.get("guard", {})
         if g.get("tripped"):
             self.guard.tripped = True
@@ -109,6 +111,7 @@ class WaterController:
             "settings": self.settings, "pump_days": self.pump.days, "pool_days": self.pool.days,
             "buckets": {d: {str(k): v for k, v in slots.items()} for d, slots in self.buckets.data.items()},
             "meter": {"days": self.meter.days, "total_l": self.meter.total_l, "last": self.meter.last},
+            "tank": self.tank.to_dict(),
             "guard": {"tripped": self.guard.tripped, "tripped_at": self.guard.tripped_at.isoformat() if self.guard.tripped_at else None},
         }
 
@@ -183,6 +186,48 @@ class WaterController:
         return water.estimate_flow(hz, live["pressure"], s["flow_curve"], float(s["flow_rated_hz"]), float(s["flow_min_hz"]),
                                    float(s["flow_suction_m"]), float(s["flow_cal"]))
 
+    def borehole_on(self) -> bool | None:
+        eid = self.settings.get("borehole_entity")
+        st = self.hass.states.get(eid) if eid else None
+        if st is None or st.state in BAD:
+            return None
+        if st.domain == "sensor":
+            try:
+                return float(st.state) > float(self.settings.get("borehole_watts", 50))
+            except ValueError:
+                return None
+        return st.state in ("on", "open", "running")
+
+    def _tank_update(self, now, live: dict) -> None:
+        """Estimated tank level when there is no level sensor (borehole float switch + water used)."""
+        s = self.settings
+        size = float(s.get("tank_size_l") or 0)
+        bh = self.borehole_on()
+        live["borehole"] = bh
+        if size <= 0 or self.conf.get(CONF_TANK_LEVEL):
+            return
+        was = self.tank.filling
+        self.tank.update(now, bh, self.meter.total_l, size, float(s.get("tank_refill_pct", 67)))
+        if was != self.tank.filling:
+            self._save()
+        lvl = self.tank.level_l
+        live["tank"] = round(lvl / size * 100, 1) if lvl is not None else None
+        live["tank_l"] = round(lvl) if lvl is not None else None
+        live["tank_est"] = True
+        long_min = float(s.get("borehole_long_min") or 0) or ((self.tank.usual_fill_min() or 0) * 3)
+        mins = (now - dt_util.parse_datetime(self.tank.fill_start)).total_seconds() / 60 if self.tank.filling and self.tank.fill_start else 0
+        live["borehole_min"] = round(mins, 1) if self.tank.filling else None
+        live["borehole_long"] = bool(self.tank.filling and long_min and mins > long_min)
+
+    def tank_info(self) -> dict | None:
+        s = self.settings
+        if not float(s.get("tank_size_l") or 0) or self.conf.get(CONF_TANK_LEVEL):
+            return None
+        return {"size_l": s["tank_size_l"], "level_l": None if self.tank.level_l is None else round(self.tank.level_l),
+                "filling": self.tank.filling, "fill_start": self.tank.fill_start, "inflow_lpm": self.tank.inflow_lpm,
+                "usual_fill_min": self.tank.usual_fill_min(), "fills": list(reversed(self.tank.fills))[:5],
+                "flow_counting": bool(s.get("flow_enabled"))}
+
     def _open_zones(self) -> tuple:
         irr = self.hass.data.get(DOMAIN, {}).get("irrigation")
         out = []
@@ -245,6 +290,7 @@ class WaterController:
             live["flow_m3h"] = q
             live["flow_lpm"] = round(q * 1000 / 60, 1) if q is not None else None
             self.meter.update(now, q, self._open_zones())
+        self._tank_update(now, live)
         self.live = live
         self._notify_ui()
 
@@ -346,6 +392,9 @@ class WaterController:
         }
         if self.settings.get("flow_enabled"):
             snap["usage"] = self.usage()
+        tank = self.tank_info()
+        if tank:
+            snap["tank"] = tank
         if history:
             y = (today - timedelta(days=1)).isoformat()
             snap["rows"] = {"today": self.buckets.rows(t), "yesterday": self.buckets.rows(y)}

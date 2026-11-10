@@ -38,6 +38,12 @@ DEFAULT_WATER_SETTINGS: dict = {
     "flow_min_hz": 20,           # below this the pump counts as stopped
     "flow_suction_m": 0.0,       # + metres if the pump lifts from a tank below it, - if the inlet is pressurised
     "flow_cal": 1.0,             # correction from a bucket test
+    # tank without a level sensor: worked out from the borehole's float switch and the water used
+    "tank_size_l": 0,            # 0 = no tank estimate
+    "borehole_entity": "",       # the borehole pump: switch / binary_sensor, or a power sensor
+    "borehole_watts": 50,        # a power sensor above this counts as running
+    "tank_refill_pct": 67,       # the float switches the borehole on at this level (1/3 down from the top = 67 %)
+    "borehole_long_min": 0,      # warn when the borehole runs longer than this (0 = 3× its usual fill time)
 }
 USER_KEYS = {"pool_mode", "pool_schedules", "pool_solar_start_w", "pool_solar_keep_w", "pool_hours",
              "pool_stop_deficit_min", "pool_stop_discharge_min", "pool_discharge_w"}
@@ -310,6 +316,31 @@ def validate_water_settings(new: dict, admin: bool) -> dict:
             if not 0 <= v <= 120:
                 raise ValueError("Frequency must be 0 … 120 Hz")
             clean[key] = v
+        elif key == "tank_size_l":
+            v = float(value)
+            if not (v == 0 or 50 <= v <= 1_000_000):
+                raise ValueError("Tank size must be 50 … 1 000 000 L (0 = no tank)")
+            clean[key] = round(v)
+        elif key == "borehole_entity":
+            value = str(value or "").strip()
+            if value and not value.startswith(("switch.", "binary_sensor.", "input_boolean.", "sensor.", "light.")):
+                raise ValueError("The borehole must be a switch, binary sensor or power sensor")
+            clean[key] = value
+        elif key == "borehole_watts":
+            v = float(value)
+            if not 0 <= v <= 20000:
+                raise ValueError("Borehole running watts must be 0 … 20 000 W")
+            clean[key] = v
+        elif key == "tank_refill_pct":
+            v = float(value)
+            if not 5 <= v <= 95:
+                raise ValueError("The borehole switch-on level must be 5 … 95 %")
+            clean[key] = v
+        elif key == "borehole_long_min":
+            v = float(value)
+            if not 0 <= v <= 1440:
+                raise ValueError("Borehole warning must be 0 … 1440 minutes")
+            clean[key] = v
         elif key == "notify_service":
             value = str(value or "").strip()
             if value and not value.startswith("notify."):
@@ -418,3 +449,65 @@ class WaterMeter:
                 for z, v in d.get("zones", {}).items():
                     out["zones"][z] = out["zones"].get(z, 0.0) + v
         return out
+
+
+@dataclass
+class TankModel:
+    """Tank level without a level sensor.
+
+    The borehole's float switch tells us two exact levels: when the borehole switches ON the tank is at the
+    refill level (e.g. 2/3), when it switches OFF the tank is full. In between we take off the water the booster
+    pump delivered, and while the borehole runs we add its inflow, learnt from earlier fills:
+    inflow = (water to fill from the refill level to full + water used meanwhile) / fill time."""
+    level_l: float | None = None
+    filling: bool = False
+    fill_start: str | None = None       # iso time
+    fill_used: float = 0.0              # litres the house/irrigation used during this fill
+    inflow_lpm: float | None = None     # learnt borehole yield into the tank
+    fills: list = field(default_factory=list)   # [{"start", "minutes", "in_l", "lpm"}] newest last
+    _used: float | None = None          # meter total at the last update
+    _t: datetime | None = None
+
+    def update(self, t: datetime, borehole_on: bool | None, used_total_l: float, size_l: float, refill_pct: float) -> None:
+        if size_l <= 0:
+            return
+        used = 0.0 if self._used is None else max(used_total_l - self._used, 0.0)
+        self._used = used_total_l
+        mins = (t - self._t).total_seconds() / 60 if self._t is not None and t > self._t else 0.0
+        self._t = t
+        refill_l = size_l * refill_pct / 100
+        if self.level_l is not None:
+            self.level_l -= used
+        if self.filling:
+            self.fill_used += used
+        if borehole_on and not self.filling:                 # float dropped: tank is at the refill level now
+            self.filling, self.fill_start, self.fill_used = True, t.isoformat(), 0.0
+            self.level_l = refill_l
+        elif borehole_on and self.filling:
+            if self.level_l is not None and self.inflow_lpm:
+                self.level_l = min(self.level_l + self.inflow_lpm * min(mins, 5), size_l * 0.99)
+        elif borehole_on is False and self.filling:          # float lifted: tank is full
+            self.filling = False
+            start = datetime.fromisoformat(self.fill_start) if self.fill_start else None
+            fmins = (t - start).total_seconds() / 60 if start else 0
+            if fmins >= 1:
+                in_l = size_l - refill_l + self.fill_used
+                lpm = in_l / fmins
+                self.inflow_lpm = round(lpm if self.inflow_lpm is None else 0.6 * lpm + 0.4 * self.inflow_lpm, 2)
+                self.fills = (self.fills + [{"start": self.fill_start, "minutes": round(fmins, 1), "in_l": round(in_l), "lpm": round(lpm, 1)}])[-10:]
+            self.level_l = size_l
+        if self.level_l is not None:
+            self.level_l = max(0.0, min(self.level_l, size_l))
+
+    def usual_fill_min(self) -> float | None:
+        m = sorted(f["minutes"] for f in self.fills)
+        return m[len(m) // 2] if m else None
+
+    def to_dict(self) -> dict:
+        return {"level_l": self.level_l, "filling": self.filling, "fill_start": self.fill_start, "fill_used": self.fill_used,
+                "inflow_lpm": self.inflow_lpm, "fills": self.fills, "used": self._used}
+
+    def load(self, d: dict) -> None:
+        self.level_l, self.filling, self.fill_start = d.get("level_l"), bool(d.get("filling")), d.get("fill_start")
+        self.fill_used, self.inflow_lpm, self.fills = float(d.get("fill_used") or 0), d.get("inflow_lpm"), list(d.get("fills") or [])
+        self._used = d.get("used")

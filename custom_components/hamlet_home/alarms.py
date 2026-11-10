@@ -28,6 +28,10 @@ PRESETS: dict[str, dict[str, Any]] = {
                   "help": "The booster pump was stopped by its dry-run / no-water protection."},
     "inverter_fault": {"name": "Inverter fault", "unit": "", "value": None, "minutes": 0, "level": "critical", "needs": "inverter_state",
                        "help": "The inverter reports a fault, alarm or overload."},
+    "tank_low": {"name": "Water tank low", "unit": "%", "value": 30, "minutes": 2, "level": "warning", "needs": "tank",
+                 "help": "The water tank is below this level."},
+    "borehole_long": {"name": "Borehole running too long", "unit": "", "value": None, "minutes": 0, "level": "warning", "needs": "borehole",
+                      "help": "The borehole has been filling the tank much longer than usual – it may be running dry, or a pipe or float may be leaking."},
     "sensor": {"name": "Own alarm", "unit": "", "value": 0, "minutes": 1, "level": "warning", "needs": "",
                "help": "Any sensor or switch: above / below a value, or on."},
 }
@@ -156,6 +160,16 @@ def check(rule: dict, ctx: dict) -> tuple[bool | None, str]:
         if not s:
             return None, ""
         return bool(FAULT.search(s)), f"Inverter state: {s}"
+    if t == "tank_low":
+        lv = ctx.get("tank")
+        if lv is None:
+            return None, ""
+        return lv < v, f"Tank at {lv:.0f}% (alarm below {v:.0f}%)"
+    if t == "borehole_long":
+        b = ctx.get("borehole_long")
+        if b is None:
+            return None, ""
+        return bool(b), f"The borehole has been running {ctx.get('borehole_min') or 0:.0f} min – check that it still pumps water" if b else ""
     if t == "sensor":
         st = ctx.get("states", {}).get(rule.get("entity"))
         if st is None or st[0] in ("unavailable", "unknown", ""):

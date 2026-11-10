@@ -554,3 +554,37 @@ async def test_water_use_house_and_valves(enable_custom_integrations, hass: Home
     assert hass.states.get("sensor.huis_water_flow").attributes["unit_of_measurement"] == "L/min"
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_tank_estimate_and_borehole_alarm(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user, freezer):
+    """No level sensor: the borehole float switch + the water used give the tank level; a long fill raises an alarm."""
+    freezer.move_to(dt_util.start_of_local_day() + timedelta(hours=9))
+    entry, on, off, _ = await _water_entry(hass)
+    w = hass.data[DOMAIN]["water"]
+    hass.states.async_set("sensor.druk_hz", "50", {"unit_of_measurement": "Hz"})
+    hass.states.async_set("sensor.water_druk", "350", {"unit_of_measurement": "kPa"})   # ≈ 49 L/min to the house
+    hass.states.async_set("switch.borehole", "off")
+    refresh = await hass.auth.async_create_refresh_token(hass_admin_user, CLIENT_ID)
+    client = await hass_ws_client(hass, access_token=hass.auth.async_create_access_token(refresh))
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/water_settings", "settings": {
+        "flow_enabled": True, "tank_size_l": 2500, "borehole_entity": "switch.borehole", "tank_refill_pct": 67, "borehole_long_min": 30}})
+    assert (await client.receive_json())["success"]
+    await w.async_evaluate()
+    assert w.snapshot()["tank"]["level_l"] is None and w.live["tank_est"]
+    hass.states.async_set("switch.borehole", "on")
+    await w.async_evaluate()
+    assert w.live["tank_l"] == 1675 and w.live["tank"] == 67.0 and w.live["borehole"] is True
+    freezer.tick(timedelta(minutes=2))
+    await w.async_evaluate()
+    assert w.live["tank_l"] == pytest.approx(1675 - 98, abs=2)        # 2 min of house water out
+    al = hass.data[DOMAIN]["alarms"]
+    await al.async_save([{"type": "borehole_long", "enabled": True}, {"type": "tank_low", "enabled": True, "value": 30, "minutes": 0}], None)
+    freezer.tick(timedelta(minutes=31))
+    await w.async_evaluate(); await al.async_evaluate()
+    assert w.live["borehole_long"] and [a["name"] for a in al.snapshot()["active"]] == ["Borehole running too long"]
+    hass.states.async_set("switch.borehole", "off")                     # float lifts: full
+    await w.async_evaluate(); await al.async_evaluate()
+    assert w.live["tank_l"] == 2500 and not al.snapshot()["active"]
+    assert w.tank_info()["inflow_lpm"] > 0 and len(w.tank_info()["fills"]) == 1
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

@@ -1337,6 +1337,8 @@ Object.assign(HamletHomePanel.prototype, {
         <div class="chartwrap" id="wchart"></div></section>
       <section class="card" id="wprot" hidden><h2>Protection &amp; alerts <span class="sub">admin only</span></h2><div id="wprotbody"></div>
         <div class="actions"><span class="msg" id="wprotmsg"></span><button class="btn primary" data-w="protsave">Save</button></div></section>
+      <section class="card" id="wtank" hidden><h2>Tank &amp; borehole <span class="sub">admin only · tank level without a level sensor</span></h2><div id="wtankbody"></div>
+        <div class="actions"><span class="msg" id="wtankmsg"></span><button class="btn primary" data-w="tanksave">Save</button></div></section>
       <section class="card" id="wflow" hidden><h2>Water use <span class="sub">admin only · how the litres are worked out</span></h2><div id="wflowbody"></div>
         <div class="actions"><span class="msg" id="wflowmsg"></span><button class="btn primary" data-w="flowsave">Save</button></div></section>`;
     this._wShown = {};
@@ -1416,6 +1418,7 @@ Object.assign(HamletHomePanel.prototype, {
     hide("wchartcard", !f.water_pressure);
     hide("wprot", !this._isAdmin || !hasPump);
     hide("wflow", !this._isAdmin || !hasPump);
+    hide("wtank", !this._isAdmin || !hasPump || !!f.tank_level);
 
     // alarm
     const al = $("walarm");
@@ -1457,6 +1460,10 @@ Object.assign(HamletHomePanel.prototype, {
       const mins = (sec) => (sec >= 3600 ? `${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min` : `${Math.round((sec || 0) / 60)} min`);
       const startsPerHour = (t.starts || 0) / Math.max(new Date().getHours() + new Date().getMinutes() / 60, 1);
       tiles.push(["Run time today", mins(t.seconds)], ["Starts today", `${t.starts || 0}`], ["Longest run", mins(t.longest)]);
+      if (w.tank) {
+        tiles.push(["Tank", w.tank.level_l === null ? "learning…" : `${w.tank.level_l} L · ${Math.round(w.tank.level_l / w.tank.size_l * 100)}%`]);
+        if (w.tank.filling) tiles.push(["Borehole", L.borehole_long ? `⚠ running ${Math.round(L.borehole_min || 0)} min` : `filling${L.borehole_min ? ` · ${Math.round(L.borehole_min)} min` : ""}`]);
+      }
       const u = w.usage;
       if (u) {
         const irrToday = Math.max(u.today - u.house_today, 0);
@@ -1489,6 +1496,33 @@ Object.assign(HamletHomePanel.prototype, {
     }
     this._renderProt();
     this._renderWaterUse();
+    this._renderTankSet();
+  },
+
+  _renderTankSet(force) {
+    const el = this.shadowRoot.getElementById("wtankbody"); if (!el || !this._isAdmin || !this._water) return;
+    const w = this._water, st = w.settings, T = w.tank, L = w.live || {};
+    const key = JSON.stringify([st.tank_size_l, st.borehole_entity, st.borehole_watts, st.tank_refill_pct, st.borehole_long_min, T && T.fills, T && T.filling, st.flow_enabled]);
+    const a = this.shadowRoot.activeElement;
+    if (!force && ((a && a.closest && a.closest("#wtankbody")) || this._wShown.tank === key)) return;
+    this._wShown.tank = key;
+    const fld = (k, label, hint, unit, step) => `<div class="field"><label for="wt-${k}">${label}${hint ? `<span class="hint">${hint}</span>` : ""}</label><span class="ctl"><input id="wt-${k}" type="number" data-wt="${k}" value="${st[k] ?? ""}" step="${step}" min="0">${unit}</span></div>`;
+    const ago = (iso) => { if (!iso) return ""; const d = new Date(iso); return d.toLocaleDateString([], { weekday: "short" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
+    el.innerHTML = `
+      <p class="muted small" style="margin:0 0 10px">The borehole's float switch tells the app two exact levels: when the borehole switches <b>on</b> the tank is at the switch-on level, when it switches <b>off</b> the tank is full. In between it takes off the water the booster pump delivered and adds what the borehole pumps (learnt from earlier fills).</p>
+      <div class="cols2"><div>
+        ${fld("tank_size_l", "Tank size", "0 = no tank", "L", 50)}
+        ${fld("tank_refill_pct", "Borehole switches on at", "1/3 down from the top = 67 %", "%", 1)}
+        ${fld("borehole_long_min", "Warn when the borehole runs longer than", "0 = 3× its usual fill time", "min", 5)}
+      </div><div>
+        <div class="field"><label for="wt-borehole_entity">Borehole pump<span class="hint">its switch / contactor, or a power sensor</span></label><input id="wt-borehole_entity" type="text" data-wt="borehole_entity" value="${esc(st.borehole_entity || "")}" placeholder="switch.borehole" list="wtbh"></div>
+        <datalist id="wtbh">${Object.entries(this._hass?.states || {}).filter(([id, x]) => /^(switch|binary_sensor|input_boolean|light)\./.test(id) || (id.startsWith("sensor.") && /^k?W$/.test(x?.attributes?.unit_of_measurement || ""))).slice(0, 400).map(([id, x]) => ({ id, name: x?.attributes?.friendly_name || id })).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("")}</datalist>
+        ${fld("borehole_watts", "Power sensor: running above", "only for a power sensor", "W", 10)}
+      </div></div>
+      ${st.tank_size_l && !st.flow_enabled ? `<p class="msg err" style="margin:6px 0">Switch on <b>Count the water</b> (Water use card below) – the tank estimate needs the water the booster pump delivers.</p>` : ""}
+      ${T ? `<div class="sub2">Now</div>
+        <p style="margin:2px 0 8px">${T.level_l === null ? "Learning – the level is known from the next time the borehole switches on or off." : `<b>${T.level_l} L</b> (${Math.round(T.level_l / T.size_l * 100)} %)`}${T.filling ? ` · borehole filling${L.borehole_min ? ` for ${Math.round(L.borehole_min)} min` : ""}` : ""}${T.inflow_lpm ? ` · borehole gives about <b>${T.inflow_lpm.toFixed(1)} L/min</b>` : ""}${T.usual_fill_min ? ` · a fill usually takes ${Math.round(T.usual_fill_min)} min` : ""}</p>
+        ${T.fills && T.fills.length ? `<div class="sub2">Last fills</div><div class="muted small">${T.fills.map((x) => `${ago(x.start)} · ${Math.round(x.minutes)} min · ${x.in_l} L in · ${x.lpm} L/min`).join("<br>")}</div>` : ""}` : ""}`;
   },
 
   _renderWaterUse(force) {
@@ -1641,6 +1675,14 @@ Object.assign(HamletHomePanel.prototype, {
         if (!(est > 0)) { m.textContent = "Do the test while the pump runs and Count the water is on"; m.className = "msg err"; return; }
         const real = lit / sec * 60, cal = Math.min(Math.max(Number(this._water.settings.flow_cal || 1) * real / est, 0.2), 5);
         $("wf-flow_cal").value = cal.toFixed(2); m.textContent = `Measured ${real.toFixed(1)} L/min – factor ${cal.toFixed(2)}, tap Save`; m.className = "msg ok"; return;
+      }
+      case "tanksave": {
+        const settings = {};
+        this.shadowRoot.querySelectorAll("[data-wt]").forEach((inp) => { settings[inp.dataset.wt] = inp.type === "text" ? inp.value.trim() : Number(inp.value || 0); });
+        this.shadowRoot.activeElement?.blur?.();
+        this._wShown.tank = null;
+        if (await call({ type: `${DOMAIN}/water_settings`, settings }, $("wtankmsg"))) { const m = $("wtankmsg"); m.textContent = "Saved"; m.className = "msg ok"; this._renderTankSet(true); }
+        return;
       }
       case "flowsave": {
         const settings = { flow_curve: this._flowCurve };
@@ -1795,6 +1837,7 @@ Object.assign(HamletHomePanel.prototype, {
     const moving = pumpRun || anyZone;                  // water moves when the pump runs or a valve is open
     const house = moving && !anyZone;                  // pump running with no valve open: someone opened a tap
     const tank = num(L.tank), bar = num(L.pressure);
+    const bh = !!(w.settings && w.settings.borehole_entity), bhOn = bh && !!L.borehole;
     const narrow = (this.shadowRoot.host.clientWidth || 800) < 560;
     const n = zones.length + 1;                          // branch 0 = house, 1.. = valves
     const lastOn = moving ? Math.max(0, ...[house ? 0 : -1, ...zOn.map((o, i) => (o ? i + 1 : -1))]) : 0;
@@ -1815,9 +1858,9 @@ Object.assign(HamletHomePanel.prototype, {
       spray = (i) => [bx(i), yTop - 22];
       hit = (i) => [bx(i) - step / 2, yTop - 24, step, yMain + 34 - (yTop - 24)];
     } else {
-      const xr = 170, y0 = 112, step = 46;
-      Wd = 340; H = y0 + (n - 1) * step + 26; yMain = 40;
-      tank0 = { x: 16, y: 8, w: 58, h: 64, lx: 45, ly: 88, la: "middle" };
+      const xr = 170, y0 = bh ? 136 : 112, step = 46;   // with a borehole everything moves down to make room for its pipe
+      Wd = 340; H = y0 + (n - 1) * step + 26; yMain = bh ? 64 : 40;
+      tank0 = bh ? { x: 16, y: 34, w: 58, h: 54, lx: 45, ly: 104, la: "middle" } : { x: 16, y: 8, w: 58, h: 64, lx: 45, ly: 88, la: "middle" };
       pump = { x: 120, y: yMain, vx: 120, vy: yMain - 28, va: "middle", lx: 120, ly: yMain + 36 };
       pipeIn = `M74 ${yMain} H 98`;
       const by = (i) => y0 + i * step;
@@ -1828,7 +1871,7 @@ Object.assign(HamletHomePanel.prototype, {
       spray = (i) => [228, by(i) - 22];
       hit = (i) => [200, by(i) - step / 2, Wd - 200, step];
     }
-    const key = JSON.stringify([narrow, Wd, zones.map((z, i) => [z.id, z.name, zOn[i], z.available]), pumpRun, house, w.tripped, tank === null ? null : Math.round(tank / 5), bar === null ? null : bar.toFixed(1), f.tank_level]);
+    const key = JSON.stringify([narrow, Wd, zones.map((z, i) => [z.id, z.name, zOn[i], z.available]), pumpRun, house, w.tripped, tank === null ? null : Math.round(tank / 5), bar === null ? null : bar.toFixed(1), f.tank_level, bh, bhOn, L.tank_l === undefined ? null : Math.round(L.tank_l / 50), !!L.borehole_long]);
     if (el._key === key) return;
     el._key = key;
     const seg = (d, on, cls = "") => `<g class="${on ? "on" : ""} ${cls}"><path class="pipe" d="${d}"/><path class="wet" d="${d}"/><path class="drops" d="${d}"/></g>`;
@@ -1840,8 +1883,13 @@ Object.assign(HamletHomePanel.prototype, {
       <g clip-path="url(#wtclip)"><rect x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" fill="color-mix(in srgb, var(--c-water) 6%, var(--card))"/>
         <path class="wave" d="M4 ${wy} q 8 -4 16 0 t 16 0 t 16 0 t 16 0 t 16 0 V ${T.y + T.h} H 4 Z" fill="color-mix(in srgb, var(--c-water) ${tank !== null && tank < 20 ? "55" : "40"}%, transparent)"/></g>
       <rect x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/>
-      <text class="val" x="${T.x + T.w / 2}" y="${T.y + T.h / 2 + 4}">${tank === null ? "" : `${Math.round(tank)}%`}</text>
-      <text class="lbl" x="${T.lx}" y="${T.ly}">${f.tank_level ? "Tank" : "Supply"}</text>`;
+      <text class="val" x="${T.x + T.w / 2}" y="${T.y + T.h / 2 + (L.tank_l !== undefined && L.tank_l !== null ? -2 : 4)}">${tank === null ? "" : `${Math.round(tank)}%`}</text>
+      ${L.tank_l !== undefined && L.tank_l !== null ? `<text class="lbl" x="${T.x + T.w / 2}" y="${T.y + T.h / 2 + 12}" style="font-size:10px">${L.tank_l} L</text>` : ""}
+      <text class="lbl" x="${T.lx}" y="${T.ly}">${f.tank_level || w.tank ? "Tank" : "Supply"}</text>`;
+    if (bh) {   // borehole feeding the top of the tank – water dots while it pumps
+      const bx = T.x + T.w / 2, right = narrow ? 104 : 112;
+      svg += seg(`M${right} 10 H ${bx} V ${T.y}`, bhOn) + `<text class="lbl ${bhOn ? "on" : ""}" x="${right + 6}" y="14" style="text-anchor:start${L.borehole_long ? ";fill:var(--c-bad)" : ""}">${L.borehole_long ? "Borehole ⚠" : bhOn ? "Borehole on" : "Borehole"}</text>`;
+    }
     // pipes: supply -> pump -> main line -> branches
     svg += seg(pipeIn, moving);
     svg += seg(trunk(-1, lastOn), moving);
