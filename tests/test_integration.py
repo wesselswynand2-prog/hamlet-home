@@ -593,3 +593,35 @@ async def test_tank_estimate_and_borehole_alarm(enable_custom_integrations, hass
     assert not (await client.receive_json())["success"]
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_float_switch_calibrates_and_controls_borehole(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user, freezer):
+    """The Shelly input wired to the float: exact tank levels, and (optionally) the app switches the borehole relay."""
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    freezer.move_to(dt_util.start_of_local_day() + timedelta(hours=9))
+    entry, on, off, _ = await _water_entry(hass)
+    w = hass.data[DOMAIN]["water"]
+    hass.states.async_set("binary_sensor.shelly_input", "off")      # off = full (input on means: needs water)
+    hass.states.async_set("switch.shelly_borehole", "off")
+    ons, offs = async_mock_service(hass, "homeassistant", "turn_on"), async_mock_service(hass, "homeassistant", "turn_off")
+    refresh = await hass.auth.async_create_refresh_token(hass_admin_user, CLIENT_ID)
+    client = await hass_ws_client(hass, access_token=hass.auth.async_create_access_token(refresh))
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/water_settings", "settings": {
+        "flow_enabled": True, "tank_size_l": 2500, "tank_refill_pct": 67, "float_entity": "binary_sensor.shelly_input",
+        "float_on_means": "low", "borehole_switch": "switch.shelly_borehole", "borehole_control": True}})
+    assert (await client.receive_json())["success"]
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.shelly_input", "on")       # float drops -> needs water
+    await hass.async_block_till_done()                               # reacts at once (no 20 s wait)
+    assert w.live["float_low"] is True and w.live["tank_l"] == 1675
+    assert ons and ons[-1].data["entity_id"] == "switch.shelly_borehole"
+    hass.states.async_set("switch.shelly_borehole", "on")
+    freezer.tick(timedelta(minutes=30))
+    hass.states.async_set("binary_sensor.shelly_input", "off")      # float lifts -> full
+    await hass.async_block_till_done()
+    assert w.live["tank_l"] == 2500 and offs and offs[-1].data["entity_id"] == "switch.shelly_borehole"
+    assert w.tank_info()["fills"][0]["minutes"] == pytest.approx(30, abs=0.5)
+    await client.send_json({"id": 2, "type": f"{DOMAIN}/water_settings", "settings": {"float_entity": "sensor.x_power", "borehole_switch": "sensor.y"}})
+    assert not (await client.receive_json())["success"]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

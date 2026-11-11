@@ -136,6 +136,8 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 
 - The installer sets the tank size, the borehole pump's switch (or power sensor) and the level where the float switches the borehole on (1/3 down from the top = 67 %).
 - When the borehole switches on, the tank is at that level; when it switches off, the tank is full. In between the app takes off the water the house and garden use and adds what the borehole pumps – it learns the borehole's L/min from each fill.
+- **Float switch:** if the tank's float is wired to an input (e.g. a Shelly input), pick it as **Float switch input** – the level is then set exactly when the float drops (switch-on level) and lifts (full). Check **When the input is ON** against the real float.
+- **The app starts and stops the borehole:** switch this on and pick the **Borehole relay** (the Shelly output) to let the app run the borehole from the float. Leave it off when the Shelly already does it itself. If the float input goes offline, the app switches the borehole off.
 - Know the level? On the Tank & borehole card tap **Tank is full now**, or type the % and tap **Set level**. The float switch also corrects it every time the borehole switches on or off.
 - The tank on the pump drawing shows the % and litres, and the borehole pipe runs while it fills. The first level shows after the borehole has switched on or off once.
 - Alarms: **Water tank low** and **Borehole running too long** (it may be running dry).

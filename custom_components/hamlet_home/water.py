@@ -44,6 +44,10 @@ DEFAULT_WATER_SETTINGS: dict = {
     "borehole_watts": 50,        # a power sensor above this counts as running
     "tank_refill_pct": 67,       # the float switches the borehole on at this level (1/3 down from the top = 67 %)
     "borehole_long_min": 0,      # warn when the borehole runs longer than this (0 = 3× its usual fill time)
+    "float_entity": "",          # the tank's float switch, e.g. the Shelly input it is wired to (exact full / refill moments)
+    "float_on_means": "low",     # input ON = tank needs water ("low") or tank full ("full")
+    "borehole_switch": "",       # the borehole relay (Shelly output) – only needed when the app switches the borehole
+    "borehole_control": False,   # the app starts / stops the borehole from the float switch
     "pump_card": "",             # a dashboard card (YAML) shown with the booster pump, e.g. the Delta CP2000 card
 }
 USER_KEYS = {"pool_mode", "pool_schedules", "pool_solar_start_w", "pool_solar_keep_w", "pool_hours",
@@ -342,6 +346,20 @@ def validate_water_settings(new: dict, admin: bool) -> dict:
             if not 0 <= v <= 1440:
                 raise ValueError("Borehole warning must be 0 … 1440 minutes")
             clean[key] = v
+        elif key == "float_entity":
+            value = str(value or "").strip()
+            if value and not value.startswith(("binary_sensor.", "switch.", "input_boolean.", "sensor.", "event.")):
+                raise ValueError("The float switch must be a binary sensor (the Shelly input)")
+            clean[key] = value
+        elif key == "float_on_means":
+            if value not in ("low", "full"):
+                raise ValueError("Float input: 'low' or 'full'")
+            clean[key] = value
+        elif key == "borehole_switch":
+            value = str(value or "").strip()
+            if value and not value.startswith(("switch.", "input_boolean.", "light.")):
+                raise ValueError("The borehole relay must be a switch (the Shelly output)")
+            clean[key] = value
         elif key == "pump_card":
             value = str(value or "").strip()
             if value:

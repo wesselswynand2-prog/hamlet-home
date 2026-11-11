@@ -353,7 +353,7 @@ class HamletHomeProperty extends HTMLElement {
     // ---------- water
     const hasBooster = !!(WF.pump_switch || WF.pump_power || WF.pump_hz || WF.water_pressure);
     const boost = !!WL.pump_running, bar = num(WL.pressure), tank = num(WL.tank);
-    const hasBh = !!(W.settings && W.settings.borehole_entity), bhOn = hasBh && !!WL.borehole;
+    const hasBh = !!(W.settings && (W.settings.borehole_entity || W.settings.borehole_switch)), bhOn = hasBh && !!WL.borehole;
     const zones = (irr.zones || []).filter((z) => z.enabled !== false || z.on).slice(0, 6);
     const zOn = zones.map((z) => !!z.on || z.id === irr.run?.zone);
     const watering = zOn.some(Boolean);

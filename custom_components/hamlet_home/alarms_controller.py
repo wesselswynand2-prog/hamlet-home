@@ -94,7 +94,7 @@ class AlarmsController:
             "pump_tripped": bool(water.guard.tripped) if has_pump and hasattr(water, "guard") else None,
             "inverter_state": inv.state if inv is not None and inv.state not in ("unavailable", "unknown") else None,
             "tank": (water.live.get("tank") if hasattr(water, "live") else None),
-            "borehole_long": (water.live.get("borehole_long") if hasattr(water, "live") and water.settings.get("borehole_entity") and water.settings.get("tank_size_l") else None),
+            "borehole_long": (water.live.get("borehole_long") if hasattr(water, "live") and (water.settings.get("borehole_entity") or water.settings.get("borehole_switch")) and water.settings.get("tank_size_l") else None),
             "borehole_min": (water.live.get("borehole_min") if hasattr(water, "live") else None),
             "minutes_now": now.hour * 60 + now.minute,
             "states": states,

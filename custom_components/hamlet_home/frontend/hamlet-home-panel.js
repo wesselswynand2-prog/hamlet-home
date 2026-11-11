@@ -1564,7 +1564,7 @@ Object.assign(HamletHomePanel.prototype, {
   _renderTankSet(force) {
     const el = this.shadowRoot.getElementById("wtankbody"); if (!el || !this._isAdmin || !this._water) return;
     const w = this._water, st = w.settings, T = w.tank, L = w.live || {};
-    const key = JSON.stringify([st.tank_size_l, st.borehole_entity, st.borehole_watts, st.tank_refill_pct, st.borehole_long_min, T && T.fills, T && T.filling, st.flow_enabled]);
+    const key = JSON.stringify([st.tank_size_l, st.borehole_entity, st.borehole_watts, st.tank_refill_pct, st.borehole_long_min, st.float_entity, st.float_on_means, st.borehole_switch, st.borehole_control, T && T.fills, T && T.filling, T && T.float_low, st.flow_enabled]);
     const a = this.shadowRoot.activeElement;
     if (!force && ((a && a.closest && a.closest("#wtankbody")) || this._wShown.tank === key)) return;
     this._wShown.tank = key;
@@ -1581,9 +1581,19 @@ Object.assign(HamletHomePanel.prototype, {
         <datalist id="wtbh">${Object.entries(this._hass?.states || {}).filter(([id, x]) => /^(switch|binary_sensor|input_boolean|light)\./.test(id) || (id.startsWith("sensor.") && /^k?W$/.test(x?.attributes?.unit_of_measurement || ""))).slice(0, 400).map(([id, x]) => ({ id, name: x?.attributes?.friendly_name || id })).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("")}</datalist>
         ${fld("borehole_watts", "Power sensor: running above", "only for a power sensor", "W", 10)}
       </div></div>
+      <div class="sub2">Float switch <span class="muted small">optional – e.g. the Shelly input the tank's float is wired to</span></div>
+      <div class="cols2"><div>
+        <div class="field"><label for="wt-float_entity">Float switch input<span class="hint">gives the exact moments: tank at the switch-on level / tank full</span></label><input id="wt-float_entity" type="text" data-wt="float_entity" value="${esc(st.float_entity || "")}" placeholder="binary_sensor.shelly_input_0" list="wtfl"></div>
+        <datalist id="wtfl">${Object.entries(this._hass?.states || {}).filter(([id]) => /^(binary_sensor|input_boolean|switch)\./.test(id)).slice(0, 400).map(([id, x]) => `<option value="${esc(id)}">${esc(x?.attributes?.friendly_name || id)}</option>`).join("")}</datalist>
+        <div class="field"><label for="wt-float_on_means">When the input is ON<span class="hint">check: with the tank full the input should show the other state</span></label><select id="wt-float_on_means" data-wt="float_on_means"><option value="low" ${st.float_on_means !== "full" ? "selected" : ""}>the tank needs water</option><option value="full" ${st.float_on_means === "full" ? "selected" : ""}>the tank is full</option></select></div>
+      </div><div>
+        <div class="field"><label for="wt-borehole_control">The app starts and stops the borehole<span class="hint">from the float switch · off when the Shelly does it by itself</span></label><span class="switch"><input id="wt-borehole_control" type="checkbox" data-wt="borehole_control" ${st.borehole_control ? "checked" : ""}><span></span></span></div>
+        <div class="field"><label for="wt-borehole_switch">Borehole relay<span class="hint">the Shelly output that switches the borehole</span></label><input id="wt-borehole_switch" type="text" data-wt="borehole_switch" value="${esc(st.borehole_switch || "")}" placeholder="switch.shelly_borehole" list="wtsw"></div>
+        <datalist id="wtsw">${Object.entries(this._hass?.states || {}).filter(([id]) => /^(switch|input_boolean)\./.test(id)).slice(0, 400).map(([id, x]) => `<option value="${esc(id)}">${esc(x?.attributes?.friendly_name || id)}</option>`).join("")}</datalist>
+      </div></div>
       ${st.tank_size_l && !st.flow_enabled ? `<p class="msg err" style="margin:6px 0">Switch on <b>Count the water</b> (Water use card below) – the tank estimate needs the water the booster pump delivers.</p>` : ""}
       ${T ? `<div class="sub2">Now</div>
-        <p style="margin:2px 0 8px">${T.level_l === null ? "Learning – the level is known from the next time the borehole switches on or off." : `<b>${T.level_l} L</b> (${Math.round(T.level_l / T.size_l * 100)} %)`}${T.filling ? ` · borehole filling${L.borehole_min ? ` for ${Math.round(L.borehole_min)} min` : ""}` : ""}${T.inflow_lpm ? ` · borehole gives about <b>${T.inflow_lpm.toFixed(1)} L/min</b>` : ""}${T.usual_fill_min ? ` · a fill usually takes ${Math.round(T.usual_fill_min)} min` : ""}</p>
+        <p style="margin:2px 0 8px">${T.level_l === null ? "Learning – the level is known from the next time the borehole switches on or off." : `<b>${T.level_l} L</b> (${Math.round(T.level_l / T.size_l * 100)} %)`}${T.filling ? ` · borehole filling${L.borehole_min ? ` for ${Math.round(L.borehole_min)} min` : ""}` : ""}${st.float_entity ? ` · float: <b>${T.float_low === true ? "needs water" : T.float_low === false ? "full" : "unknown"}</b>` : ""}${T.inflow_lpm ? ` · borehole gives about <b>${T.inflow_lpm.toFixed(1)} L/min</b>` : ""}${T.usual_fill_min ? ` · a fill usually takes ${Math.round(T.usual_fill_min)} min` : ""}</p>
         <div class="row2" style="flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px"><span class="muted small">Know the level?</span><button class="btn" data-w="tankfull">Tank is full now</button><span class="ctl"><input type="number" id="wt-setpct" min="0" max="100" step="1" placeholder="${T.level_l === null ? "" : Math.round(T.level_l / T.size_l * 100)}" aria-label="Tank level now in %">%</span><button class="btn" data-w="tankset">Set level</button></div>
         ${T.fills && T.fills.length ? `<div class="sub2">Last fills</div><div class="muted small">${T.fills.map((x) => `${ago(x.start)} · ${Math.round(x.minutes)} min · ${x.in_l} L in · ${x.lpm} L/min`).join("<br>")}</div>` : ""}` : ""}`;
   },
@@ -1754,7 +1764,9 @@ Object.assign(HamletHomePanel.prototype, {
       }
       case "tanksave": {
         const settings = {};
-        this.shadowRoot.querySelectorAll("[data-wt]").forEach((inp) => { settings[inp.dataset.wt] = inp.type === "text" ? inp.value.trim() : Number(inp.value || 0); });
+        this.shadowRoot.querySelectorAll("[data-wt]").forEach((inp) => { settings[inp.dataset.wt] = inp.type === "checkbox" ? inp.checked : inp.tagName === "SELECT" ? inp.value : inp.type === "text" ? inp.value.trim() : Number(inp.value || 0); });
+        if (settings.borehole_control && !settings.borehole_switch) { const m = $("wtankmsg"); m.textContent = "Pick the borehole relay (the Shelly output) first"; m.className = "msg err"; return; }
+        if (settings.borehole_control && !settings.float_entity) { const m = $("wtankmsg"); m.textContent = "Pick the float switch input first"; m.className = "msg err"; return; }
         this.shadowRoot.activeElement?.blur?.();
         this._wShown.tank = null;
         if (await call({ type: `${DOMAIN}/water_settings`, settings }, $("wtankmsg"))) { const m = $("wtankmsg"); m.textContent = "Saved"; m.className = "msg ok"; this._renderTankSet(true); }
@@ -1913,7 +1925,7 @@ Object.assign(HamletHomePanel.prototype, {
     const moving = pumpRun || anyZone;                  // water moves when the pump runs or a valve is open
     const house = moving && !anyZone;                  // pump running with no valve open: someone opened a tap
     const tank = num(L.tank), bar = num(L.pressure);
-    const bh = !!(w.settings && w.settings.borehole_entity), bhOn = bh && !!L.borehole;
+    const bh = !!(w.settings && (w.settings.borehole_entity || w.settings.borehole_switch)), bhOn = bh && !!L.borehole;
     const narrow = (this.shadowRoot.host.clientWidth || 800) < 560;
     const n = zones.length + 1;                          // branch 0 = house, 1.. = valves
     const lastOn = moving ? Math.max(0, ...[house ? 0 : -1, ...zOn.map((o, i) => (o ? i + 1 : -1))]) : 0;

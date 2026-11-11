@@ -90,9 +90,22 @@ class WaterController:
         ids = [self.conf[k] for k in WATER_KEYS if self.conf.get(k)]
         self._unsubs.append(async_track_state_change_event(self.hass, ids, self._on_change))
         self._unsubs.append(async_track_time_interval(self.hass, self._on_tick, timedelta(seconds=20)))
+        self._watch_float()
         await self.async_evaluate()
 
+    def _watch_float(self) -> None:
+        """React the moment the float switch or the borehole changes (not only every 20 s)."""
+        if getattr(self, "_float_unsub", None):
+            self._float_unsub()
+            self._float_unsub = None
+        ids = [e for e in (self.settings.get("float_entity"), self.settings.get("borehole_entity"), self.settings.get("borehole_switch")) if e]
+        if ids and self.enabled:
+            self._float_unsub = async_track_state_change_event(self.hass, ids, self._on_change)
+
     async def async_stop(self) -> None:
+        if getattr(self, "_float_unsub", None):
+            self._float_unsub()
+            self._float_unsub = None
         for u in self._unsubs:
             u()
         self._unsubs.clear()
@@ -198,16 +211,47 @@ class WaterController:
                 return None
         return st.state in ("on", "open", "running")
 
+    def float_low(self) -> bool | None:
+        """True = the float says the tank needs water, False = full, None = no float switch / unknown."""
+        eid = self.settings.get("float_entity")
+        st = self.hass.states.get(eid) if eid else None
+        if st is None or st.state in BAD:
+            return None
+        on = st.state in ("on", "open", "true", "1")
+        return on if self.settings.get("float_on_means", "low") == "low" else not on
+
+    async def _control_borehole(self, low: bool | None, live: dict) -> None:
+        """The app follows the float: tank low -> borehole on, tank full -> off. Unknown float -> off (safe)."""
+        sw = self.settings.get("borehole_switch")
+        if not (self.settings.get("borehole_control") and sw):
+            return
+        want = bool(low)
+        st = self.hass.states.get(sw)
+        is_on = st is not None and st.state == "on"
+        if st is None or is_on == want:
+            return
+        try:
+            await self.hass.services.async_call("homeassistant", "turn_on" if want else "turn_off", {"entity_id": sw}, blocking=False)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Hamlet Home: could not switch the borehole %s: %s", sw, err)
+
     def _tank_update(self, now, live: dict) -> None:
         """Estimated tank level when there is no level sensor (borehole float switch + water used)."""
         s = self.settings
         size = float(s.get("tank_size_l") or 0)
         bh = self.borehole_on()
+        if bh is None and s.get("borehole_switch"):
+            st = self.hass.states.get(s["borehole_switch"])
+            bh = None if st is None or st.state in BAD else st.state == "on"
+        low = self.float_low()
         live["borehole"] = bh
+        live["float_low"] = low
         if size <= 0 or self.conf.get(CONF_TANK_LEVEL):
             return
         was = self.tank.filling
-        self.tank.update(now, bh, self.meter.total_l, size, float(s.get("tank_refill_pct", 67)))
+        # the float switch gives the exact moments (low = refill level, full); without one the borehole running is used
+        calling = low if s.get("float_entity") else bh
+        self.tank.update(now, calling, self.meter.total_l, size, float(s.get("tank_refill_pct", 67)))
         if was != self.tank.filling:
             self._save()
         lvl = self.tank.level_l
@@ -226,7 +270,7 @@ class WaterController:
         return {"size_l": s["tank_size_l"], "level_l": None if self.tank.level_l is None else round(self.tank.level_l),
                 "filling": self.tank.filling, "fill_start": self.tank.fill_start, "inflow_lpm": self.tank.inflow_lpm,
                 "usual_fill_min": self.tank.usual_fill_min(), "fills": list(reversed(self.tank.fills))[:5],
-                "flow_counting": bool(s.get("flow_enabled"))}
+                "flow_counting": bool(s.get("flow_enabled")), "float_low": self.float_low()}
 
     def _open_zones(self) -> tuple:
         irr = self.hass.data.get(DOMAIN, {}).get("irrigation")
@@ -291,6 +335,7 @@ class WaterController:
             live["flow_lpm"] = round(q * 1000 / 60, 1) if q is not None else None
             self.meter.update(now, q, self._open_zones())
         self._tank_update(now, live)
+        await self._control_borehole(live.get("float_low"), live)
         self.live = live
         self._notify_ui()
 
@@ -355,6 +400,8 @@ class WaterController:
             self._pool_last_desired = None
         self.settings.update(clean)
         self._save(1)
+        if {"float_entity", "borehole_entity", "borehole_switch"} & set(clean):
+            self._watch_float()
         await self.async_evaluate()
 
     # ------------------------------------------------------ solar sharing
