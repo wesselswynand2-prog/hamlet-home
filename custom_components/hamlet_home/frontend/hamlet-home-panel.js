@@ -1584,6 +1584,7 @@ Object.assign(HamletHomePanel.prototype, {
       ${st.tank_size_l && !st.flow_enabled ? `<p class="msg err" style="margin:6px 0">Switch on <b>Count the water</b> (Water use card below) – the tank estimate needs the water the booster pump delivers.</p>` : ""}
       ${T ? `<div class="sub2">Now</div>
         <p style="margin:2px 0 8px">${T.level_l === null ? "Learning – the level is known from the next time the borehole switches on or off." : `<b>${T.level_l} L</b> (${Math.round(T.level_l / T.size_l * 100)} %)`}${T.filling ? ` · borehole filling${L.borehole_min ? ` for ${Math.round(L.borehole_min)} min` : ""}` : ""}${T.inflow_lpm ? ` · borehole gives about <b>${T.inflow_lpm.toFixed(1)} L/min</b>` : ""}${T.usual_fill_min ? ` · a fill usually takes ${Math.round(T.usual_fill_min)} min` : ""}</p>
+        <div class="row2" style="flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px"><span class="muted small">Know the level?</span><button class="btn" data-w="tankfull">Tank is full now</button><span class="ctl"><input type="number" id="wt-setpct" min="0" max="100" step="1" placeholder="${T.level_l === null ? "" : Math.round(T.level_l / T.size_l * 100)}" aria-label="Tank level now in %">%</span><button class="btn" data-w="tankset">Set level</button></div>
         ${T.fills && T.fills.length ? `<div class="sub2">Last fills</div><div class="muted small">${T.fills.map((x) => `${ago(x.start)} · ${Math.round(x.minutes)} min · ${x.in_l} L in · ${x.lpm} L/min`).join("<br>")}</div>` : ""}` : ""}`;
   },
 
@@ -1737,6 +1738,12 @@ Object.assign(HamletHomePanel.prototype, {
         if (!(est > 0)) { m.textContent = "Do the test while the pump runs and Count the water is on"; m.className = "msg err"; return; }
         const real = lit / sec * 60, cal = Math.min(Math.max(Number(this._water.settings.flow_cal || 1) * real / est, 0.2), 5);
         $("wf-flow_cal").value = cal.toFixed(2); m.textContent = `Measured ${real.toFixed(1)} L/min – factor ${cal.toFixed(2)}, tap Save`; m.className = "msg ok"; return;
+      }
+      case "tankfull": case "tankset": {
+        const v = b.dataset.w === "tankfull" ? "100" : String($("wt-setpct").value || "").trim(), m = $("wtankmsg");
+        if (v === "") { m.textContent = "Type the level in %"; m.className = "msg err"; return; }
+        if (await call({ type: `${DOMAIN}/water_action`, action: "tank_level", value: v }, m)) { m.textContent = `Tank set to ${v} %`; m.className = "msg ok"; this._renderTankSet(true); }
+        return;
       }
       case "cardsave": {
         const ta = $("wcardyaml"), text = ta.value.trim();

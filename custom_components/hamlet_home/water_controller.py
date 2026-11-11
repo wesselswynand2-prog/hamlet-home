@@ -316,6 +316,20 @@ class WaterController:
 
     # ---------------------------------------------------------------- actions
     async def async_action(self, action: str, value: Any = None) -> None:
+        if action == "tank_level":     # "my tank is full now" – correct the estimate by hand
+            size = float(self.settings.get("tank_size_l") or 0)
+            if size <= 0:
+                raise ValueError("Set the tank size first")
+            try:
+                pct = float(value)
+            except (TypeError, ValueError) as err:
+                raise ValueError("Give the tank level in %") from err
+            if not 0 <= pct <= 100:
+                raise ValueError("Tank level must be 0 … 100 %")
+            self.tank.level_l = size * pct / 100
+            self._save()
+            await self.async_evaluate()
+            return
         if action == "pump":
             if not self.conf.get(CONF_PUMP_SWITCH):
                 raise ValueError("No pump switch set up")

@@ -185,7 +185,7 @@ async def ws_set_tariff(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): f"{DOMAIN}/water_action",
-    vol.Required("action"): vol.In(["pump", "reset", "pool_mode"]),
+    vol.Required("action"): vol.In(["pump", "reset", "pool_mode", "tank_level"]),
     vol.Optional("value"): vol.Any(bool, str),
 })
 @websocket_api.async_response
@@ -193,6 +193,9 @@ async def ws_water_action(hass, connection, msg):
     if _controller(hass, connection, msg) is None:
         return
     w: WaterController = hass.data[DOMAIN]["water"]
+    if msg["action"] == "tank_level" and not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Only an administrator can set the tank level")
+        return
     try:
         await w.async_action(msg["action"], msg.get("value"))
     except ValueError as err:

@@ -586,5 +586,10 @@ async def test_tank_estimate_and_borehole_alarm(enable_custom_integrations, hass
     await w.async_evaluate(); await al.async_evaluate()
     assert w.live["tank_l"] == 2500 and not al.snapshot()["active"]
     assert w.tank_info()["inflow_lpm"] > 0 and len(w.tank_info()["fills"]) == 1
+    await client.send_json({"id": 9, "type": f"{DOMAIN}/water_action", "action": "tank_level", "value": "80"})   # set by hand
+    res = await client.receive_json()
+    assert res["success"] and res["result"]["tank"]["level_l"] == 2000 and w.live["tank"] == 80.0
+    await client.send_json({"id": 10, "type": f"{DOMAIN}/water_action", "action": "tank_level", "value": "120"})
+    assert not (await client.receive_json())["success"]
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
