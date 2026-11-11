@@ -50,6 +50,7 @@ const STYLE = SKY_CSS + WIND_CSS + `
 .spin.on { animation: spin .6s linear infinite; }
 .sunrays { transform-box: fill-box; transform-origin: center; animation: spin 30s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.buzz { animation: buzz .12s linear infinite; } @keyframes buzz { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(.8px); } }
 .cloud { animation: drift 70s linear infinite; } .cloud.c2 { animation-duration: 95s; animation-delay: -40s; }
 @keyframes drift { from { transform: translateX(-300px); } to { transform: translateX(1900px); } }
 .wave1 { animation: wave 4s ease-in-out infinite alternate; } .wave2 { animation: wave 5.5s ease-in-out infinite alternate-reverse; }
@@ -166,6 +167,7 @@ class HamletHomeProperty extends HTMLElement {
       <rect x="690" y="262" width="26" height="56" fill="#7a4334"/>
 
       <!-- wires and pipes (base) -->
+      <g id="bhcasing"><rect x="1032" y="598" width="18" height="150" fill="#3b3226" opacity=".55"/><rect x="1035" y="598" width="12" height="150" fill="#0f3b5c" opacity=".55"/></g>
       <path class="wire" id="w-grid" d="M186 286 Q 260 340 300 410 H 382"/>
       <path class="wire" id="w-pvac" d="M470 300 V 366 H 407 V 384"/>
       <path class="wire" id="w-pvdc" d="M560 300 V 392 Q 560 404 596 404 V 412"/>
@@ -177,6 +179,7 @@ class HamletHomeProperty extends HTMLElement {
       <path class="pipe" id="p-coll" d="M650 350 V 372 H 380 V 480"/>
       <path class="pipe" id="p-coll2" d="M690 352 V 380 H 640 V 500 H 622"/>
       <path class="pipe" id="p-tankpump" d="M914 552 V 584 H 992"/>
+      <path class="pipe" id="p-bh" d="M1041 716 V 424 H 962"/>
       <path class="pipe" id="p-house" d="M992 588 H 780"/>
       <path class="pipe" id="p-irr" d="M1010 596 V 750 H 120"/>
       <path class="pipe" id="p-pool" d="M1420 690 H 1470 V 640"/>
@@ -230,6 +233,17 @@ class HamletHomeProperty extends HTMLElement {
         <g class="spin" id="boostimp"><path d="M1004 586 l0 -11 a11 11 0 0 1 8 3 Z M1004 586 l9.5 5.5 a11 11 0 0 1 -4 7.5 Z M1004 586 l-9.5 5.5 a11 11 0 0 1 -4 -7.5 Z" fill="#fff"/></g>
         <rect x="992" y="602" width="24" height="6" rx="2" fill="#555"/></g>
 
+      <!-- borehole: casing down into the ground (cut-away), submersible pump at the bottom, pipe up into the tank -->
+      <g id="borehole">
+        <path d="M1032 598 V 748 M1050 598 V 748" stroke="#9aa4b0" stroke-width="2" stroke-dasharray="6 4" opacity=".8"/>
+        <g id="bhpump"><rect x="1034" y="716" width="14" height="30" rx="4" fill="#3a6fb0" stroke="#1f3f6a" stroke-width="1.5"/>
+          <path d="M1034 724 H1048 M1034 738 H1048" stroke="#1f3f6a" stroke-width="1.5"/><rect x="1037" y="712" width="8" height="5" rx="1" fill="#9aa4b0"/></g>
+        <rect x="1026" y="590" width="30" height="10" rx="2" fill="#b9b2a5" stroke="#8e877b" stroke-width="1.5"/>
+        <rect x="1034" y="566" width="14" height="26" rx="2" fill="#c9ced6" stroke="#7d8794" stroke-width="1.5"/>
+        <rect x="1031" y="562" width="20" height="6" rx="2" fill="#7d8794"/>
+        <circle id="bhled" cx="1041" cy="580" r="3" fill="#555"/>
+      </g>
+
       <!-- pool, with ripples, lights and cleaner -->
       <g id="pool">
         <rect x="1056" y="636" width="368" height="94" rx="16" fill="#e9e4da" stroke="#b9b2a5" stroke-width="2"/>
@@ -276,7 +290,7 @@ class HamletHomeProperty extends HTMLElement {
     $("collector").querySelector("g").innerHTML = t;
     const fl = $("flows");
     ["grid", "pvac", "pvdc", "batt", "ess", "gey", "gey2", "yard"].forEach((k) => { const d = $("w-" + k).getAttribute("d"); fl.insertAdjacentHTML("beforeend", `<path class="glowline" id="g-${k}" d="${d}"/><path class="flow" id="f-${k}" d="${d}"/>`); });
-    ["coll", "coll2", "tankpump", "house", "irr", "pool", "pool2", "poolret"].forEach((k) => { const d = $("p-" + k).getAttribute("d"); fl.insertAdjacentHTML("beforeend", `<path class="glowline" id="g-${k}" d="${d}"/><path class="flow wat" id="f-${k}" d="${d}"/>`); });
+    ["coll", "coll2", "tankpump", "bh", "house", "irr", "pool", "pool2", "poolret"].forEach((k) => { const d = $("p-" + k).getAttribute("d"); fl.insertAdjacentHTML("beforeend", `<path class="glowline" id="g-${k}" d="${d}"/><path class="flow wat" id="f-${k}" d="${d}"/>`); });
     this._built = true;
   }
 
@@ -339,6 +353,7 @@ class HamletHomeProperty extends HTMLElement {
     // ---------- water
     const hasBooster = !!(WF.pump_switch || WF.pump_power || WF.pump_hz || WF.water_pressure);
     const boost = !!WL.pump_running, bar = num(WL.pressure), tank = num(WL.tank);
+    const hasBh = !!(W.settings && W.settings.borehole_entity), bhOn = hasBh && !!WL.borehole;
     const zones = (irr.zones || []).filter((z) => z.enabled !== false || z.on).slice(0, 6);
     const zOn = zones.map((z) => !!z.on || z.id === irr.run?.zone);
     const watering = zOn.some(Boolean);
@@ -405,6 +420,10 @@ class HamletHomeProperty extends HTMLElement {
     this._flow("yard", yardW, C[essSrc]);
     // ---------- water pipes
     this._flow("tankpump", boost ? 900 : 0, C.water);
+    this._show(["borehole", "bhcasing", "p-bh", "f-bh", "g-bh"], hasBh);
+    this._flow("bh", bhOn ? 1100 : 0, C.water);
+    $("bhpump").classList.toggle("buzz", bhOn);
+    $("bhled").setAttribute("fill", WL.borehole_long ? "#e5484d" : bhOn ? "#3ccf6e" : "#555");
     this._flow("house", boost && !watering ? 900 : 0, C.water);
     this._flow("irr", watering ? 1400 : 0, C.water);
     this._flow("coll", ci === 0 && cg.collOn ? 900 : 0, C.heat);
@@ -458,7 +477,7 @@ class HamletHomeProperty extends HTMLElement {
     labels += lab(700, 636, fmt(ess), lsplit ? "House · essential loads" : "House load", C[essSrc] || C.grid);
     if (lsplit && noness !== null) labels += lab(296, 372, down ? "Off" : fmt(noness), "AC Loads · grid side", C[top(fm.noness, "grid")] || C.grid, "end");
     if (f.battery) labels += lab(504, 636, soc !== null ? `${Math.round(soc)}%` : fmt(batt), `Battery${battTxt ? " · " + battTxt : ""}`, C.battery);
-    if (hasBooster) labels += lab(914, 380, tank !== null ? `${Math.round(tank)}%` : bar !== null ? `${bar.toFixed(1)} bar` : "Water", `${boost ? "Booster on" : "Booster"}${bar !== null && tank !== null ? ` · ${bar.toFixed(1)} bar` : ""}`, C.water);
+    if (hasBooster) labels += lab(914, 380, tank !== null ? `${Math.round(tank)}%` : bar !== null ? `${bar.toFixed(1)} bar` : "Water", `${boost ? "Booster on" : "Booster"}${bar !== null && tank !== null ? ` · ${bar.toFixed(1)} bar` : ""}${bhOn ? (WL.borehole_long ? " · borehole ⚠" : " · borehole filling") : ""}`, C.water);
     if (watering) labels += lab(30, 662, "Watering", zNames.join(" + "), C.water, "start");
     if (hasPool) labels += lab(1240, 612, pp ? `Pool pump${num(WL.pool_w) ? " " + fmt(num(WL.pool_w)) : " on"}` : "Pool pump off",
       hpOn ? `${hp.name} ${fmt(num(hp.w) || num(hp.rated_w))}${poolT !== null ? ` · ${poolT.toFixed(1)}°C` : ""}` : `${poolT !== null ? `Pool ${poolT.toFixed(1)}°C` : "Pool"}${lights ? " · lights on" : ""}`,
