@@ -392,6 +392,11 @@ class WaterController:
         }
         if self.settings.get("flow_enabled"):
             snap["usage"] = self.usage()
+        if self.settings.get("pump_card"):
+            try:
+                snap["pump_card"] = water.parse_card(self.settings["pump_card"])
+            except ValueError:
+                snap["pump_card"] = None
         tank = self.tank_info()
         if tank:
             snap["tank"] = tank

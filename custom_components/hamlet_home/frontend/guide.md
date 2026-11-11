@@ -128,6 +128,10 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 
 - **Tap a valve on the pump drawing** to water it: choose the minutes (− / + or 5–30) and tap **Water for … min**. Tap a valve that is watering to stop it.
 
+**Pump card** (installer)
+
+- Any dashboard card can be shown next to the booster pump – e.g. the Delta CP2000 VFD keypad card. On the Irrigation tab, **Pump card**: paste the card's YAML (from a dashboard: edit the card → ⋮ → *Edit in YAML*, copy it) and Save. The card must be installed through HACS.
+
 **Tank & borehole** (no level sensor needed)
 
 - The installer sets the tank size, the borehole pump's switch (or power sensor) and the level where the float switches the borehole on (1/3 down from the top = 67 %).

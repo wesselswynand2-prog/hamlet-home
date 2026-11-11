@@ -198,6 +198,11 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .zname { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .zname .t { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zname .z2 { font-size: 12px; color: var(--muted); }
+.wpwrap { display: flex; gap: 16px; align-items: flex-start; }
+.wpmain { flex: 1; min-width: 0; }
+#wcard { flex: 0 0 auto; width: min(400px, 100%); }
+@media (max-width: 1100px) { .wpwrap { flex-direction: column; } #wcard { width: 100%; max-width: 480px; margin: 0 auto; } }
+#wcardyaml { width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: var(--card2, rgba(127,127,127,.08)); color: var(--primary-text-color); border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
 .fcurve { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
 .fpt { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .fpt input, #wflowbody .ctl input { width: 76px; }
@@ -355,6 +360,7 @@ class HamletHomePanel extends HTMLElement {
     this._hass = hass;
     this.toggleAttribute("dark", !!hass.themes?.darkMode);
     if (this._menu) this._menu.hass = hass;
+    if (this._pcEl) this._pcEl.hass = hass;
     if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
     this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene, hamlet-home-property, hamlet-home-alarms").forEach((c) => { c.hass = hass; });
     if (first) this._init();
@@ -1328,13 +1334,17 @@ Object.assign(HamletHomePanel.prototype, {
   _buildWater() {
     this._main.innerHTML = `
       <div class="card alarm" id="walarm" hidden></div>
-      <section class="card" id="wpump"><h2>Booster pump <span class="sub" id="wpumpsub"></span></h2><div id="wpumpbody"></div><div id="wpumpdia"></div></section>
+      <section class="card" id="wpump"><h2>Booster pump <span class="sub" id="wpumpsub"></span></h2><div class="wpwrap"><div class="wpmain"><div id="wpumpbody"></div><div id="wpumpdia"></div></div><div id="wcard" hidden></div></div></section>
       <section class="card" id="wirr"><h2><ha-icon icon="mdi:sprinkler-variant"></ha-icon>Irrigation <span class="sub" id="wirrsub"></span></h2>
         <div id="irrlive"></div><div id="irrform"></div>
         <div class="actions" id="irract" hidden><span class="msg" id="irrmsg"></span><button class="btn" data-irr="discard">Discard</button><button class="btn primary" data-irr="save">Save changes</button></div></section>
       <section class="card" id="wchartcard"><h2>Water pressure <span class="sub"><span class="seg"><button data-wday="today" aria-pressed="${(this._wday || "today") === "today"}">Today</button><button data-wday="yesterday" aria-pressed="${this._wday === "yesterday"}">Yesterday</button></span></span></h2>
         <div class="legend" style="margin:0 0 6px"><span class="key"><i style="background:var(--c-load)"></i>Pressure (bar)</span><span class="key"><i style="background:var(--accent);opacity:.25"></i>Booster pump running</span></div>
         <div class="chartwrap" id="wchart"></div></section>
+      <section class="card" id="wcardset" hidden><h2>Pump card <span class="sub">admin only · show a dashboard card with the booster pump</span></h2>
+        <p class="muted small" style="margin:0 0 8px">Paste the card's YAML – the same as in a dashboard's card editor (⋮ → Edit in YAML). E.g. the Delta CP2000 card: <code>type: custom:delta-cp2000-card</code> with its entities. The card must be installed (HACS). Leave empty for no card.</p>
+        <textarea id="wcardyaml" rows="10" spellcheck="false" placeholder="type: custom:delta-cp2000-card&#10;name: Druk Pomp&#10;entities:&#10;  ..."></textarea>
+        <div class="actions"><span class="msg" id="wcardmsg"></span><button class="btn primary" data-w="cardsave">Save</button></div></section>
       <section class="card" id="wprot" hidden><h2>Protection &amp; alerts <span class="sub">admin only</span></h2><div id="wprotbody"></div>
         <div class="actions"><span class="msg" id="wprotmsg"></span><button class="btn primary" data-w="protsave">Save</button></div></section>
       <section class="card" id="wtank" hidden><h2>Tank &amp; borehole <span class="sub">admin only · tank level without a level sensor</span></h2><div id="wtankbody"></div>
@@ -1418,6 +1428,9 @@ Object.assign(HamletHomePanel.prototype, {
     hide("wchartcard", !f.water_pressure);
     hide("wprot", !this._isAdmin || !hasPump);
     hide("wflow", !this._isAdmin || !hasPump);
+    hide("wcardset", !this._isAdmin || !hasPump);
+    { const ta = $("wcardyaml"); if (ta && this.shadowRoot.activeElement !== ta && ta.dataset.v !== (w?.settings?.pump_card || "")) { ta.value = ta.dataset.v = w?.settings?.pump_card || ""; } }
+    this._renderPumpCard();
     hide("wtank", !this._isAdmin || !hasPump || !!f.tank_level);
 
     // alarm
@@ -1497,6 +1510,55 @@ Object.assign(HamletHomePanel.prototype, {
     this._renderProt();
     this._renderWaterUse();
     this._renderTankSet();
+  },
+
+  // a Lovelace card (e.g. the Delta CP2000 keypad card) next to the booster pump
+  async _renderPumpCard() {
+    const slot = this.shadowRoot.getElementById("wcard"); if (!slot) return;
+    const cfg = this._water && this._water.pump_card;
+    const key = cfg ? JSON.stringify(cfg) : "";
+    if (!cfg) { slot.hidden = true; slot.replaceChildren(); this._pcKey = ""; this._pcEl = null; return; }
+    slot.hidden = false;
+    if (this._pcKey === key && this._pcEl && slot.contains(this._pcEl)) { this._pcEl.hass = this._hass; return; }
+    this._pcKey = key;
+    try {
+      await this._loadLovelaceResources();
+      const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : null;
+      if (this._pcKey !== key) return;
+      let el;
+      if (helpers) el = helpers.createCardElement(cfg);
+      else {
+        const tag = cfg.type.startsWith("custom:") ? cfg.type.slice(7) : `hui-${cfg.type}-card`;
+        await Promise.race([customElements.whenDefined(tag), new Promise((r) => setTimeout(r, 8000))]);
+        el = document.createElement(tag); el.setConfig(cfg);
+      }
+      el.hass = this._hass;
+      el.addEventListener("ll-rebuild", (ev) => { ev.stopPropagation(); this._pcKey = ""; this._renderPumpCard(); });   // the card's code arrived later
+      this._pcEl = el;
+      slot.replaceChildren(el);
+    } catch (e) {
+      slot.innerHTML = `<div class="msg err" style="padding:12px">Could not show the pump card: ${esc(e.message || String(e))}</div>`;
+      this._pcEl = null;
+    }
+  },
+
+  // custom cards (HACS) are only loaded by dashboards – load them here too
+  _loadLovelaceResources() {
+    if (!this._llRes) {
+      this._llRes = (async () => {
+        let res = [];
+        try { res = await this._hass.callWS({ type: "lovelace/resources" }); } catch (e) { return; }
+        if (!Array.isArray(res)) return;
+        await Promise.all(res.map((r) => {
+          const url = r.url;
+          if (r.type === "module") return import(url).catch(() => {});
+          if (r.type === "js") return new Promise((ok) => { if (document.querySelector(`script[src="${CSS.escape(url)}"]`)) return ok(); const sc = document.createElement("script"); sc.src = url; sc.onload = sc.onerror = ok; document.head.appendChild(sc); });
+          if (r.type === "css" && !document.querySelector(`link[href="${CSS.escape(url)}"]`)) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = url; document.head.appendChild(l); }
+          return null;
+        }));
+      })();
+    }
+    return this._llRes;
   },
 
   _renderTankSet(force) {
@@ -1675,6 +1737,13 @@ Object.assign(HamletHomePanel.prototype, {
         if (!(est > 0)) { m.textContent = "Do the test while the pump runs and Count the water is on"; m.className = "msg err"; return; }
         const real = lit / sec * 60, cal = Math.min(Math.max(Number(this._water.settings.flow_cal || 1) * real / est, 0.2), 5);
         $("wf-flow_cal").value = cal.toFixed(2); m.textContent = `Measured ${real.toFixed(1)} L/min – factor ${cal.toFixed(2)}, tap Save`; m.className = "msg ok"; return;
+      }
+      case "cardsave": {
+        const ta = $("wcardyaml"), text = ta.value.trim();
+        if (await call({ type: `${DOMAIN}/water_settings`, settings: { pump_card: text } }, $("wcardmsg"))) {
+          ta.dataset.v = text; const m = $("wcardmsg"); m.textContent = text ? "Saved – the card shows next to the booster pump" : "Saved – no card"; m.className = "msg ok"; this._renderPumpCard();
+        }
+        return;
       }
       case "tanksave": {
         const settings = {};

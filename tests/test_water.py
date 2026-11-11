@@ -157,3 +157,22 @@ def test_tank_from_borehole_float():
     assert len(t.fills) == 2 and t.usual_fill_min() >= 40
     d = t.to_dict(); t2 = water.TankModel(); t2.load(d)
     assert t2.level_l == 2500 and t2.inflow_lpm == t.inflow_lpm and t2.fills == t.fills
+
+
+def test_pump_card_yaml():
+    y = "type: custom:delta-cp2000-card\nname: Druk Pomp\nentities:\n  output_frequency: sensor.druk_hz\n"
+    assert water.parse_card(y) == {"type": "custom:delta-cp2000-card", "name": "Druk Pomp", "entities": {"output_frequency": "sensor.druk_hz"}}
+    assert water.parse_card("- type: entities\n  entities: [switch.a]\n")["type"] == "entities"
+    assert water.parse_card("") is None
+    assert water.validate_water_settings({"pump_card": y}, True)["pump_card"] == y.strip()
+    for bad in ("name: no type", "type: [", "just text"):
+        try:
+            water.validate_water_settings({"pump_card": bad}, True)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+    try:
+        water.validate_water_settings({"pump_card": y}, False)
+        raise AssertionError("non-admin")
+    except ValueError:
+        pass

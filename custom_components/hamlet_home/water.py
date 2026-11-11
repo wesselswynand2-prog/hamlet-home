@@ -44,6 +44,7 @@ DEFAULT_WATER_SETTINGS: dict = {
     "borehole_watts": 50,        # a power sensor above this counts as running
     "tank_refill_pct": 67,       # the float switches the borehole on at this level (1/3 down from the top = 67 %)
     "borehole_long_min": 0,      # warn when the borehole runs longer than this (0 = 3× its usual fill time)
+    "pump_card": "",             # a dashboard card (YAML) shown with the booster pump, e.g. the Delta CP2000 card
 }
 USER_KEYS = {"pool_mode", "pool_schedules", "pool_solar_start_w", "pool_solar_keep_w", "pool_hours",
              "pool_stop_deficit_min", "pool_stop_discharge_min", "pool_discharge_w"}
@@ -341,6 +342,11 @@ def validate_water_settings(new: dict, admin: bool) -> dict:
             if not 0 <= v <= 1440:
                 raise ValueError("Borehole warning must be 0 … 1440 minutes")
             clean[key] = v
+        elif key == "pump_card":
+            value = str(value or "").strip()
+            if value:
+                parse_card(value)
+            clean[key] = value
         elif key == "notify_service":
             value = str(value or "").strip()
             if value and not value.startswith("notify."):
@@ -511,3 +517,22 @@ class TankModel:
         self.level_l, self.filling, self.fill_start = d.get("level_l"), bool(d.get("filling")), d.get("fill_start")
         self.fill_used, self.inflow_lpm, self.fills = float(d.get("fill_used") or 0), d.get("inflow_lpm"), list(d.get("fills") or [])
         self._used = d.get("used")
+
+
+def parse_card(text: str) -> dict | None:
+    """A dashboard card written in YAML (as in the card editor's code view) -> its config."""
+    import yaml  # noqa: PLC0415
+    text = str(text or "").strip()
+    if not text:
+        return None
+    if len(text) > 20000:
+        raise ValueError("The card is too long")
+    try:
+        cfg = yaml.safe_load(text)
+    except yaml.YAMLError as err:
+        raise ValueError(f"The card's YAML has a mistake: {str(err).splitlines()[0]}") from err
+    if isinstance(cfg, list) and len(cfg) == 1:
+        cfg = cfg[0]
+    if not isinstance(cfg, dict) or not isinstance(cfg.get("type"), str) or not cfg["type"]:
+        raise ValueError("The card needs a type, e.g. type: custom:delta-cp2000-card")
+    return cfg
