@@ -23,6 +23,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
             entities += [PumpToday(c, w, "pump", "hours", "mdi:pump"), PumpToday(c, w, "pump", "starts", "mdi:counter")]
         if w.conf.get("water_pressure") or w.settings.get("flow_sensor"):
             entities += [WaterUse(c, w, "water_flow"), WaterUse(c, w, "water_today"), WaterUse(c, w, "water_total")]
+        if w.settings.get("tank_size_l") and (w.settings.get("borehole_entity") or w.settings.get("borehole_switch") or w.settings.get("float_entity")):
+            entities += [BoreholeWater(c, w, "borehole_today"), BoreholeWater(c, w, "borehole_total")]
         if any(w.conf.get(k) for k in (CONF_POOL_SWITCH, CONF_POOL_POWER)):
             entities.append(PumpToday(c, w, "pool", "hours", "mdi:pool"))
     if c.conf.get("battery_soc") and c.conf.get("battery_power"):
@@ -159,6 +161,28 @@ class WaterUse(_Base):
             from homeassistant.util import dt as dt_util  # noqa: PLC0415
             return round(self.w.meter.days.get(dt_util.now().date().isoformat(), {}).get("l", 0.0), 1)
         return round(self.w.meter.total_l / 1000, 3)
+
+
+class BoreholeWater(_Base):
+    """Water the borehole pumped (per completed fill): today (L) and lifetime (m³, Energy dashboard → Water)."""
+
+    def __init__(self, controller, water, key: str):
+        super().__init__(controller, key)
+        self.w = water
+        self._attr_unique_id = f"{controller.entry.entry_id}_{key}"
+        self._attr_translation_key = key
+        self._attr_device_class = SensorDeviceClass.WATER
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_native_unit_of_measurement = "L" if key == "borehole_today" else "m³"
+        self._attr_icon = "mdi:water-well"
+        self._attr_suggested_display_precision = 0 if key == "borehole_today" else 3
+
+    @property
+    def native_value(self):
+        if self.key == "borehole_today":
+            from homeassistant.util import dt as dt_util  # noqa: PLC0415
+            return round(self.w.tank.days.get(dt_util.now().date().isoformat(), 0.0))
+        return round(self.w.tank.total_l / 1000, 3)
 
 
 class IrrigationStatus(_Base):

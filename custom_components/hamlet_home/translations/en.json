@@ -209,6 +209,12 @@
       },
       "water_total": {
         "name": "Water used total"
+      },
+      "borehole_today": {
+        "name": "Borehole water today"
+      },
+      "borehole_total": {
+        "name": "Borehole water total"
       }
     }
   }

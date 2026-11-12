@@ -489,6 +489,8 @@ class TankModel:
     fill_used: float = 0.0              # litres the house/irrigation used during this fill
     inflow_lpm: float | None = None     # learnt borehole yield into the tank
     fills: list = field(default_factory=list)   # [{"start", "minutes", "in_l", "lpm"}] newest last
+    days: dict = field(default_factory=dict)    # date -> litres the borehole pumped (booked when a fill completes)
+    total_l: float = 0.0                        # lifetime litres from the borehole
     _used: float | None = None          # meter total at the last update
     _t: datetime | None = None
 
@@ -519,9 +521,23 @@ class TankModel:
                 lpm = in_l / fmins
                 self.inflow_lpm = round(lpm if self.inflow_lpm is None else 0.6 * lpm + 0.4 * self.inflow_lpm, 2)
                 self.fills = (self.fills + [{"start": self.fill_start, "minutes": round(fmins, 1), "in_l": round(in_l), "lpm": round(lpm, 1)}])[-10:]
+                day = t.date().isoformat()
+                self.days[day] = self.days.get(day, 0.0) + in_l
+                self.total_l += in_l
             self.level_l = size_l
         if self.level_l is not None:
             self.level_l = max(0.0, min(self.level_l, size_l))
+
+    def pumped_so_far(self, t: datetime, size_l: float, refill_pct: float) -> float | None:
+        """Litres the borehole has pumped in the fill that is running now (estimate until the float says full)."""
+        if not self.filling or not self.fill_start:
+            return None
+        if self.level_l is not None and self.inflow_lpm:
+            return max(self.level_l - size_l * refill_pct / 100 + self.fill_used, 0.0)
+        return None
+
+    def period(self, first_day: str, last_day: str) -> float:
+        return sum(v for d, v in self.days.items() if first_day <= d <= last_day)
 
     def usual_fill_min(self) -> float | None:
         m = sorted(f["minutes"] for f in self.fills)
@@ -529,12 +545,13 @@ class TankModel:
 
     def to_dict(self) -> dict:
         return {"level_l": self.level_l, "filling": self.filling, "fill_start": self.fill_start, "fill_used": self.fill_used,
-                "inflow_lpm": self.inflow_lpm, "fills": self.fills, "used": self._used}
+                "inflow_lpm": self.inflow_lpm, "fills": self.fills, "used": self._used, "days": self.days, "total_l": self.total_l}
 
     def load(self, d: dict) -> None:
         self.level_l, self.filling, self.fill_start = d.get("level_l"), bool(d.get("filling")), d.get("fill_start")
         self.fill_used, self.inflow_lpm, self.fills = float(d.get("fill_used") or 0), d.get("inflow_lpm"), list(d.get("fills") or [])
         self._used = d.get("used")
+        self.days, self.total_l = dict(d.get("days") or {}), float(d.get("total_l") or 0.0)
 
 
 def parse_card(text: str) -> dict | None:

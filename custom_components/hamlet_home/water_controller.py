@@ -120,6 +120,7 @@ class WaterController:
         self.buckets.data = {d: v for d, v in self.buckets.data.items() if d in keep}
         mcut = (today - timedelta(days=400)).isoformat()
         self.meter.days = {d: v for d, v in self.meter.days.items() if d >= mcut}
+        self.tank.days = {d: v for d, v in self.tank.days.items() if d >= mcut}
         return {
             "settings": self.settings, "pump_days": self.pump.days, "pool_days": self.pool.days,
             "buckets": {d: {str(k): v for k, v in slots.items()} for d, slots in self.buckets.data.items()},
@@ -270,7 +271,18 @@ class WaterController:
         return {"size_l": s["tank_size_l"], "level_l": None if self.tank.level_l is None else round(self.tank.level_l),
                 "filling": self.tank.filling, "fill_start": self.tank.fill_start, "inflow_lpm": self.tank.inflow_lpm,
                 "usual_fill_min": self.tank.usual_fill_min(), "fills": list(reversed(self.tank.fills))[:5],
-                "flow_counting": bool(s.get("flow_enabled")), "float_low": self.float_low()}
+                "flow_counting": bool(s.get("flow_enabled")), "float_low": self.float_low(), "pumped": self.borehole_pumped()}
+
+    def borehole_pumped(self) -> dict:
+        """Water from the borehole: worked out per fill = water to fill the tank from the switch-on level to full
+        + the water used meanwhile. Booked when the fill completes; 'now' is this fill so far (estimate)."""
+        today = dt_util.now().date()
+        t, m0, y0 = today.isoformat(), today.replace(day=1).isoformat(), today.replace(month=1, day=1).isoformat()
+        size = float(self.settings.get("tank_size_l") or 0)
+        now = self.tank.pumped_so_far(dt_util.now(), size, float(self.settings.get("tank_refill_pct", 67)))
+        week = [{"day": (today - timedelta(days=n)).isoformat(), "l": round(self.tank.days.get((today - timedelta(days=n)).isoformat(), 0.0))} for n in range(6, -1, -1)]
+        return {"today": round(self.tank.period(t, t)), "month": round(self.tank.period(m0, t)), "year": round(self.tank.period(y0, t)),
+                "total_m3": round(self.tank.total_l / 1000, 3), "now": None if now is None else round(now), "week": week}
 
     def _open_zones(self) -> tuple:
         irr = self.hass.data.get(DOMAIN, {}).get("irrigation")

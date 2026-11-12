@@ -621,6 +621,10 @@ async def test_float_switch_calibrates_and_controls_borehole(enable_custom_integ
     await hass.async_block_till_done()
     assert w.live["tank_l"] == 2500 and offs and offs[-1].data["entity_id"] == "switch.shelly_borehole"
     assert w.tank_info()["fills"][0]["minutes"] == pytest.approx(30, abs=0.5)
+    p = w.tank_info()["pumped"]
+    used = w.tank_info()["fills"][0]["in_l"] - 825                       # what the house used during the fill
+    assert used >= 0 and p["today"] == 825 + used and p["total_m3"] == pytest.approx((825 + used) / 1000, abs=0.002)
+    assert p["now"] is None and p["week"][-1]["l"] == p["today"]
     await client.send_json({"id": 2, "type": f"{DOMAIN}/water_settings", "settings": {"float_entity": "sensor.x_power", "borehole_switch": "sensor.y"}})
     assert not (await client.receive_json())["success"]
     await hass.config_entries.async_unload(entry.entry_id)

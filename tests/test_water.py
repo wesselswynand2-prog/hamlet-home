@@ -155,8 +155,10 @@ def test_tank_from_borehole_float():
     assert round(t.level_l) == round(1675 + 2 * 925 / 40)
     t.update(m(62 + 40), False, 700, 2500, 67)
     assert len(t.fills) == 2 and t.usual_fill_min() >= 40
+    day = T0.date().isoformat()
+    assert round(t.days[day]) == 925 + 825 and round(t.total_l) == 1750      # 2nd fill: 825 L to fill, nothing used
     d = t.to_dict(); t2 = water.TankModel(); t2.load(d)
-    assert t2.level_l == 2500 and t2.inflow_lpm == t.inflow_lpm and t2.fills == t.fills
+    assert t2.level_l == 2500 and t2.inflow_lpm == t.inflow_lpm and t2.fills == t.fills and t2.total_l == t.total_l
 
 
 def test_pump_card_yaml():
