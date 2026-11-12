@@ -491,6 +491,17 @@ class TankModel:
     fills: list = field(default_factory=list)   # [{"start", "minutes", "in_l", "lpm"}] newest last
     days: dict = field(default_factory=dict)    # date -> litres the borehole pumped (booked when a fill completes)
     total_l: float = 0.0                        # lifetime litres from the borehole
+    starts: dict = field(default_factory=dict)  # date -> times the borehole pump started
+    _bh_prev: bool | None = None
+
+    def count_start(self, t: datetime, running: bool | None) -> None:
+        """A start = the borehole pump going from stopped to running (unknown states are skipped)."""
+        if running is None:
+            return
+        if running and self._bh_prev is False:
+            day = t.date().isoformat()
+            self.starts[day] = self.starts.get(day, 0) + 1
+        self._bh_prev = running
     _used: float | None = None          # meter total at the last update
     _t: datetime | None = None
 
@@ -545,13 +556,14 @@ class TankModel:
 
     def to_dict(self) -> dict:
         return {"level_l": self.level_l, "filling": self.filling, "fill_start": self.fill_start, "fill_used": self.fill_used,
-                "inflow_lpm": self.inflow_lpm, "fills": self.fills, "used": self._used, "days": self.days, "total_l": self.total_l}
+                "inflow_lpm": self.inflow_lpm, "fills": self.fills, "used": self._used, "days": self.days, "total_l": self.total_l, "starts": self.starts, "bh_prev": self._bh_prev}
 
     def load(self, d: dict) -> None:
         self.level_l, self.filling, self.fill_start = d.get("level_l"), bool(d.get("filling")), d.get("fill_start")
         self.fill_used, self.inflow_lpm, self.fills = float(d.get("fill_used") or 0), d.get("inflow_lpm"), list(d.get("fills") or [])
         self._used = d.get("used")
         self.days, self.total_l = dict(d.get("days") or {}), float(d.get("total_l") or 0.0)
+        self.starts, self._bh_prev = dict(d.get("starts") or {}), d.get("bh_prev")
 
 
 def parse_card(text: str) -> dict | None:

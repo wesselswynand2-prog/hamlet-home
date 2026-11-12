@@ -215,6 +215,9 @@
       },
       "borehole_total": {
         "name": "Borehole water total"
+      },
+      "borehole_starts": {
+        "name": "Borehole starts today"
       }
     }
   }

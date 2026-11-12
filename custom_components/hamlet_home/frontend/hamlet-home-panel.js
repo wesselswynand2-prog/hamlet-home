@@ -1479,7 +1479,7 @@ Object.assign(HamletHomePanel.prototype, {
           const bm = L.borehole_min ? ` ${Math.round(L.borehole_min)} min` : "", so = w.tank.pumped && w.tank.pumped.now !== null ? `~${fmtL(w.tank.pumped.now)}` : null;
           tiles.push([L.borehole_long ? `⚠ Borehole${bm}` : `Borehole filling${bm}`, so || (L.borehole_long ? "too long" : "on")]);
         }
-        if (w.tank.pumped) tiles.push(["Borehole today", fmtL(w.tank.pumped.today)], ["Borehole this month", fmtL(w.tank.pumped.month)]);
+        if (w.tank.pumped) tiles.push(["Borehole today", fmtL(w.tank.pumped.today)], ["Borehole starts today", `${w.tank.pumped.starts_today || 0}`], ["Borehole this month", fmtL(w.tank.pumped.month)]);
       }
       const u = w.usage;
       if (u) {
@@ -1568,7 +1568,7 @@ Object.assign(HamletHomePanel.prototype, {
   _renderTankSet(force) {
     const el = this.shadowRoot.getElementById("wtankbody"); if (!el || !this._isAdmin || !this._water) return;
     const w = this._water, st = w.settings, T = w.tank, L = w.live || {};
-    const key = JSON.stringify([st.tank_size_l, st.borehole_entity, st.borehole_watts, st.tank_refill_pct, st.borehole_long_min, st.float_entity, st.float_on_means, st.borehole_switch, st.borehole_control, T && T.fills, T && T.filling, T && T.float_low, T && T.pumped && [T.pumped.today, T.pumped.now], st.flow_enabled]);
+    const key = JSON.stringify([st.tank_size_l, st.borehole_entity, st.borehole_watts, st.tank_refill_pct, st.borehole_long_min, st.float_entity, st.float_on_means, st.borehole_switch, st.borehole_control, T && T.fills, T && T.filling, T && T.float_low, T && T.pumped && [T.pumped.today, T.pumped.now, T.pumped.starts_today], st.flow_enabled]);
     const a = this.shadowRoot.activeElement;
     if (!force && ((a && a.closest && a.closest("#wtankbody")) || this._wShown.tank === key)) return;
     this._wShown.tank = key;
@@ -1600,7 +1600,7 @@ Object.assign(HamletHomePanel.prototype, {
         <p style="margin:2px 0 8px">${T.level_l === null ? "Learning – the level is known from the next time the borehole switches on or off." : `<b>${T.level_l} L</b> (${Math.round(T.level_l / T.size_l * 100)} %)`}${T.filling ? ` · borehole filling${L.borehole_min ? ` for ${Math.round(L.borehole_min)} min` : ""}` : ""}${st.float_entity ? ` · float: <b>${T.float_low === true ? "needs water" : T.float_low === false ? "full" : "unknown"}</b>` : ""}${T.inflow_lpm ? ` · borehole gives about <b>${T.inflow_lpm.toFixed(1)} L/min</b>` : ""}${T.usual_fill_min ? ` · a fill usually takes ${Math.round(T.usual_fill_min)} min` : ""}</p>
         <div class="row2" style="flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px"><span class="muted small">Know the level?</span><button class="btn" data-w="tankfull">Tank is full now</button><span class="ctl"><input type="number" id="wt-setpct" min="0" max="100" step="1" placeholder="${T.level_l === null ? "" : Math.round(T.level_l / T.size_l * 100)}" aria-label="Tank level now in %">%</span><button class="btn" data-w="tankset">Set level</button></div>
         ${T.pumped ? `<div class="sub2">Water from the borehole</div>
-          <div class="tiles" style="margin:4px 0 10px">${[["Today", fmtL(T.pumped.today)], ["This month", fmtL(T.pumped.month)], ["This year", fmtL(T.pumped.year)], ["Total", `${T.pumped.total_m3.toFixed(1)} m³`], ...(T.pumped.now !== null ? [["This fill so far", `~${fmtL(T.pumped.now)}`]] : [])].map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("")}</div>
+          <div class="tiles" style="margin:4px 0 10px">${[["Today", fmtL(T.pumped.today)], ["Starts today", `${T.pumped.starts_today || 0}`], ["This month", fmtL(T.pumped.month)], ["This year", fmtL(T.pumped.year)], ["Total", `${T.pumped.total_m3.toFixed(1)} m³`], ...(T.pumped.now !== null ? [["This fill so far", `~${fmtL(T.pumped.now)}`]] : [])].map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("")}</div>
           <p class="muted small" style="margin:0 0 8px">Each fill counts the water to bring the tank from ${st.tank_refill_pct} % to full plus what was used meanwhile – booked when the tank is full. Sensors <b>Borehole water today</b> and <b>Borehole water total</b> can go on the Energy dashboard under Water.</p>` : ""}
         ${T.fills && T.fills.length ? `<div class="sub2">Last fills</div><div class="muted small">${T.fills.map((x) => `${ago(x.start)} · ${Math.round(x.minutes)} min · ${x.in_l} L in · ${x.lpm} L/min`).join("<br>")}</div>` : ""}` : ""}`;
   },

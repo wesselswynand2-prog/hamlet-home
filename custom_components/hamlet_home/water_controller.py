@@ -121,6 +121,7 @@ class WaterController:
         mcut = (today - timedelta(days=400)).isoformat()
         self.meter.days = {d: v for d, v in self.meter.days.items() if d >= mcut}
         self.tank.days = {d: v for d, v in self.tank.days.items() if d >= mcut}
+        self.tank.starts = {d: v for d, v in self.tank.starts.items() if d >= mcut}
         return {
             "settings": self.settings, "pump_days": self.pump.days, "pool_days": self.pool.days,
             "buckets": {d: {str(k): v for k, v in slots.items()} for d, slots in self.buckets.data.items()},
@@ -246,6 +247,9 @@ class WaterController:
             bh = None if st is None or st.state in BAD else st.state == "on"
         low = self.float_low()
         live["borehole"] = bh
+        if bh is not None and bh != self.tank._bh_prev:
+            self.tank.count_start(now, bh)
+            self._save()
         live["float_low"] = low
         if size <= 0 or self.conf.get(CONF_TANK_LEVEL):
             return
@@ -282,7 +286,8 @@ class WaterController:
         now = self.tank.pumped_so_far(dt_util.now(), size, float(self.settings.get("tank_refill_pct", 67)))
         week = [{"day": (today - timedelta(days=n)).isoformat(), "l": round(self.tank.days.get((today - timedelta(days=n)).isoformat(), 0.0))} for n in range(6, -1, -1)]
         return {"today": round(self.tank.period(t, t)), "month": round(self.tank.period(m0, t)), "year": round(self.tank.period(y0, t)),
-                "total_m3": round(self.tank.total_l / 1000, 3), "now": None if now is None else round(now), "week": week}
+                "total_m3": round(self.tank.total_l / 1000, 3), "now": None if now is None else round(now), "week": week,
+                "starts_today": self.tank.starts.get(t, 0), "starts_week": [self.tank.starts.get(x["day"], 0) for x in week]}
 
     def _open_zones(self) -> tuple:
         irr = self.hass.data.get(DOMAIN, {}).get("irrigation")
