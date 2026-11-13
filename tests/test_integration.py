@@ -543,6 +543,7 @@ async def test_water_use_house_and_valves(enable_custom_integrations, hass: Home
     u = w.usage()
     assert u["house_today"] == pytest.approx(98.5, abs=1) and u["zones"][roses]["today"] == pytest.approx(147.7, abs=1)
     assert u["zones"][roses]["last"] == pytest.approx(147.7, abs=1) and u["today"] == pytest.approx(246.2, abs=1)
+    assert len(u["zones"][roses]["week"]) == 7 and u["zones"][roses]["week"][-1] == pytest.approx(147.7, abs=1)
 
     await client.send_json({"id": 3, "type": f"{DOMAIN}/state"})
     ws = (await client.receive_json())["result"]["water"]

@@ -109,6 +109,13 @@ def _setpoint(z: dict) -> float | None:
     return round(v, 2)
 
 
+def _group(z: dict, old: dict | None = None) -> str:
+    """Garden area the valve belongs to (Lawn, Beds & garden, Trees … or the client's own name); "" = guess from the name."""
+    if "group" not in z:
+        return (old or {}).get("group", "")
+    return str(z.get("group") or "").strip()[:30]
+
+
 def validate(new: dict, current: dict, admin: bool) -> dict:
     """Clean a settings update. Non-admins may change times, programs, amount and rain delay only."""
     out: dict = {}
@@ -125,12 +132,13 @@ def validate(new: dict, current: dict, admin: bool) -> dict:
                 if entity and not _ENTITY_RE.match(entity):
                     raise ValueError(f"Not a valid entity: {entity}")
                 zones.append({"id": zid, "name": str(z.get("name") or "Zone")[:40], "entity": entity,
-                              "minutes": minutes, "enabled": bool(z.get("enabled", True)), "setpoint": _setpoint(z)})
+                              "minutes": minutes, "enabled": bool(z.get("enabled", True)), "setpoint": _setpoint(z),
+                              "group": _group(z, old.get(zid))})
             else:
                 if zid not in old:
                     raise ValueError("Only an administrator can add or remove valves")
                 zones.append({**old[zid], "minutes": minutes, "enabled": bool(z.get("enabled", old[zid].get("enabled", True))),
-                              "setpoint": _setpoint(z) if "setpoint" in z else old[zid].get("setpoint")})
+                              "setpoint": _setpoint(z) if "setpoint" in z else old[zid].get("setpoint"), "group": _group(z, old[zid])})
         if not admin and len(zones) != len(old):
             raise ValueError("Only an administrator can add or remove valves")
         out["zones"] = zones

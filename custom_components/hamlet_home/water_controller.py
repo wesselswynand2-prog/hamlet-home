@@ -495,7 +495,8 @@ class WaterController:
         zones = {}
         for z in set(d["zones"]) | set(mo["zones"]) | set(self.meter.last):
             last = self.meter.last.get(z) or {}
-            zones[z] = {"today": r(d["zones"].get(z, 0.0)), "month": r(mo["zones"].get(z, 0.0)),
+            week = [r(self.meter.days.get((today - timedelta(days=n)).isoformat(), {}).get("zones", {}).get(z, 0.0)) for n in range(6, -1, -1)]
+            zones[z] = {"today": r(d["zones"].get(z, 0.0)), "month": r(mo["zones"].get(z, 0.0)), "week": week,
                         "last": r(last.get("l", 0.0)) if last else None, "last_at": last.get("at")}
         return {"today": r(d["l"]), "month": r(mo["l"]), "house_today": r(d["house"]), "house_month": r(mo["house"]),
                 "total_m3": round(self.meter.total_l / 1000, 3), "zones": zones,

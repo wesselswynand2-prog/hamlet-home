@@ -362,7 +362,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._menu) this._menu.hass = hass;
     if (this._pcEl) this._pcEl.hass = hass;
     if (this._tab === "energy" && this._snap && !first) this._renderFlowInfo();
-    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene, hamlet-home-property, hamlet-home-alarms").forEach((c) => { c.hass = hass; });
+    this.shadowRoot.querySelectorAll("hamlet-geyser-card, hamlet-geyser-panel, hamlet-home-controls, hamlet-home-weather, hamlet-home-costs, hamlet-home-devices, hamlet-home-help, hamlet-home-blocks, hamlet-home-scene, hamlet-home-property, hamlet-home-alarms, hamlet-home-garden").forEach((c) => { c.hass = hass; });
     if (first) this._init();
   }
   set narrow(v) { this._narrow = v; if (this._menu) this._menu.narrow = v; }
@@ -1334,8 +1334,9 @@ Object.assign(HamletHomePanel.prototype, {
   _buildWater() {
     this._main.innerHTML = `
       <div class="card alarm" id="walarm" hidden></div>
+      <section class="card" id="wgarden" hidden style="grid-column:1/-1"><h2><ha-icon icon="mdi:flower-tulip-outline"></ha-icon>Garden watering <span class="sub"><span class="seg"><button data-gstyle="garden" aria-pressed="true">Garden</button><button data-gstyle="classic" aria-pressed="false">Classic</button></span></span></h2><div id="gardenbox"></div></section>
       <section class="card" id="wpump"><h2>Booster pump <span class="sub" id="wpumpsub"></span></h2><div class="wpwrap"><div class="wpmain"><div id="wpumpbody"></div><div id="wpumpdia"></div></div><div id="wcard" hidden></div></div></section>
-      <section class="card" id="wirr"><h2><ha-icon icon="mdi:sprinkler-variant"></ha-icon>Irrigation <span class="sub" id="wirrsub"></span></h2>
+      <section class="card" id="wirr"><h2><ha-icon icon="mdi:sprinkler-variant"></ha-icon>Irrigation <span class="sub"><span id="wirrsub"></span> <span class="seg" id="wirrseg"><button data-gstyle="garden" aria-pressed="false">Garden</button><button data-gstyle="classic" aria-pressed="true">Classic</button></span></span></h2>
         <div id="irrlive"></div><div id="irrform"></div>
         <div class="actions" id="irract" hidden><span class="msg" id="irrmsg"></span><button class="btn" data-irr="discard">Discard</button><button class="btn primary" data-irr="save">Save changes</button></div></section>
       <section class="card" id="wchartcard"><h2>Water pressure <span class="sub"><span class="seg"><button data-wday="today" aria-pressed="${(this._wday || "today") === "today"}">Today</button><button data-wday="yesterday" aria-pressed="${this._wday === "yesterday"}">Yesterday</button></span></span></h2>
@@ -1715,6 +1716,13 @@ Object.assign(HamletHomePanel.prototype, {
     };
     const ib = ev.target.closest("[data-irr]");
     if (ib) return this._irrClick(ib);
+    const gs = ev.target.closest("[data-gstyle]");
+    if (gs) {
+      this._gstyle = gs.dataset.gstyle;
+      try { localStorage.setItem("hamlet_home_irrstyle", this._gstyle); } catch (e) { /* ignore */ }
+      this.shadowRoot.querySelectorAll("[data-gstyle]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.gstyle === this._gstyle));
+      this._irrShown = null; return this._renderIrr();
+    }
     const wd = ev.target.closest("[data-wday]");
     if (wd) { this._wday = wd.dataset.wday; this.shadowRoot.querySelectorAll("[data-wday]").forEach((b) => b.setAttribute("aria-pressed", b === wd)); return this._renderPressure(); }
     const pm = ev.target.closest("[data-pmode]");
@@ -2089,6 +2097,10 @@ Object.assign(HamletHomePanel.prototype, {
     const $ = (id) => this.shadowRoot.getElementById(id);
     const card = $("wirr"); if (!card) return;
     const ir = this._irr || { zones: [], settings: {} };
+    if (this._gstyle === undefined) { try { this._gstyle = localStorage.getItem("hamlet_home_irrstyle") || "garden"; } catch (e) { this._gstyle = "garden"; } }
+    const garden = this._gstyle === "garden" && ir.zones.some((z) => z.entity);
+    $("wgarden").hidden = !garden; $("wirrseg").hidden = !ir.zones.some((z) => z.entity);
+    if (garden) { card.hidden = true; this._renderGarden(); return; }
     card.hidden = !ir.zones.length && !this._isAdmin;
     if (card.hidden) return;
     this._renderIrrLive();
@@ -2098,6 +2110,24 @@ Object.assign(HamletHomePanel.prototype, {
     this._irrShown = key;
     this._irrDraft = this._irrFresh();
     this._renderIrrForm();
+  },
+
+  async _renderGarden() {
+    const box = this.shadowRoot.getElementById("gardenbox"); if (!box) return;
+    if (!customElements.get("hamlet-home-garden")) {
+      if (!this._gardenLoading) this._gardenLoading = import(`/hamlet_home_static/hamlet-home-garden.js?v=${VERSION}`).catch(() => null);
+      await this._gardenLoading;
+      if (!customElements.get("hamlet-home-garden")) { box.innerHTML = `<div class="muted small">Couldn't load the garden view – refresh the page, or use Classic.</div>`; return; }
+    }
+    let el = box.querySelector("hamlet-home-garden");
+    if (!el) {
+      el = document.createElement("hamlet-home-garden");
+      el.addEventListener("irr-changed", (e) => { if (e.detail && e.detail.zones) { this._irr = e.detail; this._irrShown = null; this._renderIrr(); } });
+      box.replaceChildren(el);
+    }
+    el.hass = this._hass;
+    const fe = (this._snap && this._snap.flow_entities) || {};
+    el.data = { irr: this._irr, water: this._water, weather: fe.weather, wind: { wind_speed: fe.wind_speed, wind_gust: fe.wind_gust, wind_direction: fe.wind_direction } };
   },
 
   _renderIrrLive() {

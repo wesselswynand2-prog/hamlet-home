@@ -71,3 +71,13 @@ def test_validate_permissions():
         raise AssertionError
     except ValueError:
         pass
+
+
+def test_valve_area_group():
+    cur = {"zones": [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10, "enabled": True, "setpoint": None, "group": ""}]}
+    out = irr.validate({"zones": [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10, "group": "  Front garden "}]}, cur, True)
+    assert out["zones"][0]["group"] == "Front garden"
+    out = irr.validate({"zones": [{"id": "a", "minutes": 12, "group": "Lawn"}]}, cur, False)          # a client may move a valve to an area
+    assert out["zones"][0]["group"] == "Lawn" and out["zones"][0]["entity"] == "switch.a" and out["zones"][0]["minutes"] == 12
+    out = irr.validate({"zones": [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10}]}, {"zones": [{**cur["zones"][0], "group": "Back"}]}, True)
+    assert out["zones"][0]["group"] == "Back"                                                       # not sent = kept
