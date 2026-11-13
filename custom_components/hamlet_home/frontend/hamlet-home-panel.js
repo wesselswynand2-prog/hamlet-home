@@ -198,6 +198,8 @@ details summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .zname { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .zname .t { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zname .z2 { font-size: 12px; color: var(--muted); }
+#main[data-wpage="water"] :is(#wpump, #wchartcard, #wcardset, #wprot, #wtank, #wflow) { display: none !important; }
+#main[data-wpage="pump"] :is(#wgarden, #wirr) { display: none !important; }
 .wpwrap { display: flex; gap: 16px; align-items: flex-start; }
 .wpmain { flex: 1; min-width: 0; }
 #wcard { flex: 0 0 auto; width: min(400px, 100%); }
@@ -451,7 +453,9 @@ class HamletHomePanel extends HTMLElement {
     if (this._weather) tabs.push(["weather", "mdi:weather-partly-cloudy", "Weather"]);
     const wf = this._water?.features || {};
     const poolDevs = (this._devices || []).filter((d) => d.area === "pool");
-    if (wf.pump_switch || wf.pump_power || wf.pump_hz || wf.water_pressure || this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:sprinkler-variant", "Irrigation"]);
+    const hasPump = wf.pump_switch || wf.pump_power || wf.pump_hz || wf.water_pressure || wf.tank_level || this._water?.tank;
+    if (this._irr?.zones?.length || this._isAdmin) tabs.push(["water", "mdi:sprinkler-variant", "Irrigation"]);
+    if (hasPump || this._isAdmin) tabs.push(["pump", "mdi:water-pump", "Pump"]);
     if (wf.pool_switch || wf.pool_power || wf.pool_temp || poolDevs.length || this._isAdmin) tabs.push(["pool", "mdi:pool", "Pool"]);
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
     if ((this._devices || []).some((d) => d.area !== "pool") || this._isAdmin) tabs.push(["devices", "mdi:power-plug", "Devices"]);
@@ -463,12 +467,13 @@ class HamletHomePanel extends HTMLElement {
 
   _buildTab() {
     this._built = true;
+    delete this._main.dataset.wpage;
     this._ro?.disconnect();
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === this._tab));
     this.shadowRoot.getElementById("helpbtn")?.setAttribute("aria-pressed", this._tab === "help");
     this.shadowRoot.getElementById("bellbtn")?.setAttribute("aria-pressed", this._tab === "alarms");
     if (this._tab === "geyser") return this._buildGeyser();
-    if (this._tab === "water") return this._buildWater();
+    if (this._tab === "water" || this._tab === "pump") return this._buildWater();
     if (this._tab === "pool") return this._buildPool();
     if (this._tab === "property") return this._buildProperty();
     if (this._tab === "controls") return this._buildControls();
@@ -652,7 +657,7 @@ class HamletHomePanel extends HTMLElement {
     if (s.irrigation !== undefined) this._irr = s.irrigation;
     if (s.devices !== undefined) this._devices = s.devices;
     if (s.alarms) { this._renderAlarms(s.alarms.active); if (this._tab === "alarms") this.shadowRoot.querySelector("hamlet-home-alarms")?.update?.(s); }
-    if (this._tab === "water") return this._renderWater();
+    if (this._tab === "water" || this._tab === "pump") return this._renderWater();
     if (this._tab === "property") return this._renderProperty();
     if (this._tab === "pool") { this._renderWater(); const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
     if (this._tab === "devices") { const d = this.shadowRoot.querySelector("hamlet-home-devices"); if (d) d.update(s); return; }
@@ -1353,6 +1358,7 @@ Object.assign(HamletHomePanel.prototype, {
       <section class="card" id="wflow" hidden><h2>Water use <span class="sub">admin only · how the litres are worked out</span></h2><div id="wflowbody"></div>
         <div class="actions"><span class="msg" id="wflowmsg"></span><button class="btn primary" data-w="flowsave">Save</button></div></section>`;
     this._wShown = {};
+    this._main.dataset.wpage = this._tab;   // Irrigation tab: the valves · Pump tab: booster, tank, borehole and their settings
     this._ro = new ResizeObserver(() => this._renderPressure());
     this._ro.observe(this.shadowRoot.getElementById("wchart"));
     this._irrShown = null; this._irrDirty = false;

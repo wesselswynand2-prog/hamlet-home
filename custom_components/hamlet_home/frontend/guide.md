@@ -117,7 +117,7 @@ Rain in mm or inches and wind in km/h or m/s are set by your installer under *We
 
 ## Irrigation tab
 
-The Irrigation tab runs the booster pump and the garden irrigation.
+The **Irrigation** tab waters the garden (the valves). The **Pump** tab has the booster pump, the tank and borehole, the pressure chart, water use and their settings.
 
 **Booster pump**
 
@@ -131,7 +131,7 @@ The Irrigation tab runs the booster pump and the garden irrigation.
 
 **Pump card** (installer)
 
-- Any dashboard card can be shown next to the booster pump – e.g. the Delta CP2000 VFD keypad card. On the Irrigation tab, **Pump card**: paste the card's YAML (from a dashboard: edit the card → ⋮ → *Edit in YAML*, copy it) and Save. The card must be installed through HACS.
+- Any dashboard card can be shown next to the booster pump – e.g. the Delta CP2000 VFD keypad card. On the Pump tab, **Pump card**: paste the card's YAML (from a dashboard: edit the card → ⋮ → *Edit in YAML*, copy it) and Save. The card must be installed through HACS.
 
 **Tank & borehole** (no level sensor needed)
 
@@ -306,7 +306,7 @@ Most problems are fixed by refreshing the page or checking the device's own swit
 | The pool pump or a device won't start in Solar mode | Read the line next to the status: it says why, e.g. not enough spare solar, outside the solar hours, or run hours done for today |
 | It stopped and says *may start again in … min* | A stop rule switched it off (low solar or the battery feeding the house). It tries again after that time |
 | I switched something by hand and the app switched it back | In Auto, Timer or Solar mode the app is in charge. Use **On** or **Off** instead |
-| The booster pump is off and says dry run | Check the water supply or tank, then tap **Reset** on the Irrigation tab |
+| The booster pump is off and says dry run | Check the water supply or tank, then tap **Reset** on the Pump tab |
 | The geyser isn't heating | Check the mode (Auto?), the heating times and the temperature. With a low battery or during load-shedding it may wait |
 | The battery time looks wrong | It uses the last minute's usage. A kettle or geyser makes it jump; it settles again within a minute |
 | Rand figures look wrong | Check the electricity price on the Energy tab |

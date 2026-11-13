@@ -154,7 +154,7 @@ def check(rule: dict, ctx: dict) -> tuple[bool | None, str]:
         p = ctx.get("pump_tripped")
         if p is None:
             return None, ""
-        return bool(p), "Stopped by the dry-run protection – check the water supply, then Reset on the Irrigation tab" if p else ""
+        return bool(p), "Stopped by the dry-run protection – check the water supply, then Reset on the Pump tab" if p else ""
     if t == "inverter_fault":
         s = ctx.get("inverter_state")
         if not s:
