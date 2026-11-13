@@ -37,68 +37,103 @@ const TI = {
 };
 const WX = { sunny: "☀", "clear-night": "☾", partlycloudy: "⛅", cloudy: "☁", rainy: "🌧", pouring: "🌧", "lightning-rainy": "⛈", lightning: "⛈", fog: "🌫", windy: "💨", snowy: "❄", hail: "🌨" };
 
+TI.gauge = T(`<path d="M5 21 a10 10 0 1 1 20 0" fill="none" stroke="#1f8fd0" stroke-width="2.6" stroke-linecap="round"/><path d="M15 21 L 21 12" stroke="#1d2a1f" stroke-width="2.4" stroke-linecap="round"/><circle cx="15" cy="21" r="2.6" fill="#1d2a1f"/>`);
+TI.flow = T(`<path d="M3 12 q4 -4 8 0 t8 0 t8 0 M3 19 q4 -4 8 0 t8 0 t8 0" stroke="#1f8fd0" stroke-width="2.4" fill="none" stroke-linecap="round"/>`);
+const compassIcon = (deg) => T(`<circle cx="15" cy="15" r="11" fill="none" stroke="#7d8a7e" stroke-width="2"/><g transform="rotate(${deg === null ? 0 : (deg + 180) % 360} 15 15)"><path d="M15 6 L 19 17 L 15 15 L 11 17 Z" fill="#e5484d"/></g>`);
+const NAV = {
+  now: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12 a9 9 0 1 1 18 0" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 12 L 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 17 h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
+  history: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20 V 4 M3 20 H 21" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M6 16 l4 -6 l4 3 l5 -8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 l2.1 2.1 M17 17 l2.1 2.1 M4.9 19.1 l2.1 -2.1 M17 7 l2.1 -2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
+};
+
 const STYLE = `
-:host { display: block; --g-bg: var(--card-background-color, #fff); --g-fg: var(--primary-text-color, #1d2a1f); --g-muted: var(--secondary-text-color, #5f6f61);
-  --g-line: var(--divider-color, #d9e3d4); --g-leaf: #3f9a3b; --g-leaf-deep: #2b7130; --g-soft: rgba(63,154,59,.13); --g-water: #1f8fd0; --g-wsoft: rgba(31,143,208,.13); --g-bad: #d4483b; color: var(--g-fg); }
+:host { display: block; color: var(--g-fg);
+  --g-app: #eaf5e5; --g-card: #ffffff; --g-fg: #1d2a1f; --g-muted: #5f6f61; --g-line: #d3e3cc;
+  --g-leaf: #43a63d; --g-bar: #5cb84f; --g-tile: #9bd78c; --g-tile-fg: #173b17; --g-tile2: #bfe3f5; --g-tile2-fg: #0f3550;
+  --g-water: #1f8fd0; --g-wsoft: #d6ecf8; --g-bad: #d4483b; }
+:host([dark]) { --g-app: #142019; --g-card: #1c2a20; --g-fg: #e4efe1; --g-muted: #9db09e; --g-line: #2c4031;
+  --g-leaf: #5cbc55; --g-bar: #3f8f3a; --g-tile: #2f6b33; --g-tile-fg: #e6f6e1; --g-tile2: #1d4560; --g-tile2-fg: #e2f2fb; --g-wsoft: #183447; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-.bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--g-leaf); color: #fff; border-radius: 14px; }
-.bar h3 { font-size: 17px; font-weight: 600; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar button { background: rgba(255,255,255,.2); border: 0; color: #fff; font: 600 14px inherit; font-family: inherit; padding: 6px 10px; border-radius: 10px; cursor: pointer; }
+button { font-family: inherit; }
 button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
-.view { display: flex; flex-direction: column; gap: 14px; padding-top: 14px; }
-.wx { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.wx div { background: var(--g-wsoft); border-radius: 14px; padding: 8px; text-align: center; display: flex; flex-direction: column; }
-.wx b { font-size: 20px; } .wx span { font-size: 12px; color: var(--g-muted); }
+.app { max-width: 640px; margin: 0 auto; background: var(--g-app); border-radius: 22px; overflow: hidden; border: 1px solid var(--g-line); display: flex; flex-direction: column; }
+.bar { position: relative; display: flex; align-items: center; justify-content: center; min-height: 52px; padding: 8px 12px; background: var(--g-bar); color: #fff; }
+.bar h3 { font-size: 18px; font-weight: 600; margin: 0; padding: 0 84px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .back { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: 0; color: #fff; font-size: 15px; font-weight: 500; padding: 8px; cursor: pointer; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.view { padding: 14px; display: flex; flex-direction: column; gap: 14px; min-height: 360px; }
 .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--g-muted); font-weight: 600; }
 .note { font-size: 13px; color: var(--g-muted); }
-.areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.area { display: flex; align-items: stretch; border: 1px solid var(--g-line); border-radius: 16px; overflow: hidden; background: none; cursor: pointer; text-align: left; padding: 0; font: inherit; color: inherit; width: 100%; }
-.area svg { width: 120px; flex: 0 0 120px; height: 96px; display: block; }
-.area .t { padding: 10px 14px; display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; }
-.area .t b { font-size: 19px; font-weight: 600; }
+/* weather cards (as on the valve settings screen) */
+.wx { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.wx div { background: linear-gradient(160deg, #4aa9e6, #1f73b8); color: #fff; border-radius: 14px; padding: 8px 6px; text-align: center; display: flex; flex-direction: column; gap: 1px; }
+.wx b { font-size: 22px; font-weight: 600; } .wx span { font-size: 12px; opacity: .9; }
+/* area list – a picture and a big name */
+.list { background: var(--g-card); border-radius: 16px; overflow: hidden; border: 1px solid var(--g-line); }
+.area { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; border-bottom: 1px solid var(--g-line); background: none; padding: 10px; cursor: pointer; text-align: left; color: inherit; }
+.area:last-child { border-bottom: 0; }
+.area svg { width: 132px; height: 88px; flex: 0 0 132px; border-radius: 10px; display: block; }
+.area .t { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.area .t b { font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
 .area .t span { font-size: 13px; color: var(--g-muted); }
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--g-soft); color: var(--g-leaf-deep); width: fit-content; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--g-tile); color: var(--g-tile-fg); width: fit-content; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pill.on { background: var(--g-wsoft); color: var(--g-water); }
 .pill.on::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--g-water); animation: pulse 1.2s infinite; flex: 0 0 7px; }
-.pill.warn { background: rgba(212,72,59,.12); color: var(--g-bad); }
+.pill.warn { background: rgba(212,72,59,.14); color: var(--g-bad); }
 @keyframes pulse { 50% { opacity: .3; } }
-.zones { display: flex; flex-direction: column; }
-.zone { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border: 0; border-bottom: 1px solid var(--g-line); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; }
+/* valve list – round plant pictures */
+.zone { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; border-bottom: 1px solid var(--g-line); background: none; padding: 10px 12px; cursor: pointer; text-align: left; color: inherit; }
 .zone:last-child { border-bottom: 0; }
-.zone .ico { width: 52px; height: 52px; border-radius: 14px; background: var(--g-soft); flex: 0 0 52px; display: grid; place-items: center; }
-.zone .ico svg { width: 40px; height: 40px; }
-.zone .t { flex: 1; min-width: 0; } .zone .t b { display: block; font-weight: 600; } .zone .t span { font-size: 12.5px; color: var(--g-muted); }
-.zone .go { color: var(--g-muted); font-size: 20px; }
-.cols { display: grid; grid-template-columns: 1fr; gap: 14px; }
-@media (min-width: 860px) { .cols { grid-template-columns: 1fr 1fr; } }
-.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.tile { background: var(--g-soft); border-radius: 14px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; min-width: 0; }
-.tile svg { width: 30px; height: 30px; flex: 0 0 30px; }
-.tile .k { font-size: 11.5px; color: var(--g-muted); } .tile .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile.w { background: var(--g-wsoft); }
-.chart { border: 1px solid var(--g-line); border-radius: 14px; padding: 10px 10px 4px; }
-.chart svg { width: 100%; height: auto; max-height: 240px; display: block; } .chart text { fill: var(--g-muted); font-size: 11px; font-family: inherit; }
-.set { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.set label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--g-muted); }
-.set input, .set select { font: 15px inherit; font-family: inherit; color: var(--g-fg); background: transparent; border: 1px solid var(--g-line); border-radius: 10px; padding: 8px 10px; min-width: 0; width: 100%; }
-.progs { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { font-size: 13px; padding: 5px 10px; border-radius: 10px; background: var(--g-soft); color: var(--g-leaf-deep); }
-.chip.off { opacity: .55; }
-.row { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.zone .ico { width: 56px; height: 56px; border-radius: 50%; background: var(--g-tile); flex: 0 0 56px; display: grid; place-items: center; overflow: hidden; }
+.zone .ico svg { width: 42px; height: 42px; }
+.zone .t { flex: 1; min-width: 0; } .zone .t b { display: block; font-size: 16px; font-weight: 600; } .zone .t span { font-size: 12.5px; color: var(--g-muted); }
+.zone .go { color: var(--g-muted); font-size: 22px; }
+/* Now: big green tiles */
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.tile { background: var(--g-tile); color: var(--g-tile-fg); border-radius: 16px; padding: 14px 12px; display: flex; gap: 12px; align-items: center; min-height: 84px; min-width: 0; box-shadow: 0 2px 0 rgba(0,0,0,.06); }
+.tile .ic { width: 46px; height: 46px; flex: 0 0 46px; border-radius: 12px; background: rgba(255,255,255,.75); display: grid; place-items: center; }
+.tile .ic svg { width: 32px; height: 32px; }
+.tile .k { font-size: 12px; opacity: .8; } .tile .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.w { background: var(--g-tile2); color: var(--g-tile2-fg); }
+.tile.wide { grid-column: 1 / -1; }
+.banner { display: flex; align-items: center; gap: 12px; background: var(--g-wsoft); color: var(--g-water); border-radius: 14px; padding: 10px 12px; font-weight: 600; }
+.banner .grow { flex: 1; min-width: 0; } .banner small { display: block; font-weight: 400; color: var(--g-muted); }
+.banner .prog { height: 6px; margin-top: 6px; }
+/* History */
+.chart { background: var(--g-card); border-radius: 16px; padding: 12px 10px 6px; border: 1px solid var(--g-line); }
+.chart svg { width: 100%; height: auto; display: block; } .chart text { fill: var(--g-muted); font-size: 12px; font-family: inherit; }
+.chart .cap { text-align: center; font-size: 15px; font-weight: 600; margin: 6px 0 2px; } .chart .cap2 { text-align: center; font-size: 12px; color: var(--g-muted); margin-bottom: 6px; }
+.daylist { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 12px; color: var(--g-muted); }
+.daylist b { display: block; color: var(--g-fg); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* Settings: white form card like the app */
+.form { background: var(--g-card); border-radius: 16px; padding: 14px; border: 1px solid var(--g-line); display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--g-muted); text-align: center; min-width: 0; }
+.form input, .form select, .form .ro { font: 15px inherit; font-family: inherit; color: var(--g-fg); background: var(--g-app); border: 1px solid var(--g-line); border-radius: 10px; padding: 9px 10px; min-width: 0; width: 100%; text-align: center; }
+.form .ro { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.form .full { grid-column: 1 / -1; }
+.row { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.link { background: none; border: 0; color: var(--g-water); font-size: 16px; font-weight: 600; padding: 6px 10px; cursor: pointer; }
 .msg { font-size: 13px; color: var(--g-muted); } .msg.err { color: var(--g-bad); } .msg.ok { color: var(--g-leaf); }
-.save { background: none; border: 1px solid var(--g-leaf); color: var(--g-leaf); border-radius: 10px; padding: 7px 14px; font: 600 14px inherit; font-family: inherit; cursor: pointer; }
-.now { border: 1px solid var(--g-line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-.mins { display: flex; align-items: center; justify-content: center; gap: 22px; }
-.mins b { font-size: 40px; font-variant-numeric: tabular-nums; min-width: 2.2ch; display: inline-block; text-align: center; }
-.round { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--g-line); background: none; color: var(--g-fg); font-size: 24px; cursor: pointer; }
+.manual { background: var(--g-card); border-radius: 16px; padding: 14px; border: 1px solid var(--g-line); display: flex; flex-direction: column; gap: 12px; }
+.manual .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
+.mins { display: flex; align-items: center; gap: 12px; }
+.mins b { font-size: 26px; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: center; display: inline-block; }
+.round { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--g-line); background: var(--g-app); color: var(--g-fg); font-size: 22px; cursor: pointer; }
 .go2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.btn { border: 0; border-radius: 14px; padding: 13px; font: 600 16px inherit; font-family: inherit; cursor: pointer; }
-.btn.start { background: var(--g-leaf); color: #fff; } .btn.stop { background: var(--g-bad); color: #fff; } .btn:disabled { opacity: .4; cursor: default; }
+.btn { border: 0; border-radius: 14px; padding: 13px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.btn.start { background: var(--g-leaf); color: #fff; } .btn.stop { background: var(--g-bad); color: #fff; } .btn:disabled { opacity: .35; cursor: default; }
 .prog { height: 8px; background: var(--g-line); border-radius: 99px; overflow: hidden; } .prog i { display: block; height: 100%; background: var(--g-water); transition: width .6s; }
 .status { text-align: center; font-size: 14px; color: var(--g-muted); min-height: 1.4em; }
-.empty { padding: 18px; text-align: center; color: var(--g-muted); }
+.progs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.chip { font-size: 13px; padding: 5px 10px; border-radius: 10px; background: var(--g-tile); color: var(--g-tile-fg); } .chip.off { opacity: .55; }
+/* bottom bar on the valve screens */
+.nav { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--g-card); border-top: 1px solid var(--g-line); }
+.nav button { background: none; border: 0; padding: 8px 4px 10px; color: var(--g-muted); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; cursor: pointer; }
+.nav button svg { width: 24px; height: 24px; }
+.nav button[aria-selected="true"] { color: var(--g-leaf); font-weight: 600; }
+.empty { padding: 24px; text-align: center; color: var(--g-muted); }
+@media (max-width: 420px) { .area svg { width: 104px; flex-basis: 104px; height: 76px; } .area .t b { font-size: 20px; }
+  .tiles { gap: 10px; } .tile { padding: 12px 10px; gap: 8px; min-height: 76px; } .tile .v { font-size: 17px; } .tile .ic { width: 34px; height: 34px; flex-basis: 34px; border-radius: 10px; } .tile .ic svg { width: 26px; height: 26px; } }
 @media (prefers-reduced-motion: reduce) { .pill.on::before { animation: none; } }
 `;
 
@@ -106,19 +141,19 @@ class HamletHomeGarden extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._v = { view: "home", area: null, zone: null, mins: null };
+    this._v = { view: "home", area: null, zone: null, mins: null, page: "now" };
     this._daily = null;
     this.shadowRoot.addEventListener("click", (e) => this._click(e));
   }
   set hass(h) {
     this._hass = h;
+    this.toggleAttribute("dark", !!h?.themes?.darkMode);
     const now = Date.now();
-    if (this._v.view === "zone" && (!this._lastTick || now - this._lastTick > 15000)) { this._lastTick = now; this._renderTiles(); }
+    if (this._v.view === "zone" && this._v.page === "now" && (!this._lastTick || now - this._lastTick > 15000)) { this._lastTick = now; this._renderNow(); }
   }
   set data(d) {
     this._d = d || {};
-    const eid = this._d.weather;
-    if (eid !== this._wxId) this._subscribeWx(eid);
+    if (this._d.weather !== this._wxId) this._subscribeWx(this._d.weather);
     this._render();
   }
   disconnectedCallback() { if (this._wxUnsub) { this._wxUnsub.then((u) => u && u()).catch(() => {}); this._wxUnsub = null; this._wxId = undefined; } }
@@ -130,7 +165,7 @@ class HamletHomeGarden extends HTMLElement {
     if (!st || !this._hass.connection) return;
     const feats = st.attributes?.supported_features ?? 0, type = feats & 1 ? "daily" : feats & 4 ? "twice_daily" : null;
     if (!type) return;
-    this._wxUnsub = this._hass.connection.subscribeMessage((ev) => { this._daily = ev.forecast || []; this._render(true); },
+    this._wxUnsub = this._hass.connection.subscribeMessage((ev) => { this._daily = ev.forecast || []; this._zKey = null; this._render(); },
       { type: "weather/subscribe_forecast", forecast_type: type, entity_id: eid }).catch(() => null);
   }
 
@@ -148,6 +183,7 @@ class HamletHomeGarden extends HTMLElement {
     return [...map.entries()].map(([name, zones]) => ({ name, zones, kind: kindOf(name === AREA_NAME.beds ? "" : name) }))
       .sort((a, b) => ((order.indexOf(a.name) + 1 || 99) - (order.indexOf(b.name) + 1 || 99)) || a.name.localeCompare(b.name));
   }
+  _zoneKind(z) { const g = groupOf(z); return kindOf(g === AREA_NAME.beds ? z.name : g); }
   _running(zid) { const r = this._irr.run; return !!(r && r.zone === zid) || !!(this._irr.zones || []).find((z) => z.id === zid && z.on); }
   _progsFor(zid) { return (this._irr.settings?.programs || []).filter((p) => !(p.zones || []).length || p.zones.includes(zid)); }
   _nextFor(zids) {
@@ -174,32 +210,42 @@ class HamletHomeGarden extends HTMLElement {
   _usage(zid) { return this._d?.water?.usage?.zones?.[zid] || null; }
 
   // ------------------------------------------------------------- render
-  _render(soft) {
+  _render(force) {
     const box = this.shadowRoot;
-    if (!this._built) { box.innerHTML = `<style>${STYLE}</style><div class="bar"><button id="back" hidden>‹ Back</button><h3 id="ttl">Garden</h3></div><div class="view" id="view"></div>`; this._built = true; }
+    if (!this._built) {
+      box.innerHTML = `<style>${STYLE}</style><div class="app"><div class="bar"><button class="back" id="back" hidden>‹ Back</button><h3 id="ttl">Garden</h3></div><div class="view" id="view"></div><div class="nav" id="nav" role="tablist" hidden></div></div>`;
+      this._built = true;
+    }
     const v = this._v, irr = this._irr;
     if (v.view === "zone" && !(irr.zones || []).find((z) => z.id === v.zone)) Object.assign(v, { view: "home", zone: null });
     if (v.view === "area" && !this._areas().find((a) => a.name === v.area)) Object.assign(v, { view: "home", area: null });
-    box.getElementById("back").hidden = v.view === "home";
+    const back = box.getElementById("back"), nav = box.getElementById("nav");
+    back.hidden = v.view === "home";
+    back.textContent = v.view === "zone" ? `‹ ${v.area || "Back"}` : "‹ Garden";
+    nav.hidden = v.view !== "zone";
     const view = box.getElementById("view"), a = box.activeElement;
-    // don't redraw a form while it's being typed in; just update the live parts
-    if (soft !== "force" && a && a.closest && a.closest(".set")) { this._renderLive(); return; }
-    if (v.view === "zone") {   // the valve page is only redrawn when its settings or litres change; the rest updates live
+    if (!force && a && a.closest && a.closest(".form")) { this._renderLive(); return; }   // don't redraw a form being typed in
+    if (v.view === "zone") {
       const z = irr.zones.find((x) => x.id === v.zone), u = this._usage(v.zone);
-      const key = JSON.stringify([v.zone, z.name, z.minutes, z.setpoint, z.group, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month]);
-      if (soft !== "force" && this._zKey === key) { this._renderLive(); return; }
+      const key = JSON.stringify([v.zone, v.page, z.name, z.minutes, z.setpoint, z.group, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month, !!this._daily]);
+      if (!force && this._zKey === key) { this._renderLive(); return; }
       this._zKey = key;
-      return this._zone(view);
+      nav.innerHTML = [["now", "Now"], ["history", "History"], ["settings", "Settings"]].map(([id, l]) => `<button role="tab" data-page="${id}" aria-selected="${v.page === id}">${NAV[id]}${l}</button>`).join("");
+      box.getElementById("ttl").textContent = z.name;
+      if (v.page === "history") this._history(view, z);
+      else if (v.page === "settings") this._settings(view, z);
+      else { view.innerHTML = `<div id="banner"></div><div class="tiles" id="tiles"></div>`; this._renderNow(); }
+      this._renderLive();
+      return;
     }
     this._zKey = null;
-    if (v.view === "home") this._home(view);
-    else this._area(view);
+    if (v.view === "home") this._home(view); else this._area(view);
   }
 
   _wxStrip() {
     const f = (this._daily || []).slice(0, 3);
     if (!f.length) return "";
-    return `<div class="wx">${f.map((d, i) => { const t = new Date(d.datetime); return `<div><span>${i === 0 ? "Today" : DAYS[(t.getDay() + 6) % 7]}</span><b>${WX[d.condition] || ""} ${d.temperature !== undefined ? Math.round(d.temperature) + "°" : ""}</b><span>${d.precipitation !== undefined && d.precipitation !== null ? `${(+d.precipitation).toFixed(d.precipitation < 10 ? 1 : 0)} mm` : ""}</span></div>`; }).join("")}</div>`;
+    return `<div class="wx">${f.map((d, i) => { const t = new Date(d.datetime); return `<div><span>${i === 0 ? "Today" : DAYS[(t.getDay() + 6) % 7]}</span><b>${d.temperature !== undefined ? Math.round(d.temperature) + "°" : ""} ${WX[d.condition] || ""}</b><span>${d.templow !== undefined && d.templow !== null ? Math.round(d.templow) + "° · " : ""}${d.precipitation !== undefined && d.precipitation !== null ? `${(+d.precipitation).toFixed(d.precipitation < 10 ? 1 : 0)} mm` : ""}</span></div>`; }).join("")}</div>`;
   }
 
   _home(view) {
@@ -208,8 +254,7 @@ class HamletHomeGarden extends HTMLElement {
     if (!areas.length) { view.innerHTML = `<div class="empty">No valves yet – add them under <b>Classic</b> → Edit valves.</div>`; return; }
     const skip = irr.skip ? `<div class="pill warn">Watering skipped: ${esc(irr.skip)}</div>` : "";
     view.innerHTML = `${this._wxStrip()}${skip}
-      <div class="lbl">Areas</div>
-      <div class="areas">${areas.map((ar) => {
+      <div class="list">${areas.map((ar) => {
         const runZ = ar.zones.find((z) => this._running(z.id)), nxt = this._nextFor(ar.zones.map((z) => z.id));
         const today = ar.zones.reduce((s, z) => s + (this._usage(z.id)?.today || 0), 0);
         return `<button class="area" data-area="${esc(ar.name)}">${ART[ar.kind] || ART.beds}<div class="t"><b>${esc(ar.name)}</b>
@@ -221,103 +266,114 @@ class HamletHomeGarden extends HTMLElement {
   _area(view) {
     const ar = this._areas().find((x) => x.name === this._v.area);
     this.shadowRoot.getElementById("ttl").textContent = ar.name;
-    view.innerHTML = `<div class="zones">${ar.zones.map((z) => {
+    view.innerHTML = `<div class="list">${ar.zones.map((z) => {
       const on = this._running(z.id), u = this._usage(z.id);
       const sub = on ? "Watering now" : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${u ? ` · ${fmtL(u.today)} today` : ""}`;
-      return `<button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[kindOf(groupOf(z) === AREA_NAME.beds ? z.name : groupOf(z))] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div>${on ? `<span class="pill on">on</span>` : `<span class="go">›</span>`}</button>`;
+      return `<button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[this._zoneKind(z)] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div>${on ? `<span class="pill on">on</span>` : `<span class="go">›</span>`}</button>`;
     }).join("")}</div>`;
   }
 
-  _zone(view) {
-    const irr = this._irr, z = irr.zones.find((x) => x.id === this._v.zone), on = this._running(z.id);
-    this.shadowRoot.getElementById("ttl").textContent = z.name;
-    if (this._v.mins === null) this._v.mins = Math.round(z.minutes) || 10;
-    const groups = [...new Set([...Object.values(AREA_NAME), ...(irr.zones || []).map(groupOf)])];
-    const progs = this._progsFor(z.id);
-    view.innerHTML = `
-      <div class="cols"><div class="col">
-        <div class="tiles" id="tiles"></div>
-        <div class="chart" id="chart"></div>
-      </div><div class="col">
-        <div class="now">
-          <div class="lbl" style="text-align:center">Water now</div>
-          <div class="mins"><button class="round" data-d="-5" aria-label="5 minutes less">−</button><div><b id="mv">${this._v.mins}</b> min</div><button class="round" data-d="5" aria-label="5 minutes more">+</button></div>
-          <div class="prog"><i id="pg" style="width:0%"></i></div>
-          <div class="status" id="st"></div>
-          <div class="go2"><button class="btn start" id="start">Start</button><button class="btn stop" id="stop">Stop</button></div>
-        </div>
-        <div class="lbl">Schedule</div>
-        <div class="progs">${progs.length ? progs.map((p) => `<span class="chip ${p.enabled === false ? "off" : ""}">${esc(p.start)} · ${(p.days || []).length === 7 ? "every day" : (p.days || []).map((d) => DAYS[d]).join(" ")}${(p.zones || []).length ? "" : " · all valves"}</span>`).join("") : `<span class="note">Not in a watering program – add one under Classic.</span>`}</div>
-        <div class="set">
-          <label for="g-min">Minutes per run<input id="g-min" type="number" min="0" max="240" step="1" value="${z.minutes}"></label>
-          <label for="g-sp">Pressure (bar)${irr.setpoint_ok ? "" : " – n/a"}<input id="g-sp" type="number" min="0.3" max="12" step="0.1" value="${z.setpoint ?? ""}" placeholder="normal" ${irr.setpoint_ok ? "" : "disabled"}></label>
-          <label for="g-grp" style="grid-column:1/-1">Area<select id="g-grp">${groups.map((g) => `<option ${g === groupOf(z) ? "selected" : ""}>${esc(g)}</option>`).join("")}<option value="__new">New area…</option></select></label>
-          <label for="g-new" id="g-newl" style="grid-column:1/-1" hidden>New area name<input id="g-new" type="text" maxlength="30" placeholder="e.g. Front garden"></label>
-        </div>
-        <div class="row"><span class="msg" id="smsg"></span><button class="save" id="save">Save</button></div>
-      </div></div>`;
-    this.shadowRoot.getElementById("g-grp").addEventListener("change", (e) => { this.shadowRoot.getElementById("g-newl").hidden = e.target.value !== "__new"; });
-    this._renderTiles(); this._renderChart(z); this._renderLive();
-  }
-
-  _renderTiles() {
+  // Now: the live readings as big tiles
+  _renderNow() {
     const box = this.shadowRoot.getElementById("tiles"); if (!box || !this._hass) return;
     const z = this._irr.zones.find((x) => x.id === this._v.zone); if (!z) return;
     const wa = this._hass.states[this._d.weather]?.attributes || {}, ws = windState(this._hass, this._d.wind || {});
-    const tu = wa.temperature_unit || "°C", t = num(wa.temperature), h = num(wa.humidity);
-    const wind = ws && ws.kmh !== null ? `${Math.round(ws.kmh)} km/h${ws.deg !== null ? " " + compass(ws.deg) : ""}` : num(wa.wind_speed) !== null ? `${Math.round(wa.wind_speed * ({ "m/s": 3.6, mph: 1.609, kn: 1.852 }[wa.wind_speed_unit] || 1))} km/h${num(wa.wind_bearing) !== null ? " " + compass(num(wa.wind_bearing)) : ""}` : "–";
+    const t = num(wa.temperature), h = num(wa.humidity), tu = wa.temperature_unit || "°C";
+    const kmh = ws && ws.kmh !== null ? ws.kmh : num(wa.wind_speed) !== null ? wa.wind_speed * ({ "m/s": 3.6, mph: 1.609, kn: 1.852 }[wa.wind_speed_unit] || 1) : null;
+    const deg = ws && ws.deg !== null ? ws.deg : num(wa.wind_bearing);
     const rain = this._daily && this._daily[0] && this._daily[0].precipitation !== undefined ? `${(+this._daily[0].precipitation).toFixed(1)} mm` : "–";
+    const L = this._d?.water?.live || {}, bar = num(L.pressure), lpm = num(L.flow_lpm);
     const u = this._usage(z.id), on = this._running(z.id);
-    const tile = (ic, k, v, cls = "") => `<div class="tile ${cls}">${ic}<div style="min-width:0"><div class="k">${k}</div><div class="v">${v}</div></div></div>`;
-    box.innerHTML = tile(TI.temp, "Air", t === null ? "–" : `${t.toFixed(1)} ${tu}`) + tile(TI.hum, "Humidity", h === null ? "–" : `${Math.round(h)} %`)
-      + tile(TI.wind, "Wind", wind) + tile(TI.rain, "Rain today", rain)
-      + tile(TI.last, "Last watered", on ? "now" : z.last ? this._when(z.last) : "–", "w") + tile(TI.used, "Water today", u ? fmtL(u.today) : "–", "w");
+    const tile = (ic, k, val, cls = "") => `<div class="tile ${cls}"><div class="ic">${ic}</div><div style="min-width:0"><div class="k">${k}</div><div class="v">${val}</div></div></div>`;
+    box.innerHTML = tile(TI.temp, "Air", t === null ? "–" : `${t.toFixed(1)}${tu}`) + tile(TI.hum, "Humidity", h === null ? "–" : `${Math.round(h)}%`)
+      + tile(TI.wind, "Wind", kmh === null ? "–" : `${Math.round(kmh)} km/h`) + tile(compassIcon(deg), "Direction", deg === null ? "–" : compass(deg))
+      + tile(TI.rain, "Rain today", rain) + tile(TI.gauge, "Pressure", bar === null ? "–" : `${bar.toFixed(1)} bar`)
+      + tile(TI.used, "Water today", u ? fmtL(u.today) : "–", "w") + tile(TI.last, "Last watered", on ? "now" : z.last ? this._when(z.last) : "–", "w")
+      + (on && lpm !== null ? tile(TI.flow, "Flow now", `${lpm.toFixed(1)} L/min`, "w wide") : "");
   }
 
-  _renderChart(z) {
-    const box = this.shadowRoot.getElementById("chart"); if (!box) return;
+  _history(view, z) {
     const u = this._usage(z.id);
-    if (!u || !u.week) { box.innerHTML = `<div class="lbl" style="padding:2px 4px 6px">Water · last 7 days</div><div class="note" style="padding:4px 4px 10px">Switch on <b>Count the water</b> (Water use card, installer) to see the litres per valve.</div>`; return; }
-    const wk = u.week, max = Math.max(...wk, 1), W = 400, x = (i) => 34 + i * ((W - 48) / 6), y = (v) => 118 - (v / max) * 96;
-    const pts = wk.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+    if (!u || !u.week) { view.innerHTML = `<div class="chart"><div class="cap">Water used</div><div class="note" style="text-align:center;padding:20px 8px">Switch on <b>Count the water</b> (Pump tab → Water use) to see the litres per valve.</div></div>`; return; }
+    const wk = u.week, max = Math.max(...wk, 1), W = 400, H = 230, top = 14, bot = 196, x = (i) => 40 + i * ((W - 54) / 6), y = (v) => bot - (v / max) * (bot - top);
     const today = new Date(), lab = (i) => { const d = new Date(today); d.setDate(d.getDate() - (6 - i)); return i === 6 ? "Today" : DAYS[(d.getDay() + 6) % 7]; };
     const nice = max >= 1000 ? (v) => `${(v / 1000).toFixed(1)}k` : (v) => `${Math.round(v)}`;
-    box.innerHTML = `<div class="lbl" style="padding:2px 4px 6px">Water · last 7 days (L) · this month ${fmtL(u.month)}</div>
-      <svg viewBox="0 0 ${W} 150" role="img" aria-label="Litres per day for the last 7 days, today ${Math.round(wk[6])} litres">
-        ${[0, 0.5, 1].map((f) => `<line x1="30" x2="${W - 8}" y1="${118 - f * 96}" y2="${118 - f * 96}" stroke="var(--g-line)"/><text x="0" y="${122 - f * 96}">${nice(max * f)}</text>`).join("")}
-        <polygon points="${x(0)},118 ${pts} ${x(6)},118" fill="var(--g-water)" opacity=".18"/>
-        <polyline points="${pts}" fill="none" stroke="var(--g-water)" stroke-width="2.5" stroke-linejoin="round"/>
-        <circle cx="${x(6)}" cy="${y(wk[6])}" r="4.5" fill="var(--g-water)"/>
-        ${wk.map((_, i) => `<text x="${x(i)}" y="140" text-anchor="middle">${lab(i)}</text>`).join("")}
-      </svg>`;
+    const pts = wk.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+    const avg = wk.reduce((s, v) => s + v, 0) / 7;
+    view.innerHTML = `<div class="chart">
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Litres per day for the last 7 days, today ${Math.round(wk[6])} litres">
+          ${[0, 0.25, 0.5, 0.75, 1].map((f) => `<line x1="36" x2="${W - 8}" y1="${bot - f * (bot - top)}" y2="${bot - f * (bot - top)}" stroke="var(--g-line)"/><text x="0" y="${bot - f * (bot - top) + 4}">${nice(max * f)}</text>`).join("")}
+          <polygon points="${x(0)},${bot} ${pts} ${x(6)},${bot}" fill="var(--g-tile)" opacity=".85"/>
+          <polyline points="${pts}" fill="none" stroke="var(--g-leaf)" stroke-width="3" stroke-linejoin="round"/>
+          <circle cx="${x(6)}" cy="${y(wk[6])}" r="5" fill="var(--g-leaf)"/>
+          ${wk.map((_, i) => `<text x="${x(i)}" y="${H - 10}" text-anchor="middle">${lab(i)}</text>`).join("")}
+        </svg>
+        <div class="cap">Last 7 days – litres</div><div class="cap2">about ${fmtL(avg)} a day · this month ${fmtL(u.month)}</div>
+      </div>
+      <div class="daylist">${wk.map((v, i) => `<div>${lab(i)}<b>${fmtL(v)}</b></div>`).join("")}</div>`;
+  }
+
+  _settings(view, z) {
+    const irr = this._irr, progs = this._progsFor(z.id);
+    if (this._v.mins === null) this._v.mins = Math.round(z.minutes) || 10;
+    const groups = [...new Set([...Object.values(AREA_NAME), ...(irr.zones || []).map(groupOf)])];
+    const ent = this._hass?.states?.[z.entity]?.attributes?.friendly_name || z.entity;
+    view.innerHTML = `${this._wxStrip()}
+      <div class="form">
+        <label>Name<div class="ro">${esc(z.name)}</div></label>
+        <label>Watering time<div class="ro">${progs.length ? progs.filter((p) => p.enabled !== false).map((p) => esc(p.start)).join(", ") || "off" : "–"}</div></label>
+        <label for="g-min">Minutes per run<input id="g-min" type="number" min="0" max="240" step="1" value="${z.minutes}"></label>
+        <label for="g-sp">Pressure (bar)<input id="g-sp" type="number" min="0.3" max="12" step="0.1" value="${z.setpoint ?? ""}" placeholder="${irr.setpoint_ok ? "normal" : "n/a"}" ${irr.setpoint_ok ? "" : "disabled"}></label>
+        <label>Valve<div class="ro" title="${esc(z.entity)}">${esc(ent)}</div></label>
+        <label for="g-grp">Area<select id="g-grp">${groups.map((g) => `<option ${g === groupOf(z) ? "selected" : ""}>${esc(g)}</option>`).join("")}<option value="__new">New area…</option></select></label>
+        <label for="g-new" id="g-newl" class="full" hidden>New area name<input id="g-new" type="text" maxlength="30" placeholder="e.g. Front garden"></label>
+        <div class="full"><div class="progs">${progs.length ? progs.map((p) => `<span class="chip ${p.enabled === false ? "off" : ""}">${esc(p.start)} · ${(p.days || []).length === 7 ? "every day" : (p.days || []).map((d) => DAYS[d]).join(" ")}</span>`).join("") : `<span class="note">Not in a watering program – add one under Classic.</span>`}</div></div>
+        <div class="row"><span class="msg" id="smsg"></span><button class="link" id="save">Save</button></div>
+      </div>
+      <div class="manual">
+        <div class="top"><span>Manual control</span><div class="mins"><button class="round" data-d="-5" aria-label="5 minutes less">−</button><span><b id="mv">${this._v.mins}</b> min</span><button class="round" data-d="5" aria-label="5 minutes more">+</button></div></div>
+        <div class="prog"><i id="pg" style="width:0%"></i></div>
+        <div class="status" id="st"></div>
+        <div class="go2"><button class="btn start" id="start">Start</button><button class="btn stop" id="stop">Stop</button></div>
+      </div>`;
+    this.shadowRoot.getElementById("g-grp").addEventListener("change", (e) => { this.shadowRoot.getElementById("g-newl").hidden = e.target.value !== "__new"; });
   }
 
   _renderLive() {
     const $ = (id) => this.shadowRoot.getElementById(id);
-    if (this._v.view !== "zone" || !$("st")) return;
-    const irr = this._irr, z = irr.zones.find((x) => x.id === this._v.zone), on = this._running(z.id), r = irr.run;
-    const mine = r && r.zone === z.id;
-    $("start").disabled = on || !z.available; $("stop").disabled = !on && !r;
-    $("stop").textContent = on ? "Stop" : r ? "Stop all" : "Stop";
+    if (this._v.view !== "zone") return;
+    const irr = this._irr, z = irr.zones.find((x) => x.id === this._v.zone); if (!z) return;
+    const on = this._running(z.id), r = irr.run, mine = r && r.zone === z.id;
     const pct = mine && r.secs && r.remaining !== null ? Math.min(100, (1 - r.remaining / r.secs) * 100) : 0;
-    $("pg").style.width = `${pct}%`;
     const left = mine && r.remaining !== null ? `${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
-    $("st").textContent = !z.available ? "The valve switch is offline" : on ? `Watering${left ? ` · ${left}` : ""}`
-      : r ? `${r.name || "Another valve"} is watering – Start here stops it` : "";
-    this._renderTiles();
+    if ($("banner")) {
+      $("banner").innerHTML = on ? `<div class="banner"><div class="grow">Watering${left ? ` · ${left}` : ""}<small>${r && !mine ? "" : "tap Stop to end it"}</small><div class="prog"><i style="width:${pct}%"></i></div></div><button class="btn stop" id="stop" style="padding:10px 16px">Stop</button></div>`
+        : r ? `<div class="banner"><div class="grow">${esc(r.name || "Another valve")} is watering<small>Settings → Start waters this valve instead</small></div></div>` : "";
+      this._renderNow();
+    }
+    if ($("st")) {
+      $("start").disabled = on || !z.available; $("stop").disabled = !on && !r;
+      $("stop").textContent = on ? "Stop" : r ? "Stop all" : "Stop";
+      $("pg").style.width = `${pct}%`;
+      $("st").textContent = !z.available ? "The valve switch is offline" : on ? `Watering${left ? ` · ${left}` : ""}` : r ? `${r.name || "Another valve"} is watering – Start here stops it` : "";
+    }
   }
 
   // ------------------------------------------------------------- actions
   async _click(e) {
     const b = e.target.closest("button"); if (!b) return;
     const v = this._v, $ = (id) => this.shadowRoot.getElementById(id);
-    if (b.id === "back") { if (v.view === "zone") { v.view = "area"; v.area = groupOf(this._irr.zones.find((z) => z.id === v.zone) || {}); } else v.view = "home"; v.mins = null; return this._render("force"); }
-    if (b.dataset.area) { Object.assign(v, { view: "area", area: b.dataset.area }); return this._render("force"); }
-    if (b.dataset.zone) { Object.assign(v, { view: "zone", zone: b.dataset.zone, mins: null }); return this._render("force"); }
+    if (b.id === "back") {
+      if (v.view === "zone") { v.view = "area"; v.area = groupOf(this._irr.zones.find((z) => z.id === v.zone) || {}); } else v.view = "home";
+      v.mins = null; return this._render(true);
+    }
+    if (b.dataset.page) { v.page = b.dataset.page; return this._render(true); }
+    if (b.dataset.area) { Object.assign(v, { view: "area", area: b.dataset.area }); return this._render(true); }
+    if (b.dataset.zone) { Object.assign(v, { view: "zone", zone: b.dataset.zone, mins: null, page: "now" }); return this._render(true); }
     if (b.dataset.d) { v.mins = Math.max(1, Math.min(240, (v.mins || 10) + Number(b.dataset.d))); $("mv").textContent = v.mins; return; }
     const ws = async (msg, el) => {
       try { const r = await this._hass.callWS(msg); this.dispatchEvent(new CustomEvent("irr-changed", { detail: r, bubbles: true, composed: true })); return r; }
-      catch (err) { if (el) { el.textContent = err.message || "Failed"; el.className = "msg err"; } else $("st").textContent = err.message || "Failed"; return null; }
+      catch (err) { const m = el || $("st"); if (m) { m.textContent = err.message || "Failed"; if (el) m.className = "msg err"; } return null; }
     };
     if (b.id === "start") { b.disabled = true; await ws({ type: `${DOMAIN}/irrigation_action`, action: "run_zone", zone: v.zone, minutes: v.mins }); return; }
     if (b.id === "stop") { b.disabled = true; await ws({ type: `${DOMAIN}/irrigation_action`, action: "stop" }); return; }
@@ -331,7 +387,7 @@ class HamletHomeGarden extends HTMLElement {
         return { ...base, minutes: Number($("g-min").value || 0), setpoint: $("g-sp").disabled ? z.setpoint : ($("g-sp").value === "" ? null : Number($("g-sp").value)), group: grp === auto ? "" : grp };
       });
       const r = await ws({ type: `${DOMAIN}/irrigation_settings`, settings: { zones } }, m);
-      if (r) { m.textContent = "Saved"; m.className = "msg ok"; $("save").blur(); }
+      if (r) { m.textContent = "Saved"; m.className = "msg ok"; b.blur(); }
     }
   }
 }

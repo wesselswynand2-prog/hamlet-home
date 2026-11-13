@@ -126,7 +126,7 @@ The **Irrigation** tab waters the garden (the valves). The **Pump** tab has the 
 - **Dry-run protection:** if the pump runs without building pressure (for example the tank is empty), the app switches it off to protect it and sends you a message. Fix the water supply first, then tap **Reset** to switch it back on.
 - You may also get a message if the pump runs non-stop for a long time – check for a leak or a tap left open.
 
-- **Garden view** (Irrigation tab, *Garden* / *Classic*): your valves grouped in areas with a picture – Lawn, Beds & garden, Trees … (guessed from the valve names; change a valve's area on its page, or make a new one). Tap an area, then a valve: weather tiles, its water over the last 7 days, its watering programs, minutes and pressure, and **Water now** with Start / Stop. Programs and valves themselves are set up under *Classic*.
+- **Garden view** (Irrigation tab, *Garden* / *Classic*): your valves grouped in areas with a picture – Lawn, Beds & garden, Trees … (guessed from the valve names; change a valve's area on its page, or make a new one). Tap an area, then a valve. The valve has three screens at the bottom: **Now** (weather, wind direction, rain, pressure, water today, last watered – and Stop while it waters), **History** (its litres over the last 7 days) and **Settings** (3-day forecast, watering time, minutes, pressure, area, and **Manual control** with Start / Stop). Programs and valves themselves are set up under *Classic*.
 - **Tap a valve on the pump drawing** to water it: choose the minutes (− / + or 5–30) and tap **Water for … min**. Tap a valve that is watering to stop it.
 
 **Pump card** (installer)
