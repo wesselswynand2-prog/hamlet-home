@@ -671,3 +671,45 @@ async def test_valve_closes_after_its_litres(enable_custom_integrations, hass: H
     assert not (await client.receive_json())["success"]
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_irrigation_pause_and_resume(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user, freezer):
+    """Pause closes the valve and keeps the time left; Resume opens it again for that time; a forgotten pause ends."""
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    freezer.move_to(dt_util.start_of_local_day() + timedelta(hours=9))
+    for mod in ("http", "frontend"):
+        assert await async_setup_component(hass, mod, {})
+    ons, offs = async_mock_service(hass, "homeassistant", "turn_on"), async_mock_service(hass, "homeassistant", "turn_off")
+    hass.states.async_set("sensor.pv", "0", {"unit_of_measurement": "W"})
+    hass.states.async_set("switch.roses", "off")
+    entry = MockConfigEntry(domain=DOMAIN, title="Huis", data={"name": "Huis", "preset": "victron", "solar_power": ["sensor.pv"]})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    refresh = await hass.auth.async_create_refresh_token(hass_admin_user, CLIENT_ID)
+    tok = hass.auth.async_create_access_token(refresh)
+    ws = await hass_ws_client(hass, access_token=tok)
+    await ws.send_json({"id": 1, "type": f"{DOMAIN}/irrigation_settings", "settings": {"zones": [{"name": "Roses", "entity": "switch.roses", "minutes": 10}]}})
+    assert (await ws.receive_json())["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
+    irrc = hass.data[DOMAIN]["irrigation"]
+    zid = irrc.zones[0]["id"]
+    ws = await hass_ws_client(hass, access_token=tok)
+    act = lambda i, a, **kw: ws.send_json({"id": i, "type": f"{DOMAIN}/irrigation_action", "action": a, **kw})  # noqa: E731
+    await act(2, "run_zone", zone=zid, minutes=10); assert (await ws.receive_json())["success"]
+    freezer.tick(timedelta(minutes=4))
+    await act(3, "pause"); res = await ws.receive_json()
+    assert res["success"] and res["result"]["run"]["paused"] and res["result"]["run"]["remaining"] == 360
+    assert offs[-1].data["entity_id"] == "switch.roses"
+    freezer.tick(timedelta(minutes=30)); await irrc._tick()
+    assert irrc.run is not None and irrc.snapshot()["run"]["remaining"] == 360          # time stands still while paused
+    await act(4, "resume"); res = await ws.receive_json()
+    assert res["success"] and not res["result"]["run"]["paused"] and ons[-1].data["entity_id"] == "switch.roses"
+    freezer.tick(timedelta(minutes=6, seconds=5)); await irrc._tick()
+    assert irrc.run is None                                                              # finished after the 6 min left
+    await act(5, "run_zone", zone=zid, minutes=10); assert (await ws.receive_json())["success"]
+    await act(6, "pause"); assert (await ws.receive_json())["success"]
+    freezer.tick(timedelta(hours=2, minutes=1)); await irrc._tick()
+    assert irrc.run is None                                                              # forgotten pause ends the run
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

@@ -244,7 +244,7 @@ async def ws_solar_settings(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): f"{DOMAIN}/irrigation_action",
-    vol.Required("action"): vol.In(["run_all", "run_zone", "run_program", "stop", "skip_zone", "rain_delay"]),
+    vol.Required("action"): vol.In(["run_all", "run_zone", "run_program", "stop", "skip_zone", "rain_delay", "pause", "resume"]),
     vol.Optional("zone"): str,
     vol.Optional("program"): str,
     vol.Optional("minutes"): vol.Coerce(float),

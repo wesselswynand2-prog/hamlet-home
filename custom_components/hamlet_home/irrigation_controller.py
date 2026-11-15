@@ -17,6 +17,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 TICK = timedelta(seconds=5)
+PAUSE_MAX = timedelta(hours=2)    # a paused run that isn't resumed ends by itself
 ON_STATES = {"on", "open", "opening"}
 BAD = (STATE_UNAVAILABLE, STATE_UNKNOWN, None)
 
@@ -135,7 +136,7 @@ class IrrigationController:
         except ValueError:
             return
         want = None
-        if self.run and self.run.get("current"):
+        if self.run and self.run.get("current") and not self.run.get("paused"):
             want = (self._zone(self.run["current"]) or {}).get("setpoint")
         if want is None:
             for z in self.zones:
@@ -256,12 +257,58 @@ class IrrigationController:
                 return 0.0
         return float(last["l"])
 
+    async def _pause(self, now: datetime) -> None:
+        """Close the watering valve but keep its place and time left; Resume carries on from there."""
+        run = self.run
+        if run is None or not run.get("current") or run.get("paused") is not None:
+            return
+        z = self._zone(run["current"]) or {}
+        run["paused"] = max(int((run["end"] - now).total_seconds()), 1) if run.get("end") else 60
+        run["paused_at"] = now
+        run["l_before"] = float(run.get("l_before") or 0) + float(self.given(run["current"], run.get("started")) or 0)
+        run["end"] = None
+        if self.settings.get("pump_entity"):
+            await self._set(self.settings["pump_entity"], False)
+        if z.get("entity"):
+            await self._set(z["entity"], False)
+        await self._sync_setpoint()
+        self.last_note = f"Paused {z.get('name', 'watering')}"
+        self._notify_ui()
+
+    async def _resume(self, now: datetime) -> None:
+        run = self.run
+        if run is None or run.get("paused") is None:
+            return
+        z = self._zone(run["current"]) or {}
+        if z.get("entity"):
+            await self._set(z["entity"], True)
+        if self.settings.get("pump_entity"):
+            await self._set(self.settings["pump_entity"], True)
+        run.update(end=now + timedelta(seconds=run["paused"]), started=now, paused=None, paused_at=None)
+        await self._sync_setpoint()
+        self.last_note = f"Resumed {z.get('name', 'watering')}"
+        self._notify_ui()
+
+    def run_litres(self) -> float | None:
+        """Litres the valve of the run has given this time (across pauses)."""
+        run = self.run
+        if not run or not run.get("current"):
+            return None
+        now_l = self.given(run["current"], run.get("started")) if run.get("paused") is None else 0.0
+        if now_l is None:
+            return None
+        return float(run.get("l_before") or 0) + now_l
+
     async def _check_litres(self, now: datetime) -> None:
         """Close a valve once it has given its litres – in a run (go to the next valve) or opened by hand."""
         cur = self.run.get("current") if self.run else None
+        if cur and self.run.get("paused") is not None:
+            if now - self.run.get("paused_at", now) > PAUSE_MAX:      # forgotten pause: end the run
+                await self._stop_run("paused too long")
+            return
         if cur:
             z = self._zone(cur) or {}
-            got = self.given(cur, self.run.get("started"))
+            got = self.run_litres()
             if z.get("litres") and got is not None and got >= z["litres"]:
                 self.last_note = f"Closed {z.get('name')} after {got:.0f} L"
                 await self._advance(now)
@@ -352,6 +399,10 @@ class IrrigationController:
             for entity_id in list(self.manual_off):
                 self.manual_off.pop(entity_id, None)
                 await self._set(entity_id, False)
+        elif action == "pause":
+            await self._pause(now)
+        elif action == "resume":
+            await self._resume(now)
         elif action == "skip_zone":
             if self.run is not None:
                 await self._advance(now)
@@ -382,9 +433,10 @@ class IrrigationController:
         if self.run is not None and self.run.get("current"):
             z = self._zone(self.run["current"]) or {}
             run = {"zone": self.run["current"], "name": z.get("name"), "by": self.run["by"],
-                   "remaining": max(int((self.run["end"] - now).total_seconds()), 0) if self.run.get("end") else None,
+                   "remaining": max(int((self.run["end"] - now).total_seconds()), 0) if self.run.get("end") else self.run.get("paused"),
+                   "paused": self.run.get("paused") is not None,
                    "secs": self.run.get("secs"), "index": self.run["done"] + 1, "total": self.run["total"],
-                   "litres": None if self.given(self.run["current"], self.run.get("started")) is None else round(self.given(self.run["current"], self.run.get("started"))), "litres_limit": z.get("litres"),
+                   "litres": None if self.run_litres() is None else round(self.run_litres()), "litres_limit": z.get("litres"),
                    "next": [self._zone(q[0])["name"] for q in self.run["queue"] if self._zone(q[0])]}
         zones = []
         for z in self.zones:
