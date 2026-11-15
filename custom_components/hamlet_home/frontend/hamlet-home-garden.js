@@ -86,6 +86,14 @@ button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
 @keyframes pulse { 50% { opacity: .3; } }
 /* valve list – round plant pictures */
 .zone { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; border-bottom: 1px solid var(--g-line); background: none; padding: 10px 12px; cursor: pointer; text-align: left; color: inherit; }
+.pcard { background: var(--g-card); border: 1px solid var(--g-line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.pcard.on { background: var(--g-wsoft); border-color: transparent; }
+.pcard .ptop { display: flex; gap: 10px; align-items: center; } .pcard .grow { flex: 1; min-width: 0; }
+.pcard b { display: block; font-size: 16px; color: var(--g-water); } .pcard span { font-size: 13px; color: var(--g-muted); }
+.pbtns { display: flex; gap: 8px; flex-wrap: wrap; } .pbtns .btn { flex: 1; padding: 11px 10px; font-size: 15px; min-width: 90px; }
+.btn.big { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px; font-size: 17px; }
+.btn.big small { font-size: 12.5px; font-weight: 500; opacity: .85; }
+.btn.ghost { background: transparent; border: 1px solid var(--g-water); color: var(--g-water); }
 .sect { display: flex; flex-direction: column; gap: 8px; }
 .ahead { display: flex; align-items: center; gap: 12px; padding: 0 2px; }
 .ahead svg { width: 64px; height: 44px; flex: 0 0 64px; border-radius: 8px; display: block; }
@@ -275,7 +283,7 @@ class HamletHomeGarden extends HTMLElement {
     const skip = irr.skip ? `<div class="pill warn">Watering skipped: ${esc(irr.skip)}</div>` : "";
     const anyOn = (irr.zones || []).some((z) => this._running(z.id));
     // every valve on one page, under its area
-    view.innerHTML = `${this._wxStrip()}${skip}<div class="msg err" id="qmsg" style="text-align:center"></div>
+    view.innerHTML = `${this._wxStrip()}${skip}${this._progCard()}<div class="msg err" id="qmsg" style="text-align:center"></div>
       ${anyOn ? `<div class="note" style="text-align:center">Tap ❚❚ to pause · double tap to stop</div>` : ""}
       ${areas.map((ar) => {
         const nxt = this._nextFor(ar.zones.map((z) => z.id));
@@ -284,6 +292,30 @@ class HamletHomeGarden extends HTMLElement {
             <span>${ar.zones.length} valve${ar.zones.length > 1 ? "s" : ""}${nxt ? ` · next ${this._when(nxt)}` : ""}${today ? ` · ${fmtL(today)} today` : ""}</span></div></div>
           <div class="list">${ar.zones.map((z) => this._zoneRow(z)).join("")}</div></section>`;
       }).join("")}`;
+  }
+
+  // top of the page: run a watering program now, or follow / pause / skip / stop the run that is going
+  _progCard() {
+    const irr = this._irr, r = irr.run, st = irr.settings || {}, amount = Number(st.amount ?? 100) / 100;
+    const zones = (irr.zones || []).filter((z) => z.entity && z.enabled !== false && z.minutes > 0);
+    if (!zones.length) return "";
+    if (r) {
+      const left = r.remaining !== null && r.remaining !== undefined ? `${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
+      const pct = r.secs && r.remaining !== null && r.remaining !== undefined ? Math.min(100, (1 - r.remaining / r.secs) * 100) : 0;
+      return `<div class="pcard on"><div class="ptop"><div class="grow"><b>${r.paused ? "Paused" : "Watering"} · ${esc(r.name || "")}</b>
+          <span>${esc(r.by || "")} · valve ${r.index} of ${r.total}${left ? ` · ${left}` : ""}${r.next && r.next.length ? ` · next ${esc(r.next[0])}` : ""}</span></div></div>
+        <div class="prog"><i style="width:${pct}%"></i></div>
+        <div class="pbtns">${r.paused ? `<button class="btn start" data-pact="resume">▶ Resume</button>` : `<button class="btn pz" data-pact="pause">❚❚ Pause</button>`}
+          ${r.total > 1 && r.index < r.total ? `<button class="btn ghost" data-pact="skip_zone">Next valve ›</button>` : ""}<button class="btn stop" data-pact="stop">■ Stop</button></div></div>`;
+    }
+    const progs = (st.programs || []).filter((p) => p.enabled !== false);
+    const est = (p) => {
+      const ids = p && (p.zones || []).length ? new Set(p.zones) : null;
+      const zs = zones.filter((z) => !ids || ids.has(z.id));
+      return [zs.length, Math.round(zs.reduce((t, z) => t + z.minutes * amount, 0))];
+    };
+    const btn = (p) => { const [n, m] = est(p); return `<button class="btn start big" ${p ? `data-prun="${esc(p.id)}"` : `data-pact="run_all"`}>▶ ${p ? `Run ${esc(p.start)} program` : "Water all valves"}<small>${n} valve${n === 1 ? "" : "s"} · about ${m} min</small></button>`; };
+    return `<div class="pcard">${progs.length ? progs.map(btn).join("") : btn(null)}</div>`;
   }
 
   _area(view) { this._v.view = "home"; this._home(view); }
@@ -406,6 +438,13 @@ class HamletHomeGarden extends HTMLElement {
       try { const r = await this._hass.callWS(msg); this.dispatchEvent(new CustomEvent("irr-changed", { detail: r, bubbles: true, composed: true })); return r; }
       catch (err) { const m = el || $("st"); if (m) { m.textContent = err.message || "Failed"; if (el) m.className = "msg err"; } return null; }
     };
+    if (b.dataset.prun || b.dataset.pact) {   // program card at the top
+      const m = $("qmsg"); b.disabled = true;
+      const msg = b.dataset.prun ? { action: "run_program", program: b.dataset.prun } : { action: b.dataset.pact };
+      const ok = await ws({ type: `${DOMAIN}/irrigation_action`, ...msg }, m);
+      if (ok) this._render(true); else b.disabled = false;
+      return;
+    }
     if (b.dataset.quick) {    // tap-to-water from the valve list: ▶ start · while watering: tap = pause / carry on, double tap = stop
       const zid = b.dataset.quick, z = this._irr.zones.find((x) => x.id === zid); if (!z) return;
       const send = async (msg) => {
