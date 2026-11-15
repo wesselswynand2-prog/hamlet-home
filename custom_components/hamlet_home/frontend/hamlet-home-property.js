@@ -497,4 +497,4 @@ class HamletHomeProperty extends HTMLElement {
     $("tiles").innerHTML = tiles;
   }
 }
-customElements.define("hamlet-home-property", HamletHomeProperty);
+if (!customElements.get("hamlet-home-property")) customElements.define("hamlet-home-property", HamletHomeProperty);

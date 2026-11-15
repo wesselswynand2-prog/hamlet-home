@@ -316,3 +316,16 @@ Most problems are fixed by refreshing the page or checking the device's own swit
 If an update is available, Home Assistant shows it under **Settings → Updates**. Your installer usually installs it for you.
 
 When you call your installer, say which tab and what the status line says, or send a screenshot.
+
+## Hamlet Home on a dashboard
+
+Every part of the app can also be a card on a normal Home Assistant dashboard – next to your other cards.
+
+1. Open a dashboard → ✏️ **Edit** → **+ Add card** → search **Hamlet Home**.
+2. Choose **What to show**: Property, Power flow, Today, Energy, Costs, Weather, Garden watering, Irrigation, Booster pump, Pump, Pool, Geyser, Devices, Controls or Alarms.
+3. Save. Add as many Hamlet Home cards as you like.
+
+In YAML: `type: custom:hamlet-home-card` with `view: property` (or flow, today, energy, costs, weather, garden, irrigation, booster, pump, pool, geyser, devices, controls, alarms).
+
+Tip: make a dashboard with the cards you use most, then set it as your default (your profile → *Dashboard*), so it opens first.
+

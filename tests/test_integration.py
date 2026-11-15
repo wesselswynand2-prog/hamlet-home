@@ -796,3 +796,18 @@ async def test_hose_tap_time_and_litres(enable_custom_integrations, hass: HomeAs
     assert res["success"] and res["result"]["run"]["total"] == 1                  # Run all leaves the hose tap out
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_dashboard_card_is_loaded_everywhere(enable_custom_integrations, hass: HomeAssistant):
+    """The Hamlet Home dashboard card's script is added to every Home Assistant page (no resource to add)."""
+    from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
+    for mod in ("http", "frontend"):
+        assert await async_setup_component(hass, mod, {})
+    hass.states.async_set("sensor.pv", "0", {"unit_of_measurement": "W"})
+    entry = MockConfigEntry(domain=DOMAIN, title="Huis", data={"name": "Huis", "preset": "victron", "solar_power": ["sensor.pv"]})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert any("/hamlet_home_static/hamlet-home-card.js" in u for u in hass.data[DATA_EXTRA_MODULE_URL].urls)
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

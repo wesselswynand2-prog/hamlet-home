@@ -74,6 +74,10 @@ const STYLE = `
 main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--ha-card-border-color, var(--line));
   box-shadow: var(--ha-card-box-shadow, none); padding: 16px; min-width: 0; grid-column: span 12; }
+:host([embed]) { min-height: 0; background: transparent; }
+:host([embed]) .toolbar, :host([embed]) .foot, :host([embed]) .apop { display: none !important; }
+:host([embed]) main { padding: 0; max-width: none; }
+:host([slim]) main > * { grid-column: 1 / -1 !important; }
 @media (min-width: 980px) { .s7 { grid-column: span 7; } .s5 { grid-column: span 5; } .s8 { grid-column: span 8; } .s4 { grid-column: span 4; } .s6 { grid-column: span 6; } }
 h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 h2 .sub { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--muted); display: flex; align-items: center; gap: 8px; }
@@ -347,6 +351,14 @@ input[type=text] { width: 220px; max-width: 100%; }
 .geysers { grid-column: 1 / -1; display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); align-items: start; }
 `;
 
+// Parts of the app that a dashboard card can show (custom:hamlet-home-card, view: …): tab + optionally one section of it
+const EMBED = {
+  energy: { tab: "energy" }, flow: { tab: "energy", only: "flowcard" }, today: { tab: "energy", only: "todaycard" },
+  property: { tab: "property" }, costs: { tab: "costs" }, weather: { tab: "weather" },
+  garden: { tab: "water", only: "wgarden" }, irrigation: { tab: "water" }, pump: { tab: "pump" }, booster: { tab: "pump", only: "wpump" },
+  pool: { tab: "pool" }, geyser: { tab: "geyser" }, devices: { tab: "devices" }, controls: { tab: "controls" }, alarms: { tab: "alarms" },
+};
+
 class HamletHomePanel extends HTMLElement {
   constructor() {
     super();
@@ -374,6 +386,17 @@ class HamletHomePanel extends HTMLElement {
     if (t) t.textContent = v?.config?.title || "Hamlet Home";
   }
   set route(v) { this._route = v; }
+  // shown inside a dashboard card: no header / tabs / footer, one fixed part of the app
+  set embed(v) {
+    const m = EMBED[v] || EMBED.property;
+    this._embed = v; this._tab = m.tab; this._only = m.only || null;
+    if (m.tab === "water") this._gstyle = m.only === "wgarden" ? "garden" : this._gstyle;
+    this.setAttribute("embed", v);
+    if (!this._embRO && window.ResizeObserver) {   // one column when the card is narrow, whatever the screen size
+      this._embRO = new ResizeObserver(([e]) => this.toggleAttribute("slim", e.contentRect.width < 900));
+      this._embRO.observe(this);
+    }
+  }
 
   connectedCallback() {
     if (this._hass && !this._unsub && this._built) this._subscribe();
@@ -388,7 +411,7 @@ class HamletHomePanel extends HTMLElement {
   /* ------------------------------------------------------------- shell */
   async _init() {
     const root = this.shadowRoot;
-    root.innerHTML = `<style>${STYLE}</style>
+    root.innerHTML = `<style>${STYLE}</style>${this._only ? `<style>#main > :not(#${this._only}) { display: none !important; } #main > #${this._only} { grid-column: 1 / -1 !important; }</style>` : ""}
       <div class="toolbar"><span id="menu"></span><div class="title" id="apptitle">${esc(this._panel?.config?.title || "Hamlet Home")}</div><div class="tabs" role="tablist" id="tabs"></div>
         <button class="helpbtn bell" id="bellbtn" aria-label="Alarms" title="Alarms"><ha-icon icon="mdi:bell-outline"></ha-icon><span class="bdot" id="bdot" hidden></span></button>
         <button class="helpbtn" id="helpbtn" aria-label="Help" title="Help"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button></div>
@@ -460,7 +483,7 @@ class HamletHomePanel extends HTMLElement {
     if (this._geyser) tabs.push(["geyser", "mdi:water-boiler", "Geyser"]);
     if ((this._devices || []).some((d) => d.area !== "pool") || this._isAdmin) tabs.push(["devices", "mdi:power-plug", "Devices"]);
     tabs.push(["controls", "mdi:light-switch", "Controls"]);
-    if (!tabs.some((t) => t[0] === this._tab) && this._tab !== "help" && this._tab !== "alarms") this._tab = "energy";
+    if (!this._embed && !tabs.some((t) => t[0] === this._tab) && this._tab !== "help" && this._tab !== "alarms") this._tab = "energy";
     this.shadowRoot.getElementById("tabs").innerHTML = tabs.length < 2 ? "" : tabs.map(([id, icon, label]) =>
       `<button role="tab" data-tab="${id}" aria-selected="${this._tab === id}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("");
   }
@@ -2309,4 +2332,4 @@ Object.assign(HamletHomePanel.prototype, {
   },
 });
 
-customElements.define("hamlet-home-panel", HamletHomePanel);
+if (!customElements.get("hamlet-home-panel")) customElements.define("hamlet-home-panel", HamletHomePanel);

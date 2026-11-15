@@ -10,6 +10,17 @@ One app for the home: **Energy** (power flow, today in kWh and rand, power chart
 Updates then show up in Settings like any other update – click **Update** and restart.
 For the geyser, add `https://github.com/wesselswynand2-prog/hamlet-geyser` the same way – it appears in the Geyser tab.
 
+
+## Dashboard cards
+
+Every part of the app is also a dashboard card – loaded automatically, no resource to add:
+
+```yaml
+type: custom:hamlet-home-card
+view: property   # flow, today, energy, costs, weather, garden, irrigation, booster, pump, pool, geyser, devices, controls, alarms
+```
+
+Add it from the card picker (search "Hamlet Home") – it has a visual editor.
 ## Updates without HACS (built in)
 Hamlet Home checks GitHub every 6 hours. A new version of **Hamlet Home** or **Hamlet Geyser** shows up under **Settings → Updates** – click **Install**: it downloads the release, keeps the previous version in `hamlet_backup/`, and restarts Home Assistant. Settings and history are kept.
 Admins also see a banner with **Install** on the Energy tab, and the check status (installed, GitHub, last check, errors, **Check now**) under *Installer: app updates*. When HACS already shows a version, Hamlet Home stays quiet (no double notices); if HACS is behind, Hamlet Home shows it.

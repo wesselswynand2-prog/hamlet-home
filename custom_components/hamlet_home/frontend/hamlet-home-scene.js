@@ -327,4 +327,4 @@ class HamletHomeScene extends HTMLElement {
     $("cards").innerHTML = cards;
   }
 }
-customElements.define("hamlet-home-scene", HamletHomeScene);
+if (!customElements.get("hamlet-home-scene")) customElements.define("hamlet-home-scene", HamletHomeScene);

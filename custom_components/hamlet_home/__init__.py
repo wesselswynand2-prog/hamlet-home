@@ -99,6 +99,9 @@ async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None
         await hass.http.async_register_static_paths(
             [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), cache_headers=False)])
         data["_static"] = True
+    if not data.get("_card"):   # the dashboard card (custom:hamlet-home-card) is loaded on every page – no resource to add
+        frontend.add_extra_js_url(hass, f"{STATIC_URL}/hamlet-home-card.js?v={VERSION}")
+        data["_card"] = True
     if data.get("_panel"):
         return
     await panel_custom.async_register_panel(
