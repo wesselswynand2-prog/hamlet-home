@@ -2133,7 +2133,7 @@ Object.assign(HamletHomePanel.prototype, {
     }
     el.hass = this._hass;
     const fe = (this._snap && this._snap.flow_entities) || {};
-    el.data = { irr: this._irr, water: this._water, weather: fe.weather, wind: { wind_speed: fe.wind_speed, wind_gust: fe.wind_gust, wind_direction: fe.wind_direction } };
+    el.data = { irr: this._irr, water: this._water, admin: !!this._isAdmin, weather: fe.weather, wind: { wind_speed: fe.wind_speed, wind_gust: fe.wind_gust, wind_direction: fe.wind_direction } };
   },
 
   _renderIrrLive() {
@@ -2202,7 +2202,7 @@ Object.assign(HamletHomePanel.prototype, {
           ${spOk ? `<span class="ctl" title="Booster pressure while this valve waters – empty = normal"><input type="number" data-zk="setpoint" value="${z.setpoint ?? ""}" min="0.3" max="12" step="0.1" placeholder="—" aria-label="Pressure set point in bar">bar</span>` : ""}
           <span class="ctl" title="Close the valve after this many litres – empty = by time only (needs Count the water)"><input type="number" data-zk="litres" value="${z.litres ?? ""}" min="1" step="10" placeholder="—" aria-label="Litres per run">L</span>
           <span class="chips"><button class="iconbtn" data-irr="zup" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button><button class="iconbtn" data-irr="zdown" ${i === d.zones.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button><button class="iconbtn" data-irr="zdel" aria-label="Remove valve"><ha-icon icon="mdi:delete-outline"></ha-icon></button></span></div>`).join("")
-        + `<div class="actions" style="justify-content:flex-start"><button class="btn" data-irr="zadd">+ Add valve</button>${d.zones.length ? `<button class="btn" data-irr="editdone" style="margin-left:auto">Done editing</button>` : ""}</div>`;
+        + `<div class="actions" style="justify-content:flex-start"><button class="btn" data-irr="zadd">+ Add valve</button>${d.zones.length ? `<button class="btn primary" data-irr="editdone" style="margin-left:auto">Save valves</button>` : ""}</div>`;
     } else {
       zones = `<div class="zgrid ${spOk ? "sp" : ""}">${d.zones.map((z, i) => `<div class="zrow" data-zi="${i}">
           <div class="zname" data-zlive="${esc(z.id)}"><span class="zdot"></span><div style="min-width:0"><div class="t">${esc(z.name)}</div><div class="z2"></div></div></div>
@@ -2253,7 +2253,9 @@ Object.assign(HamletHomePanel.prototype, {
   },
 
   async _irrClick(b) {
-    const act = b.dataset.irr, d = this._irrDraft, $ = (id) => this.shadowRoot.getElementById(id);
+    let act = b.dataset.irr;
+    const d = this._irrDraft, $ = (id) => this.shadowRoot.getElementById(id);
+    if (act === "editdone" && this._irrDirty) act = "save";   // "Save valves" stores the names / switches / minutes straight away
     const call = async (msg) => {
       try { this._irr = await this._hass.callWS(msg); this._renderIrr(); return true; }
       catch (e) { const m = $("irrmsg"); if (m && !$("irract").hidden) { m.textContent = e.message || "Failed"; m.className = "msg err"; } else alert(e.message || e); return false; }
@@ -2283,7 +2285,7 @@ Object.assign(HamletHomePanel.prototype, {
       case "runzone": { const z = d.zones.find((x) => x.id === b.dataset.zid); return action("run_zone", { zone: b.dataset.zid, minutes: z ? z.minutes : undefined }); }
       case "runprog": return action("run_program", { program: b.dataset.pid });
       case "editzones": this._irrEdit = true; return this._renderIrrForm();   // keeps unsaved changes
-      case "editdone": this._irrEdit = false; return this._renderIrrForm();
+      case "editdone": this._irrEdit = false; return this._renderIrrForm();   // nothing changed
       case "zadd": d.zones.push({ id: "", name: "", entity: "", minutes: 10, enabled: true }); this._irrEdit = true; return redraw();
       case "zdel": { const z = d.zones.splice(zi(), 1)[0]; d.programs.forEach((p) => { p.zones = p.zones.filter((x) => x !== z.id); }); return redraw(); }
       case "zup": case "zdown": { const i = zi(), j = act === "zup" ? i - 1 : i + 1; [d.zones[i], d.zones[j]] = [d.zones[j], d.zones[i]]; return redraw(); }

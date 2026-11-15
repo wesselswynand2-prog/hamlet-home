@@ -342,7 +342,7 @@ class HamletHomeGarden extends HTMLElement {
     const ent = this._hass?.states?.[z.entity]?.attributes?.friendly_name || z.entity;
     view.innerHTML = `${this._wxStrip()}
       <div class="form">
-        <label>Name<div class="ro">${esc(z.name)}</div></label>
+        ${this._d?.admin ? `<label for="g-name">Name<input id="g-name" type="text" maxlength="40" value="${esc(z.name)}"></label>` : `<label>Name<div class="ro">${esc(z.name)}</div></label>`}
         <label>Watering time<div class="ro">${progs.length ? progs.filter((p) => p.enabled !== false).map((p) => esc(p.start)).join(", ") || "off" : "–"}</div></label>
         <label for="g-min">Minutes per run<input id="g-min" type="number" min="0" max="240" step="1" value="${z.minutes}"></label>
         <label for="g-sp">Pressure (bar)<input id="g-sp" type="number" min="0.3" max="12" step="0.1" value="${z.setpoint ?? ""}" placeholder="${irr.setpoint_ok ? "normal" : "n/a"}" ${irr.setpoint_ok ? "" : "disabled"}></label>
@@ -425,7 +425,8 @@ class HamletHomeGarden extends HTMLElement {
         const base = { id: z.id, name: z.name, entity: z.entity, minutes: z.minutes, enabled: z.enabled, setpoint: z.setpoint, group: z.group || "", litres: z.litres ?? null };
         if (z.id !== v.zone) return base;
         const auto = AREA_NAME[kindOf(z.name || "")];
-        return { ...base, minutes: Number($("g-min").value || 0), setpoint: $("g-sp").disabled ? z.setpoint : ($("g-sp").value === "" ? null : Number($("g-sp").value)), group: grp === auto ? "" : grp, litres: $("g-l").value === "" ? null : Number($("g-l").value) };
+        const nm = $("g-name") ? $("g-name").value.trim() : "";
+        return { ...base, name: nm || z.name, minutes: Number($("g-min").value || 0), setpoint: $("g-sp").disabled ? z.setpoint : ($("g-sp").value === "" ? null : Number($("g-sp").value)), group: grp === auto ? "" : grp, litres: $("g-l").value === "" ? null : Number($("g-l").value) };
       });
       const r = await ws({ type: `${DOMAIN}/irrigation_settings`, settings: { zones } }, m);
       if (r) { m.textContent = "Saved"; m.className = "msg ok"; b.blur(); }
