@@ -241,6 +241,39 @@ class IrrigationController:
         self._save()
 
     # ------------------------------------------------------------------ tick
+    def given(self, zid: str, since: datetime | None = None) -> float | None:
+        """Litres this valve has given since it last opened (from the water counter), None without it.
+        `since`: a count that started before this (an earlier opening, not yet reset) counts as 0."""
+        wc = self.hass.data.get(DOMAIN, {}).get("water")
+        if wc is None or not wc.settings.get("flow_enabled"):
+            return None
+        last = wc.meter.last.get(zid)
+        if not last:
+            return 0.0
+        if since is not None:
+            at = dt_util.parse_datetime(last.get("at") or "")
+            if at is None or at < since - timedelta(seconds=15):
+                return 0.0
+        return float(last["l"])
+
+    async def _check_litres(self, now: datetime) -> None:
+        """Close a valve once it has given its litres – in a run (go to the next valve) or opened by hand."""
+        cur = self.run.get("current") if self.run else None
+        if cur:
+            z = self._zone(cur) or {}
+            got = self.given(cur, self.run.get("started"))
+            if z.get("litres") and got is not None and got >= z["litres"]:
+                self.last_note = f"Closed {z.get('name')} after {got:.0f} L"
+                await self._advance(now)
+        for z in self.zones:
+            if not z.get("litres") or (cur and z["id"] == cur) or not self._is_on(z.get("entity", "")):
+                continue
+            got = self.given(z["id"])
+            if got is not None and got >= z["litres"]:
+                self.manual_off.pop(z["entity"], None)
+                await self._set(z["entity"], False)
+                self.last_note = f"Closed {z['name']} after {got:.0f} L"
+
     async def _tick(self, _now=None) -> None:
         now = dt_util.now()
         last, self._last_check = self._last_check or now, now
@@ -258,6 +291,7 @@ class IrrigationController:
                 await self.async_start_run(queue, f"{prog['start']} program")
         if self.run is not None and self.run.get("end") and now >= self.run["end"]:
             await self._advance(now)
+        await self._check_litres(now)
         for entity_id, due in list(self.manual_off.items()):
             if now >= due:
                 self.manual_off.pop(entity_id, None)
@@ -350,6 +384,7 @@ class IrrigationController:
             run = {"zone": self.run["current"], "name": z.get("name"), "by": self.run["by"],
                    "remaining": max(int((self.run["end"] - now).total_seconds()), 0) if self.run.get("end") else None,
                    "secs": self.run.get("secs"), "index": self.run["done"] + 1, "total": self.run["total"],
+                   "litres": None if self.given(self.run["current"], self.run.get("started")) is None else round(self.given(self.run["current"], self.run.get("started"))), "litres_limit": z.get("litres"),
                    "next": [self._zone(q[0])["name"] for q in self.run["queue"] if self._zone(q[0])]}
         zones = []
         for z in self.zones:

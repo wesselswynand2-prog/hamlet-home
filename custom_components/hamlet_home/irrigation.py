@@ -109,6 +109,19 @@ def _setpoint(z: dict) -> float | None:
     return round(v, 2)
 
 
+def _litres(z: dict, old: dict | None = None) -> float | None:
+    """Close the valve once it has given this many litres (needs the water counter); None = only by time."""
+    if "litres" not in z:
+        return (old or {}).get("litres")
+    v = z.get("litres")
+    if v in (None, "", 0, "0"):
+        return None
+    v = float(v)
+    if not 1 <= v <= 1_000_000:
+        raise ValueError("Litres per run must be 1 … 1 000 000 (leave empty to go by time only)")
+    return round(v)
+
+
 def _group(z: dict, old: dict | None = None) -> str:
     """Garden area the valve belongs to (Lawn, Beds & garden, Trees … or the client's own name); "" = guess from the name."""
     if "group" not in z:
@@ -133,12 +146,12 @@ def validate(new: dict, current: dict, admin: bool) -> dict:
                     raise ValueError(f"Not a valid entity: {entity}")
                 zones.append({"id": zid, "name": str(z.get("name") or "Zone")[:40], "entity": entity,
                               "minutes": minutes, "enabled": bool(z.get("enabled", True)), "setpoint": _setpoint(z),
-                              "group": _group(z, old.get(zid))})
+                              "group": _group(z, old.get(zid)), "litres": _litres(z, old.get(zid))})
             else:
                 if zid not in old:
                     raise ValueError("Only an administrator can add or remove valves")
                 zones.append({**old[zid], "minutes": minutes, "enabled": bool(z.get("enabled", old[zid].get("enabled", True))),
-                              "setpoint": _setpoint(z) if "setpoint" in z else old[zid].get("setpoint"), "group": _group(z, old[zid])})
+                              "setpoint": _setpoint(z) if "setpoint" in z else old[zid].get("setpoint"), "group": _group(z, old[zid]), "litres": _litres(z, old[zid])})
         if not admin and len(zones) != len(old):
             raise ValueError("Only an administrator can add or remove valves")
         out["zones"] = zones

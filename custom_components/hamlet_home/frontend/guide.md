@@ -159,6 +159,7 @@ The **Irrigation** tab waters the garden (the valves). The **Pump** tab has the 
 - Run all valves, one valve, or a program by hand, and tap **Stop** to end it.
 - **Rain delay** skips watering for the hours you choose. If a rain sensor is fitted, watering is skipped after rain by itself.
 - A valve you open by hand closes again by itself after its set time, so it can't be left running.
+- **Litres per valve:** give a valve a number of litres (Garden → valve → Settings → *Stop after (litres)*, or Classic → Edit valves → **L**). It closes as soon as it has given that much water, even if its minutes aren't up yet – in a program the next valve then starts. Leave it empty to water by time only. Needs **Count the water** (Pump tab → Water use).
 - **Pressure per valve:** give a valve its own pressure (bar). While that valve waters, the booster pump runs at that pressure; afterwards it goes back to the normal pressure. Leave it empty to use the normal pressure. This column only shows when the pump's pressure set point can be changed from Home Assistant.
 
 ## Pool tab

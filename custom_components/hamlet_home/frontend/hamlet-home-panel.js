@@ -2059,7 +2059,7 @@ Object.assign(HamletHomePanel.prototype, {
     const ir = this._irr || { zones: [], settings: {} };
     const st = ir.settings || {};
     return JSON.parse(JSON.stringify({
-      zones: ir.zones.map((z) => ({ id: z.id, name: z.name, entity: z.entity, minutes: z.minutes, enabled: z.enabled !== false, setpoint: z.setpoint ?? null })),
+      zones: ir.zones.map((z) => ({ id: z.id, name: z.name, entity: z.entity, minutes: z.minutes, enabled: z.enabled !== false, setpoint: z.setpoint ?? null, litres: z.litres ?? null })),
       programs: st.programs || [], amount: st.amount ?? 100, skip_when_raining: st.skip_when_raining !== false,
       pump_entity: st.pump_entity || "", rain_entity: st.rain_entity || "", manual_auto_off: st.manual_auto_off !== false, max_minutes: st.max_minutes ?? 120,
     }));
@@ -2200,6 +2200,7 @@ Object.assign(HamletHomePanel.prototype, {
           <div class="vpick"><input type="text" class="vq" autocomplete="off" spellcheck="false" aria-label="Valve switch – type to search" placeholder="Type to search the valve switch…" value="${esc(z.entity ? ((opts.valves.find((o) => o.id === z.entity) || {}).name || z.entity) : "")}"><input type="hidden" data-zk="entity" value="${esc(z.entity || "")}"><div class="vlist" role="listbox" hidden></div></div>
           <span class="ctl"><input type="number" data-zk="minutes" value="${z.minutes}" min="0" max="240" step="1" aria-label="Minutes">min</span>
           ${spOk ? `<span class="ctl" title="Booster pressure while this valve waters – empty = normal"><input type="number" data-zk="setpoint" value="${z.setpoint ?? ""}" min="0.3" max="12" step="0.1" placeholder="—" aria-label="Pressure set point in bar">bar</span>` : ""}
+          <span class="ctl" title="Close the valve after this many litres – empty = by time only (needs Count the water)"><input type="number" data-zk="litres" value="${z.litres ?? ""}" min="1" step="10" placeholder="—" aria-label="Litres per run">L</span>
           <span class="chips"><button class="iconbtn" data-irr="zup" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button><button class="iconbtn" data-irr="zdown" ${i === d.zones.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button><button class="iconbtn" data-irr="zdel" aria-label="Remove valve"><ha-icon icon="mdi:delete-outline"></ha-icon></button></span></div>`).join("")
         + `<div class="actions" style="justify-content:flex-start"><button class="btn" data-irr="zadd">+ Add valve</button>${d.zones.length ? `<button class="btn" data-irr="editdone" style="margin-left:auto">Done editing</button>` : ""}</div>`;
     } else {
@@ -2233,7 +2234,7 @@ Object.assign(HamletHomePanel.prototype, {
       <div class="sub2">Today</div><div class="logl" id="irrlog"></div>` : ""}`;
     el.querySelectorAll("[data-zk]").forEach((inp) => {
       const up = () => { const z = d.zones[Number(inp.closest("[data-zi]").dataset.zi)]; const k = inp.dataset.zk; if (k === "minutes" && inp.value === "") return;
-        z[k] = k === "minutes" ? Number(inp.value) : k === "setpoint" ? (inp.value === "" ? null : Number(inp.value)) : inp.value;
+        z[k] = k === "minutes" ? Number(inp.value) : (k === "setpoint" || k === "litres") ? (inp.value === "" ? null : Number(inp.value)) : inp.value;
         if (k === "entity" && !z.name) { const o = (this._irrOpts?.valves || []).find((x) => x.id === inp.value); if (o) { z.name = o.name; inp.closest(".zedit").querySelector("[data-zk=name]").value = o.name; } }
         this._irrChanged(); };
       inp.addEventListener("input", up); inp.addEventListener("change", up);

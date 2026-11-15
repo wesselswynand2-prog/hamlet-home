@@ -238,7 +238,7 @@ class HamletHomeGarden extends HTMLElement {
     if (!force && a && a.closest && a.closest(".form")) { this._renderLive(); return; }   // don't redraw a form being typed in
     if (v.view === "zone") {
       const z = irr.zones.find((x) => x.id === v.zone), u = this._usage(v.zone);
-      const key = JSON.stringify([v.zone, v.page, z.name, z.minutes, z.setpoint, z.group, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month, !!this._daily]);
+      const key = JSON.stringify([v.zone, v.page, z.name, z.minutes, z.setpoint, z.group, z.litres, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month, !!this._daily]);
       if (!force && this._zKey === key) { this._renderLive(); return; }
       this._zKey = key;
       nav.innerHTML = [["now", "Now"], ["history", "History"], ["settings", "Settings"]].map(([id, l]) => `<button role="tab" data-page="${id}" aria-selected="${v.page === id}">${NAV[id]}${l}</button>`).join("");
@@ -280,7 +280,8 @@ class HamletHomeGarden extends HTMLElement {
     view.innerHTML = `<div class="msg err" id="qmsg" style="text-align:center"></div><div class="list">${ar.zones.map((z) => {
       const on = this._running(z.id), u = this._usage(z.id);
       const r = this._irr.run, left = on && r && r.zone === z.id && r.remaining !== null && r.remaining !== undefined ? ` · ${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
-      const sub = on ? `Watering now${left}` : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${u ? ` · ${fmtL(u.today)} today` : ""}`;
+      const lit = on && r && r.zone === z.id && r.litres !== null && r.litres !== undefined ? ` · ${r.litres}${r.litres_limit ? `/${r.litres_limit}` : ""} L` : "";
+      const sub = on ? `Watering now${left}${lit}` : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${z.litres ? ` or ${fmtL(z.litres)}` : ""}${u ? ` · ${fmtL(u.today)} today` : ""}`;
       const busy = this._busy === z.id;
       // the row opens the valve; the round button on the right starts it for its normal minutes (or stops it)
       return `<div class="zrow ${on ? "on" : ""}"><button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[this._zoneKind(z)] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div></button>
@@ -339,6 +340,7 @@ class HamletHomeGarden extends HTMLElement {
         <label>Watering time<div class="ro">${progs.length ? progs.filter((p) => p.enabled !== false).map((p) => esc(p.start)).join(", ") || "off" : "–"}</div></label>
         <label for="g-min">Minutes per run<input id="g-min" type="number" min="0" max="240" step="1" value="${z.minutes}"></label>
         <label for="g-sp">Pressure (bar)<input id="g-sp" type="number" min="0.3" max="12" step="0.1" value="${z.setpoint ?? ""}" placeholder="${irr.setpoint_ok ? "normal" : "n/a"}" ${irr.setpoint_ok ? "" : "disabled"}></label>
+        <label for="g-l">Stop after (litres)<input id="g-l" type="number" min="1" step="10" value="${z.litres ?? ""}" placeholder="${this._d?.water?.usage ? "by time only" : "needs water counter"}"></label>
         <label>Valve<div class="ro" title="${esc(z.entity)}">${esc(ent)}</div></label>
         <label for="g-grp">Area<select id="g-grp">${groups.map((g) => `<option ${g === groupOf(z) ? "selected" : ""}>${esc(g)}</option>`).join("")}<option value="__new">New area…</option></select></label>
         <label for="g-new" id="g-newl" class="full" hidden>New area name<input id="g-new" type="text" maxlength="30" placeholder="e.g. Front garden"></label>
@@ -360,7 +362,9 @@ class HamletHomeGarden extends HTMLElement {
     const irr = this._irr, z = irr.zones.find((x) => x.id === this._v.zone); if (!z) return;
     const on = this._running(z.id), r = irr.run, mine = r && r.zone === z.id;
     const pct = mine && r.secs && r.remaining !== null ? Math.min(100, (1 - r.remaining / r.secs) * 100) : 0;
-    const left = mine && r.remaining !== null ? `${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
+    let left = mine && r.remaining !== null ? `${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
+    if (mine && r.litres !== null && r.litres !== undefined) left += `${left ? " · " : ""}${r.litres_limit ? `${r.litres} of ${r.litres_limit} L` : `${r.litres} L`}`;
+    if (on && !mine && z.litres) left = `stops at ${z.litres} L`;
     if ($("banner")) {
       $("banner").innerHTML = on ? `<div class="banner"><div class="grow">Watering${left ? ` · ${left}` : ""}<small>${r && !mine ? "" : "tap Stop to end it"}</small><div class="prog"><i style="width:${pct}%"></i></div></div><button class="btn stop" id="stop" style="padding:10px 16px">Stop</button></div>`
         : r ? `<div class="banner"><div class="grow">${esc(r.name || "Another valve")} is watering<small>Settings → Start waters this valve instead</small></div></div>` : "";
@@ -405,10 +409,10 @@ class HamletHomeGarden extends HTMLElement {
       const m = $("smsg"), grpSel = $("g-grp").value, grp = grpSel === "__new" ? $("g-new").value.trim() : grpSel;
       if (grpSel === "__new" && !grp) { m.textContent = "Give the new area a name"; m.className = "msg err"; return; }
       const zones = this._irr.zones.map((z) => {
-        const base = { id: z.id, name: z.name, entity: z.entity, minutes: z.minutes, enabled: z.enabled, setpoint: z.setpoint, group: z.group || "" };
+        const base = { id: z.id, name: z.name, entity: z.entity, minutes: z.minutes, enabled: z.enabled, setpoint: z.setpoint, group: z.group || "", litres: z.litres ?? null };
         if (z.id !== v.zone) return base;
         const auto = AREA_NAME[kindOf(z.name || "")];
-        return { ...base, minutes: Number($("g-min").value || 0), setpoint: $("g-sp").disabled ? z.setpoint : ($("g-sp").value === "" ? null : Number($("g-sp").value)), group: grp === auto ? "" : grp };
+        return { ...base, minutes: Number($("g-min").value || 0), setpoint: $("g-sp").disabled ? z.setpoint : ($("g-sp").value === "" ? null : Number($("g-sp").value)), group: grp === auto ? "" : grp, litres: $("g-l").value === "" ? null : Number($("g-l").value) };
       });
       const r = await ws({ type: `${DOMAIN}/irrigation_settings`, settings: { zones } }, m);
       if (r) { m.textContent = "Saved"; m.className = "msg ok"; b.blur(); }

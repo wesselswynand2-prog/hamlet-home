@@ -81,3 +81,10 @@ def test_valve_area_group():
     assert out["zones"][0]["group"] == "Lawn" and out["zones"][0]["entity"] == "switch.a" and out["zones"][0]["minutes"] == 12
     out = irr.validate({"zones": [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10}]}, {"zones": [{**cur["zones"][0], "group": "Back"}]}, True)
     assert out["zones"][0]["group"] == "Back"                                                       # not sent = kept
+
+
+def test_valve_litres_limit():
+    cur = {"zones": [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10, "enabled": True, "setpoint": None, "litres": 300}]}
+    assert irr.validate({"zones": [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10}]}, cur, True)["zones"][0]["litres"] == 300   # kept
+    assert irr.validate({"zones": [{"id": "a", "minutes": 10, "litres": ""}]}, cur, False)["zones"][0]["litres"] is None                       # cleared
+    assert irr.validate({"zones": [{"id": "a", "minutes": 10, "litres": "450"}]}, cur, False)["zones"][0]["litres"] == 450
