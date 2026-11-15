@@ -713,3 +713,43 @@ async def test_irrigation_pause_and_resume(enable_custom_integrations, hass: Hom
     assert irrc.run is None                                                              # forgotten pause ends the run
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_pump_trip_pauses_watering(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user, freezer):
+    """A dry-run trip pauses the watering valve; new watering is refused; Reset carries on with the paused valve."""
+    freezer.move_to(dt_util.start_of_local_day() + timedelta(hours=9))
+    entry, on, off, notes = await _water_entry(hass)
+    hass.states.async_set("switch.roses", "off")
+    refresh = await hass.auth.async_create_refresh_token(hass_admin_user, CLIENT_ID)
+    tok = hass.auth.async_create_access_token(refresh)
+    client = await hass_ws_client(hass, access_token=tok)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/irrigation_settings", "settings": {"zones": [{"name": "Roses", "entity": "switch.roses", "minutes": 20}]}})
+    assert (await client.receive_json())["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)       # first valve reloads the app
+    client = await hass_ws_client(hass, access_token=tok)
+    await client.send_json({"id": 2, "type": f"{DOMAIN}/water_settings", "settings": {"dry_run_enabled": True, "dry_run_bar": 0.5, "dry_run_seconds": 60}})
+    assert (await client.receive_json())["success"]
+    w, irrc = hass.data[DOMAIN]["water"], hass.data[DOMAIN]["irrigation"]
+    zid = irrc.zones[0]["id"]
+    hass.states.async_set("sensor.water_druk", "300", {"unit_of_measurement": "kPa"}); await hass.async_block_till_done()
+    await client.send_json({"id": 3, "type": f"{DOMAIN}/irrigation_action", "action": "run_zone", "zone": zid, "minutes": 20})
+    assert (await client.receive_json())["success"]
+    hass.states.async_set("switch.roses", "on"); await hass.async_block_till_done()
+    freezer.tick(timedelta(minutes=5))
+    hass.states.async_set("sensor.water_druk", "19", {"unit_of_measurement": "kPa"}); await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=70))
+    hass.states.async_set("sensor.water_druk", "18", {"unit_of_measurement": "kPa"}); await hass.async_block_till_done()
+    assert w.guard.tripped
+    snap = irrc.snapshot()["run"]
+    assert snap["paused"] and snap["by_trip"] and snap["remaining"] == pytest.approx(15 * 60, abs=80)
+    assert any(c.data["entity_id"] == "switch.roses" for c in off)
+    assert irrc.skip_reason(dt_util.now()).startswith("the booster pump is tripped")
+    await client.send_json({"id": 4, "type": f"{DOMAIN}/irrigation_action", "action": "run_all"})
+    assert not (await client.receive_json())["success"]                 # no new watering while tripped
+    on.clear()
+    hass.states.async_set("sensor.water_druk", "300", {"unit_of_measurement": "kPa"})
+    await client.send_json({"id": 5, "type": f"{DOMAIN}/water_action", "action": "reset"})
+    assert (await client.receive_json())["success"]
+    assert any(c.data["entity_id"] == "switch.roses" for c in on) and not irrc.snapshot()["run"]["paused"]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

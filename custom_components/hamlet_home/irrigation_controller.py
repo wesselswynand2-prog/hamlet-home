@@ -168,7 +168,31 @@ class IrrigationController:
     def _zone_by_entity(self, entity_id: str) -> dict | None:
         return next((z for z in self.zones if z.get("entity") == entity_id), None)
 
+    def pump_tripped(self) -> bool:
+        wc = self.hass.data.get(DOMAIN, {}).get("water")
+        return bool(wc is not None and getattr(wc, "guard", None) is not None and wc.guard.tripped)
+
+    async def async_pump_tripped(self) -> None:
+        """The booster pump's dry-run protection tripped: pause the run (resumed on Reset) and close hand-opened valves."""
+        now = dt_util.now()
+        if self.run is not None and self.run.get("current") and self.run.get("paused") is None:
+            await self._pause(now)
+            self.run["by_trip"] = True
+            z = self._zone(self.run["current"]) or {}
+            self.last_note = f"Paused {z.get('name', 'watering')} – the booster pump tripped (no water). Reset the pump to carry on."
+        for entity_id in list(self.manual_off):
+            self.manual_off.pop(entity_id, None)
+            await self._set(entity_id, False)
+        self._notify_ui()
+
+    async def async_pump_reset(self) -> None:
+        """The pump was reset: carry on with a run that the trip paused."""
+        if self.run is not None and self.run.pop("by_trip", False) and self.run.get("paused") is not None:
+            await self._resume(dt_util.now())
+
     def skip_reason(self, now: datetime) -> str | None:
+        if self.pump_tripped():
+            return "the booster pump is tripped (no water) – reset it on the Pump tab"
         s = self.settings
         delay = dt_util.parse_datetime(s["rain_delay_until"]) if s.get("rain_delay_until") else None
         rain = s.get("rain_entity") or ""
@@ -380,6 +404,8 @@ class IrrigationController:
     async def async_action(self, action: str, data: dict) -> None:
         s = self.settings
         now = dt_util.now()
+        if action in ("run_zone", "run_all", "run_program", "resume") and self.pump_tripped():
+            raise ValueError("The booster pump is tripped (no water) – check the water, then Reset it on the Pump tab")
         if action == "run_all":
             await self.async_start_run(irr.program_queue(None, self.zones, float(s["amount"]), float(s["max_minutes"])), "Run all")
         elif action == "run_zone":
@@ -434,7 +460,7 @@ class IrrigationController:
             z = self._zone(self.run["current"]) or {}
             run = {"zone": self.run["current"], "name": z.get("name"), "by": self.run["by"],
                    "remaining": max(int((self.run["end"] - now).total_seconds()), 0) if self.run.get("end") else self.run.get("paused"),
-                   "paused": self.run.get("paused") is not None,
+                   "paused": self.run.get("paused") is not None, "by_trip": bool(self.run.get("by_trip")),
                    "secs": self.run.get("secs"), "index": self.run["done"] + 1, "total": self.run["total"],
                    "litres": None if self.run_litres() is None else round(self.run_litres()), "litres_limit": z.get("litres"),
                    "next": [self._zone(q[0])["name"] for q in self.run["queue"] if self._zone(q[0])]}

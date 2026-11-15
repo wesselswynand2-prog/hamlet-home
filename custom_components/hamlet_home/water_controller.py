@@ -339,6 +339,8 @@ class WaterController:
                 await self.hass.services.async_call("persistent_notification", "dismiss", {"notification_id": f"{DOMAIN}_low_pressure"}, blocking=False)
             if ev == "dry_run":
                 self._save(1)
+                if irr is not None:
+                    await irr.async_pump_tripped()
         if self.guard.tripped and live["pump_switch"] and self.conf.get(CONF_PUMP_SWITCH):
             # someone switched it back on outside the app: keep protecting until reset
             await self._switch_to(CONF_PUMP_SWITCH, False)
@@ -395,14 +397,21 @@ class WaterController:
         if action == "pump":
             if not self.conf.get(CONF_PUMP_SWITCH):
                 raise ValueError("No pump switch set up")
+            was = self.guard.tripped
             if value and self.guard.tripped:
                 self.guard.reset()
             await self._switch_to(CONF_PUMP_SWITCH, bool(value))
+            irr = self.hass.data.get(DOMAIN, {}).get("irrigation")
+            if was and value and irr is not None:
+                await irr.async_pump_reset()
         elif action == "reset":
             self.guard.reset()
             await self.hass.services.async_call("persistent_notification", "dismiss", {"notification_id": f"{DOMAIN}_dry_run"}, blocking=False)
             if self.conf.get(CONF_PUMP_SWITCH):
                 await self._switch_to(CONF_PUMP_SWITCH, True)
+            irr = self.hass.data.get(DOMAIN, {}).get("irrigation")
+            if irr is not None:
+                await irr.async_pump_reset()
         elif action == "pool_mode":
             self.settings.update(water.validate_water_settings({"pool_mode": value}, admin=True))
             self._pool_last_desired = None  # apply the new mode now

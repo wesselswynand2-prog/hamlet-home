@@ -287,7 +287,7 @@ class HamletHomeGarden extends HTMLElement {
       const r = this._irr.run, left = on && r && r.zone === z.id && r.remaining !== null && r.remaining !== undefined ? ` · ${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
       const lit = on && r && r.zone === z.id && r.litres !== null && r.litres !== undefined ? ` · ${r.litres}${r.litres_limit ? `/${r.litres_limit}` : ""} L` : "";
       const paused = on && r && r.zone === z.id && r.paused;
-      const sub = paused ? `Paused${left}${lit} · tap ▶ to carry on` : on ? `Watering now${left}${lit}` : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${z.litres ? ` or ${fmtL(z.litres)}` : ""}${u ? ` · ${fmtL(u.today)} today` : ""}`;
+      const sub = paused ? (r.by_trip ? `Paused – pump tripped (no water)${left}` : `Paused${left}${lit} · tap ▶ to carry on`) : on ? `Watering now${left}${lit}` : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${z.litres ? ` or ${fmtL(z.litres)}` : ""}${u ? ` · ${fmtL(u.today)} today` : ""}`;
       const busy = this._busy === z.id;
       // the row opens the valve; the round button on the right starts it for its normal minutes (or stops it)
       return `<div class="zrow ${on ? "on" : ""}"><button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[this._zoneKind(z)] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div></button>
@@ -373,7 +373,7 @@ class HamletHomeGarden extends HTMLElement {
     if (on && !mine && z.litres) left = `stops at ${z.litres} L`;
     if ($("banner")) {
       const pz = mine && r.paused;
-      $("banner").innerHTML = on ? `<div class="banner"><div class="grow">${pz ? "Paused" : "Watering"}${left ? ` · ${left}` : ""}<small>${pz ? "the valve is closed until you carry on" : "Pause keeps the time left"}</small><div class="prog"><i style="width:${pct}%"></i></div></div>${mine ? `<button class="btn ${pz ? "start" : "pz"}" id="${pz ? "resume" : "pause"}" style="padding:10px 14px">${pz ? "Resume" : "Pause"}</button>` : ""}<button class="btn stop" id="stop" style="padding:10px 14px">Stop</button></div>`
+      $("banner").innerHTML = on ? `<div class="banner"><div class="grow">${pz ? "Paused" : "Watering"}${left ? ` · ${left}` : ""}<small>${pz ? (r.by_trip ? "the booster pump tripped – reset it on the Pump tab and watering carries on" : "the valve is closed until you carry on") : "Pause keeps the time left"}</small><div class="prog"><i style="width:${pct}%"></i></div></div>${mine ? `<button class="btn ${pz ? "start" : "pz"}" id="${pz ? "resume" : "pause"}" style="padding:10px 14px">${pz ? "Resume" : "Pause"}</button>` : ""}<button class="btn stop" id="stop" style="padding:10px 14px">Stop</button></div>`
         : r ? `<div class="banner"><div class="grow">${esc(r.name || "Another valve")} is watering<small>Settings → Start waters this valve instead</small></div></div>` : "";
       this._renderNow();
     }
