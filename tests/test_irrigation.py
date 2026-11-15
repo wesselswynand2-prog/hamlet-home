@@ -88,3 +88,15 @@ def test_valve_litres_limit():
     assert irr.validate({"zones": [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10}]}, cur, True)["zones"][0]["litres"] == 300   # kept
     assert irr.validate({"zones": [{"id": "a", "minutes": 10, "litres": ""}]}, cur, False)["zones"][0]["litres"] is None                       # cleared
     assert irr.validate({"zones": [{"id": "a", "minutes": 10, "litres": "450"}]}, cur, False)["zones"][0]["litres"] == 450
+
+
+def test_hose_tap_kept_out_of_programs():
+    zones = [{"id": "a", "name": "Gras", "entity": "switch.a", "minutes": 10, "enabled": True},
+             {"id": "k", "name": "Kraan", "entity": "switch.k", "minutes": 10, "enabled": True},
+             {"id": "b", "name": "Beddings", "entity": "switch.b", "minutes": 5, "enabled": True, "hose": True},
+             {"id": "t", "name": "Tap water", "entity": "switch.t", "minutes": 5, "enabled": True, "hose": False}]
+    assert irr.is_hose(zones[1]) and irr.is_hose(zones[2]) and not irr.is_hose(zones[3]) and not irr.is_hose(zones[0])
+    assert [q[0] for q in irr.program_queue(None, zones, 100, 120)] == ["a", "t"]                         # all valves: no hose taps
+    assert [q[0] for q in irr.program_queue({"zones": ["a", "k"]}, zones, 100, 120)] == ["a", "k"]        # unless a program names it
+    out = irr.validate({"zones": [{**zones[1], "hose": False}]}, {"zones": [zones[1]]}, True)
+    assert out["zones"][0]["hose"] is False

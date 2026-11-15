@@ -42,6 +42,7 @@ TI.flow = T(`<path d="M3 12 q4 -4 8 0 t8 0 t8 0 M3 19 q4 -4 8 0 t8 0 t8 0" strok
 const compassIcon = (deg) => T(`<circle cx="15" cy="15" r="11" fill="none" stroke="#7d8a7e" stroke-width="2"/><g transform="rotate(${deg === null ? 0 : (deg + 180) % 360} 15 15)"><path d="M15 6 L 19 17 L 15 15 L 11 17 Z" fill="#e5484d"/></g>`);
 const PLAY = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 L 19 12 L 8 19 Z" fill="currentColor"/></svg>`;
 const PAUSE = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/></svg>`;
+const HOSE = `<svg class="hico" viewBox="0 0 40 40" aria-hidden="true"><rect x="6" y="6" width="12" height="7" rx="2" fill="#9aa4b0"/><rect x="10" y="3" width="4" height="4" rx="1" fill="#e5484d"/><path d="M12 13 V 18 q0 6 6 6 h8 q6 0 6 6 v4" stroke="#3f9a3b" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M28 36 l2 3 M32 36 l0 4 M36 36 l-2 3" stroke="#1f8fd0" stroke-width="2" stroke-linecap="round"/></svg>`;
 const NAV = {
   now: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12 a9 9 0 1 1 18 0" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 12 L 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 17 h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
   history: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20 V 4 M3 20 H 21" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M6 16 l4 -6 l4 3 l5 -8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -94,6 +95,21 @@ button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
 .btn.big { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px; font-size: 17px; }
 .btn.big small { font-size: 12.5px; font-weight: 500; opacity: .85; }
 .btn.ghost { background: transparent; border: 1px solid var(--g-water); color: var(--g-water); }
+.hose { background: var(--g-card); border: 1px solid var(--g-line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hose.on { background: var(--g-wsoft); border-color: transparent; }
+.hset { background: none; border: 0; color: var(--g-muted); font-size: 24px; padding: 4px 8px; cursor: pointer; }
+.hhead { display: flex; align-items: center; gap: 12px; } .hhead .grow { flex: 1; min-width: 0; }
+.hhead b { display: block; font-size: 16px; } .hose.on .hhead b { color: var(--g-water); } .hhead span { font-size: 13px; color: var(--g-muted); }
+.hico { width: 44px; height: 44px; flex: 0 0 44px; background: var(--g-tile); border-radius: 50%; padding: 4px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--g-line); border-radius: 12px; overflow: hidden; }
+.seg button { border: 0; background: none; color: var(--g-fg); padding: 9px 4px; font-size: 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--g-line); }
+.seg button[aria-pressed="true"] { background: var(--g-leaf); color: #fff; font-weight: 600; } .seg button:disabled { opacity: .4; cursor: default; }
+.hchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hchip { border: 1px solid var(--g-line); background: var(--g-app); color: var(--g-fg); border-radius: 10px; padding: 7px 10px; font-size: 14px; cursor: pointer; }
+.hchip[aria-pressed="true"] { background: var(--g-tile); color: var(--g-tile-fg); border-color: transparent; font-weight: 600; }
+.hcust { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--g-muted); }
+.hcust input { width: 74px; font: 14px inherit; font-family: inherit; color: var(--g-fg); background: var(--g-app); border: 1px solid var(--g-line); border-radius: 10px; padding: 7px 8px; }
 .sect { display: flex; flex-direction: column; gap: 8px; }
 .ahead { display: flex; align-items: center; gap: 12px; padding: 0 2px; }
 .ahead svg { width: 64px; height: 44px; flex: 0 0 64px; border-radius: 8px; display: block; }
@@ -138,6 +154,8 @@ button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
 .form input, .form select, .form .ro { font: 15px inherit; font-family: inherit; color: var(--g-fg); background: var(--g-app); border: 1px solid var(--g-line); border-radius: 10px; padding: 9px 10px; min-width: 0; width: 100%; text-align: center; }
 .form .ro { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .form .full { grid-column: 1 / -1; }
+.form .hrow { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; text-align: left; }
+.form .hrow input { width: 22px; height: 22px; flex: 0 0 22px; accent-color: var(--g-leaf); }
 .row { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
 .link { background: none; border: 0; color: var(--g-water); font-size: 16px; font-weight: 600; padding: 6px 10px; cursor: pointer; }
 .msg { font-size: 13px; color: var(--g-muted); } .msg.err { color: var(--g-bad); } .msg.ok { color: var(--g-leaf); }
@@ -202,7 +220,7 @@ class HamletHomeGarden extends HTMLElement {
   _areas() {
     const map = new Map();
     for (const z of this._irr.zones || []) {
-      if (!z.entity) continue;
+      if (!z.entity || z.is_hose) continue;
       const g = groupOf(z);
       if (!map.has(g)) map.set(g, []);
       map.get(g).push(z);
@@ -252,10 +270,10 @@ class HamletHomeGarden extends HTMLElement {
     back.textContent = "‹ Garden";
     nav.hidden = v.view !== "zone";
     const view = box.getElementById("view"), a = box.activeElement;
-    if (!force && a && a.closest && a.closest(".form")) { this._renderLive(); return; }   // don't redraw a form being typed in
+    if (!force && a && a.closest && a.closest(".form, .hcust")) { this._renderLive(); return; }   // don't redraw a form being typed in
     if (v.view === "zone") {
       const z = irr.zones.find((x) => x.id === v.zone), u = this._usage(v.zone);
-      const key = JSON.stringify([v.zone, v.page, z.name, z.minutes, z.setpoint, z.group, z.litres, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month, !!this._daily]);
+      const key = JSON.stringify([v.zone, v.page, z.name, z.minutes, z.setpoint, z.group, z.litres, z.is_hose, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month, !!this._daily]);
       if (!force && this._zKey === key) { this._renderLive(); return; }
       this._zKey = key;
       nav.innerHTML = [["now", "Now"], ["history", "History"], ["settings", "Settings"]].map(([id, l]) => `<button role="tab" data-page="${id}" aria-selected="${v.page === id}">${NAV[id]}${l}</button>`).join("");
@@ -281,9 +299,9 @@ class HamletHomeGarden extends HTMLElement {
     const areas = this._areas(), irr = this._irr;
     if (!areas.length) { view.innerHTML = `<div class="empty">No valves yet – add them under <b>Classic</b> → Edit valves.</div>`; return; }
     const skip = irr.skip ? `<div class="pill warn">Watering skipped: ${esc(irr.skip)}</div>` : "";
-    const anyOn = (irr.zones || []).some((z) => this._running(z.id));
+    const anyOn = (irr.zones || []).some((z) => !z.is_hose && this._running(z.id));
     // every valve on one page, under its area
-    view.innerHTML = `${this._wxStrip()}${skip}${this._progCard()}<div class="msg err" id="qmsg" style="text-align:center"></div>
+    view.innerHTML = `${this._wxStrip()}${skip}${this._progCard()}${this._hoseCards()}<div class="msg err" id="qmsg" style="text-align:center"></div>
       ${anyOn ? `<div class="note" style="text-align:center">Tap ❚❚ to pause · double tap to stop</div>` : ""}
       ${areas.map((ar) => {
         const nxt = this._nextFor(ar.zones.map((z) => z.id));
@@ -297,7 +315,7 @@ class HamletHomeGarden extends HTMLElement {
   // top of the page: run a watering program now, or follow / pause / skip / stop the run that is going
   _progCard() {
     const irr = this._irr, r = irr.run, st = irr.settings || {}, amount = Number(st.amount ?? 100) / 100;
-    const zones = (irr.zones || []).filter((z) => z.entity && z.enabled !== false && z.minutes > 0);
+    const zones = (irr.zones || []).filter((z) => z.entity && z.enabled !== false && z.minutes > 0 && !z.is_hose);
     if (!zones.length) return "";
     if (r) {
       const left = r.remaining !== null && r.remaining !== undefined ? `${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
@@ -316,6 +334,37 @@ class HamletHomeGarden extends HTMLElement {
     };
     const btn = (p) => { const [n, m] = est(p); return `<button class="btn start big" ${p ? `data-prun="${esc(p.id)}"` : `data-pact="run_all"`}>▶ ${p ? `Run ${esc(p.start)} program` : "Water all valves"}<small>${n} valve${n === 1 ? "" : "s"} · about ${m} min</small></button>`; };
     return `<div class="pcard">${progs.length ? progs.map(btn).join("") : btn(null)}</div>`;
+  }
+
+  // hose taps (e.g. "Kraan"): open on their own for a time, a number of litres, or until stopped
+  _hoseCards() {
+    const taps = (this._irr.zones || []).filter((z) => z.entity && z.is_hose);
+    if (!taps.length) return "";
+    const h = this._irr.hose, hasMeter = !!this._d?.water?.usage;
+    const f = (this._hz = this._hz || { mode: "time", minutes: 15, litres: 500 });
+    if (!hasMeter && f.mode === "litres") f.mode = "time";
+    return taps.map((z) => {
+      const open = h && h.zone === z.id;
+      if (open) {
+        const left = `${Math.floor(h.remaining / 3600) ? Math.floor(h.remaining / 3600) + ":" : ""}${String(Math.floor((h.remaining % 3600) / 60)).padStart(Math.floor(h.remaining / 3600) ? 2 : 1, "0")}:${String(h.remaining % 60).padStart(2, "0")}`;
+        const pct = h.litres_limit && h.litres !== null ? Math.min(100, h.litres / h.litres_limit * 100)
+          : h.minutes ? Math.min(100, 100 - h.remaining / (h.minutes * 60) * 100) : 0;
+        const goal = h.litres_limit ? `${h.litres ?? 0} of ${fmtL(h.litres_limit)}` : h.minutes ? `${left} left` : "until you stop it";
+        return `<div class="hose on"><div class="hhead">${HOSE}<div class="grow"><b>${esc(z.name)} is open</b><span>${goal}${h.litres !== null && h.litres !== undefined && !h.litres_limit ? ` · ${fmtL(h.litres)} so far` : ""}${h.lpm ? ` · ${h.lpm.toFixed(1)} L/min` : ""}</span></div></div>
+          ${h.litres_limit || h.minutes ? `<div class="prog"><i style="width:${pct}%"></i></div>` : ""}
+          <button class="btn stop big" data-hstop="1">■ Close ${esc(z.name)}</button></div>`;
+      }
+      const chips = f.mode === "time" ? [5, 10, 15, 30, 60, 120].map((m) => `<button class="hchip" data-hmin="${m}" aria-pressed="${f.minutes === m}">${m < 60 ? m + " min" : m / 60 + " h"}</button>`).join("")
+        + `<label class="hcust"><input id="h-min" type="number" min="1" max="720" value="${f.minutes}" aria-label="Minutes">min</label>`
+        : f.mode === "litres" ? [50, 100, 250, 500, 1000, 2000].map((l) => `<button class="hchip" data-hlit="${l}" aria-pressed="${f.litres === l}">${fmtL(l)}</button>`).join("")
+          + `<label class="hcust"><input id="h-lit" type="number" min="1" step="10" value="${f.litres}" aria-label="Litres">L</label>`
+        : `<span class="note">Stays open until you close it (at most 12 hours).</span>`;
+      const what = f.mode === "time" ? `for ${f.minutes} min` : f.mode === "litres" ? `for ${fmtL(f.litres)}` : "";
+      return `<div class="hose"><div class="hhead">${HOSE}<div class="grow"><b>${esc(z.name)}</b><span>Hose tap · fill the pool or water by hand${!z.available ? " · offline" : ""}</span></div><button class="hset" data-zone="${esc(z.id)}" aria-label="${esc(z.name)} history and settings">›</button></div>
+        <div class="seg" role="group" aria-label="How long">${[["time", "Time"], ["litres", "Litres"], ["open", "Until I stop"]].map(([k, l]) => `<button data-hmode="${k}" aria-pressed="${f.mode === k}" ${k === "litres" && !hasMeter ? "disabled title=\"Needs Count the water (Pump tab → Water use)\"" : ""}>${l}</button>`).join("")}</div>
+        <div class="hchips">${chips}</div>
+        <button class="btn start big" data-hstart="${esc(z.id)}" ${z.available === false ? "disabled" : ""}>▶ Open ${esc(z.name)} ${what}</button></div>`;
+    }).join("");
   }
 
   _area(view) { this._v.view = "home"; this._home(view); }
@@ -386,6 +435,7 @@ class HamletHomeGarden extends HTMLElement {
         <label for="g-l">Stop after (litres)<input id="g-l" type="number" min="1" step="10" value="${z.litres ?? ""}" placeholder="${this._d?.water?.usage ? "by time only" : "needs water counter"}"></label>
         <label>Valve<div class="ro" title="${esc(z.entity)}">${esc(ent)}</div></label>
         <label for="g-grp">Area<select id="g-grp">${groups.map((g) => `<option ${g === groupOf(z) ? "selected" : ""}>${esc(g)}</option>`).join("")}<option value="__new">New area…</option></select></label>
+        ${this._d?.admin ? `<label for="g-hose" class="full hrow"><span>Hose tap – fill the pool or water by hand, left out of the programs</span><input id="g-hose" type="checkbox" ${z.is_hose ? "checked" : ""}></label>` : ""}
         <label for="g-new" id="g-newl" class="full" hidden>New area name<input id="g-new" type="text" maxlength="30" placeholder="e.g. Front garden"></label>
         <div class="full"><div class="progs">${progs.length ? progs.map((p) => `<span class="chip ${p.enabled === false ? "off" : ""}">${esc(p.start)} · ${(p.days || []).length === 7 ? "every day" : (p.days || []).map((d) => DAYS[d]).join(" ")}</span>`).join("") : `<span class="note">Not in a watering program – add one under Classic.</span>`}</div></div>
         <div class="row"><span class="msg" id="smsg"></span><button class="link" id="save">Save</button></div>
@@ -438,6 +488,18 @@ class HamletHomeGarden extends HTMLElement {
       try { const r = await this._hass.callWS(msg); this.dispatchEvent(new CustomEvent("irr-changed", { detail: r, bubbles: true, composed: true })); return r; }
       catch (err) { const m = el || $("st"); if (m) { m.textContent = err.message || "Failed"; if (el) m.className = "msg err"; } return null; }
     };
+    if (b.dataset.hmode) { this._hz.mode = b.dataset.hmode; return this._render(true); }
+    if (b.dataset.hmin) { this._hz.minutes = Number(b.dataset.hmin); return this._render(true); }
+    if (b.dataset.hlit) { this._hz.litres = Number(b.dataset.hlit); return this._render(true); }
+    if (b.dataset.hstart || b.dataset.hstop) {
+      const f = this._hz || {}; b.disabled = true;
+      if (f.mode === "time" && $("h-min")) f.minutes = Math.max(1, Math.min(720, Number($("h-min").value) || f.minutes));
+      if (f.mode === "litres" && $("h-lit")) f.litres = Math.max(1, Number($("h-lit").value) || f.litres);
+      const msg = b.dataset.hstop ? { action: "hose_stop" } : { action: "hose_start", zone: b.dataset.hstart, ...(f.mode === "time" ? { minutes: f.minutes } : f.mode === "litres" ? { litres: f.litres } : {}) };
+      const ok = await ws({ type: `${DOMAIN}/irrigation_action`, ...msg }, $("qmsg"));
+      if (ok) this._render(true); else b.disabled = false;
+      return;
+    }
     if (b.dataset.prun || b.dataset.pact) {   // program card at the top
       const m = $("qmsg"); b.disabled = true;
       const msg = b.dataset.prun ? { action: "run_program", program: b.dataset.prun } : { action: b.dataset.pact };
@@ -470,7 +532,8 @@ class HamletHomeGarden extends HTMLElement {
         if (z.id !== v.zone) return base;
         const auto = AREA_NAME[kindOf(z.name || "")];
         const nm = $("g-name") ? $("g-name").value.trim() : "";
-        return { ...base, name: nm || z.name, minutes: Number($("g-min").value || 0), setpoint: $("g-sp").disabled ? z.setpoint : ($("g-sp").value === "" ? null : Number($("g-sp").value)), group: grp === auto ? "" : grp, litres: $("g-l").value === "" ? null : Number($("g-l").value) };
+        const hz = $("g-hose") ? { hose: $("g-hose").checked } : {};
+        return { ...base, ...hz, name: nm || z.name, minutes: Number($("g-min").value || 0), setpoint: $("g-sp").disabled ? z.setpoint : ($("g-sp").value === "" ? null : Number($("g-sp").value)), group: grp === auto ? "" : grp, litres: $("g-l").value === "" ? null : Number($("g-l").value) };
       });
       const r = await ws({ type: `${DOMAIN}/irrigation_settings`, settings: { zones } }, m);
       if (r) { m.textContent = "Saved"; m.className = "msg ok"; b.blur(); }

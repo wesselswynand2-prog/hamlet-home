@@ -17,7 +17,8 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 TICK = timedelta(seconds=5)
-PAUSE_MAX = timedelta(hours=2)    # a paused run that isn't resumed ends by itself
+PAUSE_MAX = timedelta(hours=2)
+HOSE_MAX_MIN = 12 * 60          # a hose run (e.g. filling the pool) is never left open longer than this    # a paused run that isn't resumed ends by itself
 ON_STATES = {"on", "open", "opening"}
 BAD = (STATE_UNAVAILABLE, STATE_UNKNOWN, None)
 
@@ -31,6 +32,7 @@ class IrrigationController:
         self.last_watered: dict[str, str] = {}   # zone id -> iso time
         self.run: dict | None = None             # {"queue", "current", "end", "by", "total", "done"}
         self.manual_off: dict[str, datetime] = {}
+        self.hose: dict | None = None            # hose tap open on its own: {"zone", "started", "end", "minutes", "litres"}
         self.sp_note = ""
         self.last_note = ""
         self._expect: dict[str, tuple[bool, datetime]] = {}
@@ -46,7 +48,7 @@ class IrrigationController:
 
     @property
     def active(self) -> bool:
-        return self.run is not None or bool(self.manual_off)
+        return self.run is not None or bool(self.manual_off) or self.hose is not None
 
     async def async_start(self) -> None:
         data = await self.store.async_load() or {}
@@ -183,6 +185,8 @@ class IrrigationController:
         for entity_id in list(self.manual_off):
             self.manual_off.pop(entity_id, None)
             await self._set(entity_id, False)
+        if self.hose:
+            await self.async_hose_stop("the booster pump tripped")
         self._notify_ui()
 
     async def async_pump_reset(self) -> None:
@@ -313,6 +317,69 @@ class IrrigationController:
         self.last_note = f"Resumed {z.get('name', 'watering')}"
         self._notify_ui()
 
+    # ----------------------------------------------------------------- hose tap
+    async def async_hose_start(self, zid: str, minutes: float | None, litres: float | None) -> None:
+        """Open a hose tap on its own (next to any irrigation run) until the time or the litres are reached."""
+        z = self._zone(zid)
+        if z is None or not z.get("entity"):
+            raise ValueError("Unknown tap")
+        if self.pump_tripped():
+            raise ValueError("The booster pump is tripped (no water) – check the water, then Reset it on the Pump tab")
+        if litres is not None and not 1 <= float(litres) <= 1_000_000:
+            raise ValueError("Litres must be 1 … 1 000 000")
+        if minutes is not None and not 0 < float(minutes) <= HOSE_MAX_MIN:
+            raise ValueError(f"Time must be 1 … {HOSE_MAX_MIN} minutes")
+        if litres is not None and self.given(zid) is None:
+            raise ValueError("Litres need the water counter – switch on Count the water (Pump tab → Water use)")
+        now = dt_util.now()
+        mins = float(minutes) if minutes else HOSE_MAX_MIN
+        if self.hose and self.hose["zone"] != zid:
+            await self.async_hose_stop("another tap opened")
+        self.hose = {"zone": zid, "started": now, "end": now + timedelta(minutes=mins), "minutes": float(minutes) if minutes else None,
+                     "litres": float(litres) if litres else None}
+        await self._set(z["entity"], True)
+        self.manual_off.pop(z["entity"], None)
+        if self.settings.get("pump_entity") and not self._is_on(self.settings["pump_entity"]):
+            await self._set(self.settings["pump_entity"], True)
+        self.last_watered[zid] = now.isoformat()
+        self.last_note = f"{z['name']} open" + (f" for {float(litres):.0f} L" if litres else "") + (f" – at most {mins:.0f} min" if minutes else "")
+        self._notify_ui()
+
+    async def async_hose_stop(self, why: str = "stopped") -> None:
+        h, self.hose = self.hose, None
+        if not h:
+            return
+        z = self._zone(h["zone"]) or {}
+        got = self.given(h["zone"], h["started"])
+        if z.get("entity") and self._is_on(z["entity"]):
+            await self._set(z["entity"], False)
+        if self.settings.get("pump_entity") and self.run is None and self._is_on(self.settings["pump_entity"]):
+            await self._set(self.settings["pump_entity"], False)
+        self.last_note = f"{z.get('name', 'Tap')} closed ({why})" + (f" – {got:.0f} L" if got else "")
+        self._notify_ui()
+
+    async def _check_hose(self, now: datetime) -> None:
+        h = self.hose
+        if not h:
+            return
+        got = self.given(h["zone"], h["started"])
+        if h.get("litres") and got is not None and got >= h["litres"]:
+            await self.async_hose_stop(f"{h['litres']:.0f} L reached")
+        elif now >= h["end"]:
+            await self.async_hose_stop("time up")
+
+    def hose_info(self) -> dict | None:
+        h = self.hose
+        if not h:
+            return None
+        z = self._zone(h["zone"]) or {}
+        got = self.given(h["zone"], h["started"])
+        wc = self.hass.data.get(DOMAIN, {}).get("water")
+        return {"zone": h["zone"], "name": z.get("name"), "since": h["started"].isoformat(),
+                "remaining": max(int((h["end"] - dt_util.now()).total_seconds()), 0), "minutes": h.get("minutes"),
+                "litres_limit": h.get("litres"), "litres": None if got is None else round(got),
+                "lpm": getattr(wc, "live", {}).get("flow_lpm") if wc is not None else None}
+
     def run_litres(self) -> float | None:
         """Litres the valve of the run has given this time (across pauses)."""
         run = self.run
@@ -363,6 +430,7 @@ class IrrigationController:
         if self.run is not None and self.run.get("end") and now >= self.run["end"]:
             await self._advance(now)
         await self._check_litres(now)
+        await self._check_hose(now)
         for entity_id, due in list(self.manual_off.items()):
             if now >= due:
                 self.manual_off.pop(entity_id, None)
@@ -370,7 +438,7 @@ class IrrigationController:
                     await self._set(entity_id, False)
                     z = self._zone_by_entity(entity_id)
                     self.last_note = f"Closed {z['name'] if z else entity_id} after its time"
-        if self.run is not None or self.manual_off:
+        if self.run is not None or self.manual_off or self.hose:
             self._notify_ui()
 
     async def _on_valve_change(self, event: Event) -> None:
@@ -385,7 +453,8 @@ class IrrigationController:
         expected = self._expect.get(entity_id)
         ours = expected is not None and expected[0] == on and (dt_util.now() - expected[1]).total_seconds() < 60
         run_entity = (self._zone(self.run["current"]) or {}).get("entity") if self.run and self.run.get("current") else None
-        if on and not ours and entity_id != run_entity and self.settings.get("manual_auto_off", True):
+        hose_entity = (self._zone(self.hose["zone"]) or {}).get("entity") if self.hose else None
+        if on and not ours and entity_id not in (run_entity, hose_entity) and self.settings.get("manual_auto_off", True):
             z = self._zone_by_entity(entity_id)
             if z is not None:
                 secs = irr.zone_seconds(z, 100, self.settings["max_minutes"]) or 60
@@ -393,6 +462,8 @@ class IrrigationController:
                 self.last_watered[z["id"]] = dt_util.now().isoformat()
         if not on:
             self.manual_off.pop(entity_id, None)
+            if self.hose and not ours and (self._zone(self.hose["zone"]) or {}).get("entity") == entity_id:
+                self.hose = None          # closed at the tap itself
             if entity_id == run_entity and not ours:
                 # closed by hand during a run: carry on with the next valve
                 await self._advance(dt_util.now())
@@ -404,6 +475,12 @@ class IrrigationController:
     async def async_action(self, action: str, data: dict) -> None:
         s = self.settings
         now = dt_util.now()
+        if action == "hose_start":
+            await self.async_hose_start(str(data.get("zone")), data.get("minutes") or None, data.get("litres") or None)
+            return
+        if action == "hose_stop":
+            await self.async_hose_stop("stopped by hand")
+            return
         if action in ("run_zone", "run_all", "run_program", "resume") and self.pump_tripped():
             raise ValueError("The booster pump is tripped (no water) – check the water, then Reset it on the Pump tab")
         if action == "run_all":
@@ -469,12 +546,12 @@ class IrrigationController:
             ent = z.get("entity")
             st = self.hass.states.get(ent) if ent else None
             zones.append({**z, "on": bool(st and st.state in ON_STATES), "available": bool(st and st.state not in BAD),
-                          "last": self.last_watered.get(z["id"]),
+                          "last": self.last_watered.get(z["id"]), "is_hose": irr.is_hose(z),
                           "closes": self.manual_off[ent].isoformat() if ent in self.manual_off else None})
         nxt = irr.next_program_start(self.settings.get("programs", []), now)
         today = now.date().isoformat()
         return {
-            "zones": zones, "run": run, "settings": {k: v for k, v in self.settings.items() if k != "zones"},
+            "zones": zones, "run": run, "hose": self.hose_info(), "settings": {k: v for k, v in self.settings.items() if k != "zones"},
             "skip": self.skip_reason(now), "next_program": nxt.isoformat() if nxt else None, "note": self.last_note,
             "today": [{**e} for e in self.log.get(today, [])],
             "today_minutes": round(sum(e["secs"] for e in self.log.get(today, [])) / 60),

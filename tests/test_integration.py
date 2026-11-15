@@ -753,3 +753,46 @@ async def test_pump_trip_pauses_watering(enable_custom_integrations, hass: HomeA
     assert any(c.data["entity_id"] == "switch.roses" for c in on) and not irrc.snapshot()["run"]["paused"]
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_hose_tap_time_and_litres(enable_custom_integrations, hass: HomeAssistant, hass_ws_client, hass_admin_user, freezer):
+    """The hose tap opens on its own and closes after its litres or its time; programs leave it out."""
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    freezer.move_to(dt_util.start_of_local_day() + timedelta(hours=9))
+    entry, on, off, _ = await _water_entry(hass)
+    hass.states.async_set("sensor.druk_hz", "50", {"unit_of_measurement": "Hz"})
+    hass.states.async_set("sensor.water_druk", "350", {"unit_of_measurement": "kPa"})   # ≈ 49 L/min
+    for v in ("kraan", "roses"):
+        hass.states.async_set(f"switch.{v}", "off")
+    refresh = await hass.auth.async_create_refresh_token(hass_admin_user, CLIENT_ID)
+    tok = hass.auth.async_create_access_token(refresh)
+    client = await hass_ws_client(hass, access_token=tok)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/water_settings", "settings": {"flow_enabled": True}})
+    assert (await client.receive_json())["success"]
+    await client.send_json({"id": 2, "type": f"{DOMAIN}/irrigation_settings", "settings": {"zones": [
+        {"name": "Roses", "entity": "switch.roses", "minutes": 10}, {"name": "Kraan", "entity": "switch.kraan", "minutes": 10}]}})
+    assert (await client.receive_json())["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
+    irrc = hass.data[DOMAIN]["irrigation"]
+    kraan = next(z["id"] for z in irrc.zones if z["name"] == "Kraan")
+    assert [z["is_hose"] for z in irrc.snapshot()["zones"]] == [False, True]
+    offs = async_mock_service(hass, "homeassistant", "turn_off"); async_mock_service(hass, "homeassistant", "turn_on")
+    client = await hass_ws_client(hass, access_token=tok)
+    await client.send_json({"id": 3, "type": f"{DOMAIN}/irrigation_action", "action": "hose_start", "zone": kraan, "litres": 100})
+    res = await client.receive_json()
+    assert res["success"] and res["result"]["hose"]["litres_limit"] == 100 and res["result"]["run"] is None
+    hass.states.async_set("switch.kraan", "on"); await hass.async_block_till_done()
+    freezer.tick(timedelta(minutes=1)); await hass.data[DOMAIN]["water"].async_evaluate(); await irrc._tick()
+    assert irrc.hose is not None and irrc.hose_info()["litres"] == pytest.approx(49, abs=2)
+    freezer.tick(timedelta(minutes=1, seconds=10)); await hass.data[DOMAIN]["water"].async_evaluate(); await irrc._tick()
+    assert irrc.hose is None and any(c.data["entity_id"] == "switch.kraan" for c in offs) and "100 L reached" in irrc.last_note
+    hass.states.async_set("switch.kraan", "off"); await hass.async_block_till_done()
+    await client.send_json({"id": 4, "type": f"{DOMAIN}/irrigation_action", "action": "hose_start", "zone": kraan, "minutes": 5})
+    assert (await client.receive_json())["success"]
+    freezer.tick(timedelta(minutes=5, seconds=5)); await irrc._tick()
+    assert irrc.hose is None and "time up" in irrc.last_note
+    await client.send_json({"id": 5, "type": f"{DOMAIN}/irrigation_action", "action": "run_all"})
+    res = await client.receive_json()
+    assert res["success"] and res["result"]["run"]["total"] == 1                  # Run all leaves the hose tap out
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

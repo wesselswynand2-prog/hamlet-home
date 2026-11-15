@@ -64,14 +64,27 @@ def zone_seconds(zone: dict, amount: float, max_minutes: float) -> int:
     return max(int(round(minutes * 60)), 0)
 
 
+HOSE_NAME = re.compile(r"kraan|\btap\b|hose|slang|tuinkraan", re.I)
+
+
+def is_hose(z: dict) -> bool:
+    """A tap for a hose pipe (fill the pool, water by hand): not part of programs or 'all valves'.
+    Set per valve; when never set, a name like 'Kraan' / 'Tap' / 'Hose' counts as one."""
+    if z.get("hose") is not None:
+        return bool(z["hose"])
+    return bool(HOSE_NAME.search(str(z.get("name") or "")))
+
+
 def program_queue(program: dict | None, zones: list[dict], amount: float, max_minutes: float) -> list[list]:
-    """[[zone_id, seconds], …] in zone order; program None = all zones."""
+    """[[zone_id, seconds], …] in zone order; program None = all zones (hose taps only when a program names them)."""
     wanted = set(program.get("zones") or []) if program else set()
     q = []
     for z in zones:
         if not z.get("enabled", True) or not z.get("entity"):
             continue
         if wanted and z["id"] not in wanted:
+            continue
+        if not wanted and is_hose(z):
             continue
         secs = zone_seconds(z, amount, max_minutes)
         if secs > 0:
@@ -122,6 +135,12 @@ def _litres(z: dict, old: dict | None = None) -> float | None:
     return round(v)
 
 
+def _hose(z: dict, old: dict | None = None) -> bool | None:
+    if "hose" not in z:
+        return (old or {}).get("hose")
+    return None if z.get("hose") is None else bool(z.get("hose"))
+
+
 def _group(z: dict, old: dict | None = None) -> str:
     """Garden area the valve belongs to (Lawn, Beds & garden, Trees … or the client's own name); "" = guess from the name."""
     if "group" not in z:
@@ -146,12 +165,12 @@ def validate(new: dict, current: dict, admin: bool) -> dict:
                     raise ValueError(f"Not a valid entity: {entity}")
                 zones.append({"id": zid, "name": str(z.get("name") or "Zone")[:40], "entity": entity,
                               "minutes": minutes, "enabled": bool(z.get("enabled", True)), "setpoint": _setpoint(z),
-                              "group": _group(z, old.get(zid)), "litres": _litres(z, old.get(zid))})
+                              "group": _group(z, old.get(zid)), "litres": _litres(z, old.get(zid)), "hose": _hose(z, old.get(zid))})
             else:
                 if zid not in old:
                     raise ValueError("Only an administrator can add or remove valves")
                 zones.append({**old[zid], "minutes": minutes, "enabled": bool(z.get("enabled", old[zid].get("enabled", True))),
-                              "setpoint": _setpoint(z) if "setpoint" in z else old[zid].get("setpoint"), "group": _group(z, old[zid]), "litres": _litres(z, old[zid])})
+                              "setpoint": _setpoint(z) if "setpoint" in z else old[zid].get("setpoint"), "group": _group(z, old[zid]), "litres": _litres(z, old[zid]), "hose": _hose(z, old[zid])})
         if not admin and len(zones) != len(old):
             raise ValueError("Only an administrator can add or remove valves")
         out["zones"] = zones
