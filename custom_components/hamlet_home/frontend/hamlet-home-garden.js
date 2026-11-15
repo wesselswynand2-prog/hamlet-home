@@ -86,6 +86,11 @@ button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
 @keyframes pulse { 50% { opacity: .3; } }
 /* valve list – round plant pictures */
 .zone { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; border-bottom: 1px solid var(--g-line); background: none; padding: 10px 12px; cursor: pointer; text-align: left; color: inherit; }
+.sect { display: flex; flex-direction: column; gap: 8px; }
+.ahead { display: flex; align-items: center; gap: 12px; padding: 0 2px; }
+.ahead svg { width: 64px; height: 44px; flex: 0 0 64px; border-radius: 8px; display: block; }
+.ahead .t { display: flex; flex-direction: column; min-width: 0; }
+.ahead .t b { font-size: 19px; font-weight: 700; } .ahead .t span { font-size: 12.5px; color: var(--g-muted); }
 .zrow { display: flex; align-items: center; border-bottom: 1px solid var(--g-line); padding-right: 12px; gap: 6px; }
 .zrow:last-child { border-bottom: 0; }
 .zrow .zone { border-bottom: 0; flex: 1; min-width: 0; padding-right: 4px; }
@@ -236,7 +241,7 @@ class HamletHomeGarden extends HTMLElement {
     if (v.view === "area" && !this._areas().find((a) => a.name === v.area)) Object.assign(v, { view: "home", area: null });
     const back = box.getElementById("back"), nav = box.getElementById("nav");
     back.hidden = v.view === "home";
-    back.textContent = v.view === "zone" ? `‹ ${v.area || "Back"}` : "‹ Garden";
+    back.textContent = "‹ Garden";
     nav.hidden = v.view !== "zone";
     const view = box.getElementById("view"), a = box.activeElement;
     if (!force && a && a.closest && a.closest(".form")) { this._renderLive(); return; }   // don't redraw a form being typed in
@@ -268,31 +273,31 @@ class HamletHomeGarden extends HTMLElement {
     const areas = this._areas(), irr = this._irr;
     if (!areas.length) { view.innerHTML = `<div class="empty">No valves yet – add them under <b>Classic</b> → Edit valves.</div>`; return; }
     const skip = irr.skip ? `<div class="pill warn">Watering skipped: ${esc(irr.skip)}</div>` : "";
-    view.innerHTML = `${this._wxStrip()}${skip}
-      <div class="list">${areas.map((ar) => {
-        const runZ = ar.zones.find((z) => this._running(z.id)), nxt = this._nextFor(ar.zones.map((z) => z.id));
+    const anyOn = (irr.zones || []).some((z) => this._running(z.id));
+    // every valve on one page, under its area
+    view.innerHTML = `${this._wxStrip()}${skip}<div class="msg err" id="qmsg" style="text-align:center"></div>
+      ${anyOn ? `<div class="note" style="text-align:center">Tap ❚❚ to pause · double tap to stop</div>` : ""}
+      ${areas.map((ar) => {
+        const nxt = this._nextFor(ar.zones.map((z) => z.id));
         const today = ar.zones.reduce((s, z) => s + (this._usage(z.id)?.today || 0), 0);
-        return `<button class="area" data-area="${esc(ar.name)}">${ART[ar.kind] || ART.beds}<div class="t"><b>${esc(ar.name)}</b>
-          <span>${ar.zones.length} valve${ar.zones.length > 1 ? "s" : ""}${nxt ? ` · next ${this._when(nxt)}` : ""}</span>
-          <span class="pill ${runZ ? "on" : ""}">${runZ ? `Watering ${esc(runZ.name)}` : today ? `${fmtL(today)} today` : "Nothing yet today"}</span></div></button>`;
-      }).join("")}</div>`;
+        return `<section class="sect"><div class="ahead">${ART[ar.kind] || ART.beds}<div class="t"><b>${esc(ar.name)}</b>
+            <span>${ar.zones.length} valve${ar.zones.length > 1 ? "s" : ""}${nxt ? ` · next ${this._when(nxt)}` : ""}${today ? ` · ${fmtL(today)} today` : ""}</span></div></div>
+          <div class="list">${ar.zones.map((z) => this._zoneRow(z)).join("")}</div></section>`;
+      }).join("")}`;
   }
 
-  _area(view) {
-    const ar = this._areas().find((x) => x.name === this._v.area);
-    this.shadowRoot.getElementById("ttl").textContent = ar.name;
-    const anyOn = ar.zones.some((z) => this._running(z.id));
-    view.innerHTML = `<div class="msg err" id="qmsg" style="text-align:center"></div>${anyOn ? `<div class="note" style="text-align:center">Tap ❚❚ to pause · double tap to stop</div>` : ""}<div class="list">${ar.zones.map((z) => {
-      const on = this._running(z.id), u = this._usage(z.id);
-      const r = this._irr.run, left = on && r && r.zone === z.id && r.remaining !== null && r.remaining !== undefined ? ` · ${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
-      const lit = on && r && r.zone === z.id && r.litres !== null && r.litres !== undefined ? ` · ${r.litres}${r.litres_limit ? `/${r.litres_limit}` : ""} L` : "";
-      const paused = on && r && r.zone === z.id && r.paused;
-      const sub = paused ? (r.by_trip ? `Paused – pump tripped (no water)${left}` : `Paused${left}${lit} · tap ▶ to carry on`) : on ? `Watering now${left}${lit}` : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${z.litres ? ` or ${fmtL(z.litres)}` : ""}${u ? ` · ${fmtL(u.today)} today` : ""}`;
-      const busy = this._busy === z.id;
-      // the row opens the valve; the round button on the right starts it for its normal minutes (or stops it)
-      return `<div class="zrow ${on ? "on" : ""}"><button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[this._zoneKind(z)] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div></button>
-        <button class="qbtn ${paused ? "paused" : on ? "pause" : ""}" data-quick="${esc(z.id)}" ${busy || (!on && !z.available) ? "disabled" : ""} aria-label="${paused ? `Carry on watering ${esc(z.name)} – double tap to stop` : on ? `Pause ${esc(z.name)} – double tap to stop` : `Water ${esc(z.name)} for ${z.minutes} minutes`}">${paused ? PLAY : on ? PAUSE : PLAY}<small>${paused ? "Resume" : on ? "Pause" : `${Math.round(z.minutes)} min`}</small></button></div>`;
-    }).join("")}</div>`;
+  _area(view) { this._v.view = "home"; this._home(view); }
+
+  _zoneRow(z) {
+    const on = this._running(z.id), u = this._usage(z.id);
+    const r = this._irr.run, left = on && r && r.zone === z.id && r.remaining !== null && r.remaining !== undefined ? ` · ${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
+    const lit = on && r && r.zone === z.id && r.litres !== null && r.litres !== undefined ? ` · ${r.litres}${r.litres_limit ? `/${r.litres_limit}` : ""} L` : "";
+    const paused = on && r && r.zone === z.id && r.paused;
+    const sub = paused ? (r.by_trip ? `Paused – pump tripped (no water)${left}` : `Paused${left}${lit} · tap ▶ to carry on`) : on ? `Watering now${left}${lit}` : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${z.litres ? ` or ${fmtL(z.litres)}` : ""}${u ? ` · ${fmtL(u.today)} today` : ""}`;
+    const busy = this._busy === z.id;
+    // the row opens the valve; the round button on the right starts it for its normal minutes (pause / double tap stop while on)
+    return `<div class="zrow ${on ? "on" : ""}"><button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[this._zoneKind(z)] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div></button>
+      <button class="qbtn ${paused ? "paused" : on ? "pause" : ""}" data-quick="${esc(z.id)}" ${busy || (!on && !z.available) ? "disabled" : ""} aria-label="${paused ? `Carry on watering ${esc(z.name)} – double tap to stop` : on ? `Pause ${esc(z.name)} – double tap to stop` : `Water ${esc(z.name)} for ${z.minutes} minutes`}">${paused ? PLAY : on ? PAUSE : PLAY}<small>${paused ? "Resume" : on ? "Pause" : `${Math.round(z.minutes)} min`}</small></button></div>`;
   }
 
   // Now: the live readings as big tiles
@@ -390,7 +395,7 @@ class HamletHomeGarden extends HTMLElement {
     const b = e.target.closest("button"); if (!b) return;
     const v = this._v, $ = (id) => this.shadowRoot.getElementById(id);
     if (b.id === "back") {
-      if (v.view === "zone") { v.view = "area"; v.area = groupOf(this._irr.zones.find((z) => z.id === v.zone) || {}); } else v.view = "home";
+      v.view = "home";
       v.mins = null; return this._render(true);
     }
     if (b.dataset.page) { v.page = b.dataset.page; return this._render(true); }
