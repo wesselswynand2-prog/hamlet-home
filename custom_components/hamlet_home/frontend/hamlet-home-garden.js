@@ -55,6 +55,7 @@ const STYLE = `
   --g-leaf: #5cbc55; --g-bar: #3f8f3a; --g-tile: #2f6b33; --g-tile-fg: #e6f6e1; --g-tile2: #1d4560; --g-tile2-fg: #e2f2fb; --g-wsoft: #183447; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+#qmsg:empty { display: none; }
 button { font-family: inherit; }
 button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
 .app { max-width: 640px; margin: 0 auto; background: var(--g-app); border-radius: 22px; overflow: hidden; border: 1px solid var(--g-line); display: flex; flex-direction: column; }
@@ -83,6 +84,15 @@ button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
 @keyframes pulse { 50% { opacity: .3; } }
 /* valve list – round plant pictures */
 .zone { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; border-bottom: 1px solid var(--g-line); background: none; padding: 10px 12px; cursor: pointer; text-align: left; color: inherit; }
+.zrow { display: flex; align-items: center; border-bottom: 1px solid var(--g-line); padding-right: 12px; gap: 6px; }
+.zrow:last-child { border-bottom: 0; }
+.zrow .zone { border-bottom: 0; flex: 1; min-width: 0; padding-right: 4px; }
+.zrow.on { background: var(--g-wsoft); }
+.qbtn { flex: 0 0 auto; width: 58px; height: 58px; border-radius: 50%; border: 0; background: var(--g-leaf); color: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+.qbtn svg { width: 22px; height: 22px; } .qbtn small { font-size: 10.5px; font-weight: 600; line-height: 1.1; }
+.qbtn.stop { background: var(--g-bad); }
+.qbtn:disabled { opacity: .45; cursor: default; }
+.qbtn:active:not(:disabled) { transform: scale(.94); }
 .zone:last-child { border-bottom: 0; }
 .zone .ico { width: 56px; height: 56px; border-radius: 50%; background: var(--g-tile); flex: 0 0 56px; display: grid; place-items: center; overflow: hidden; }
 .zone .ico svg { width: 42px; height: 42px; }
@@ -132,6 +142,7 @@ button:focus-visible { outline: 2px solid var(--g-water); outline-offset: 2px; }
 .nav button svg { width: 24px; height: 24px; }
 .nav button[aria-selected="true"] { color: var(--g-leaf); font-weight: 600; }
 .empty { padding: 24px; text-align: center; color: var(--g-muted); }
+@media (max-width: 420px) { .zrow .zone { gap: 10px; padding-left: 10px; } .zrow .zone .ico { width: 44px; height: 44px; flex-basis: 44px; } .zrow .zone .ico svg { width: 34px; height: 34px; } .qbtn { width: 54px; height: 54px; } }
 @media (max-width: 420px) { .area svg { width: 104px; flex-basis: 104px; height: 76px; } .area .t b { font-size: 20px; }
   .tiles { gap: 10px; } .tile { padding: 12px 10px; gap: 8px; min-height: 76px; } .tile .v { font-size: 17px; } .tile .ic { width: 34px; height: 34px; flex-basis: 34px; border-radius: 10px; } .tile .ic svg { width: 26px; height: 26px; } }
 @media (prefers-reduced-motion: reduce) { .pill.on::before { animation: none; } }
@@ -266,10 +277,14 @@ class HamletHomeGarden extends HTMLElement {
   _area(view) {
     const ar = this._areas().find((x) => x.name === this._v.area);
     this.shadowRoot.getElementById("ttl").textContent = ar.name;
-    view.innerHTML = `<div class="list">${ar.zones.map((z) => {
+    view.innerHTML = `<div class="msg err" id="qmsg" style="text-align:center"></div><div class="list">${ar.zones.map((z) => {
       const on = this._running(z.id), u = this._usage(z.id);
-      const sub = on ? "Watering now" : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${u ? ` · ${fmtL(u.today)} today` : ""}`;
-      return `<button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[this._zoneKind(z)] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div>${on ? `<span class="pill on">on</span>` : `<span class="go">›</span>`}</button>`;
+      const r = this._irr.run, left = on && r && r.zone === z.id && r.remaining !== null && r.remaining !== undefined ? ` · ${Math.floor(r.remaining / 60)}:${String(r.remaining % 60).padStart(2, "0")} left` : "";
+      const sub = on ? `Watering now${left}` : !z.available ? "valve offline" : `${z.last ? `last ${this._when(z.last)}` : "not watered yet"} · ${z.minutes} min${u ? ` · ${fmtL(u.today)} today` : ""}`;
+      const busy = this._busy === z.id;
+      // the row opens the valve; the round button on the right starts it for its normal minutes (or stops it)
+      return `<div class="zrow ${on ? "on" : ""}"><button class="zone" data-zone="${esc(z.id)}"><div class="ico">${ICON[this._zoneKind(z)] || ICON.beds}</div><div class="t"><b>${esc(z.name)}</b><span>${sub}</span></div></button>
+        <button class="qbtn ${on ? "stop" : ""}" data-quick="${esc(z.id)}" ${busy || (!on && !z.available) ? "disabled" : ""} aria-label="${on ? `Stop ${esc(z.name)}` : `Water ${esc(z.name)} for ${z.minutes} minutes`}">${on ? `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>` : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 L 19 12 L 8 19 Z" fill="currentColor"/></svg>`}<small>${on ? "Stop" : `${Math.round(z.minutes)} min`}</small></button></div>`;
     }).join("")}</div>`;
   }
 
@@ -375,6 +390,15 @@ class HamletHomeGarden extends HTMLElement {
       try { const r = await this._hass.callWS(msg); this.dispatchEvent(new CustomEvent("irr-changed", { detail: r, bubbles: true, composed: true })); return r; }
       catch (err) { const m = el || $("st"); if (m) { m.textContent = err.message || "Failed"; if (el) m.className = "msg err"; } return null; }
     };
+    if (b.dataset.quick) {    // tap-to-water from the valve list
+      const zid = b.dataset.quick, z = this._irr.zones.find((x) => x.id === zid); if (!z) return;
+      const on = this._running(zid);
+      this._busy = zid; b.disabled = true;
+      const ok = await ws(on ? { type: `${DOMAIN}/irrigation_action`, action: "stop" } : { type: `${DOMAIN}/irrigation_action`, action: "run_zone", zone: zid, minutes: Math.max(1, Math.round(z.minutes) || 10) }, $("qmsg"));
+      this._busy = null;
+      if (ok) this._render(true); else b.disabled = false;
+      return;
+    }
     if (b.id === "start") { b.disabled = true; await ws({ type: `${DOMAIN}/irrigation_action`, action: "run_zone", zone: v.zone, minutes: v.mins }); return; }
     if (b.id === "stop") { b.disabled = true; await ws({ type: `${DOMAIN}/irrigation_action`, action: "stop" }); return; }
     if (b.id === "save") {
