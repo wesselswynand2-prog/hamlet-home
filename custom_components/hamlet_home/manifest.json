@@ -3,6 +3,7 @@
   "name": "Hamlet Home",
   "after_dependencies": [
     "hamlet_geyser",
+    "lovelace",
     "recorder"
   ],
   "codeowners": [
@@ -21,5 +22,5 @@
   "issue_tracker": "https://github.com/wesselswynand2-prog/hamlet-home/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.27.0"
+  "version": "0.27.1"
 }

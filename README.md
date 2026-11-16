@@ -13,7 +13,7 @@ For the geyser, add `https://github.com/wesselswynand2-prog/hamlet-geyser` the s
 
 ## Dashboard cards
 
-Every part of the app is also a dashboard card – loaded automatically, no resource to add:
+Every part of the app is also a dashboard card. Hamlet Home adds it to the dashboard resources by itself (Settings → Dashboards → Resources: `/hamlet_home_static/hamlet-home-card.js`, kept at the current version). If your resources are written in YAML (`lovelace: resource_mode: yaml`), it is loaded on every page instead.
 
 ```yaml
 type: custom:hamlet-home-card

@@ -9,7 +9,7 @@ import voluptuous as vol
 from homeassistant.components import frontend, panel_custom, websocket_api
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 
@@ -99,9 +99,19 @@ async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None
         await hass.http.async_register_static_paths(
             [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), cache_headers=False)])
         data["_static"] = True
-    if not data.get("_card"):   # the dashboard card (custom:hamlet-home-card) is loaded on every page – no resource to add
-        frontend.add_extra_js_url(hass, f"{STATIC_URL}/hamlet-home-card.js?v={VERSION}")
+    if not data.get("_card"):   # the dashboard card (custom:hamlet-home-card): added to the dashboard resources
         data["_card"] = True
+        from .card_resource import async_ensure_card_resource  # noqa: PLC0415
+
+        async def _card_resource(_event=None) -> None:
+            if await async_ensure_card_resource(hass, f"{STATIC_URL}/hamlet-home-card.js", VERSION) is None:
+                # dashboards with YAML resources: load it on every page instead
+                frontend.add_extra_js_url(hass, f"{STATIC_URL}/hamlet-home-card.js?v={VERSION}")
+
+        if hass.is_running:
+            hass.async_create_task(_card_resource())
+        else:
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _card_resource)
     if data.get("_panel"):
         return
     await panel_custom.async_register_panel(
