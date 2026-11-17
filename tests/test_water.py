@@ -178,3 +178,17 @@ def test_pump_card_yaml():
         raise AssertionError("non-admin")
     except ValueError:
         pass
+
+
+def test_valve_pressure_history():
+    vp = water.ValvePressure()
+    vp.update(T0, 3.0, ("roses",))
+    vp.update(T0 + timedelta(seconds=20), 2.6, ("roses",))
+    vp.update(T0 + timedelta(seconds=40), 2.4, ("roses", "lawn"))
+    vp.update(T0 + timedelta(seconds=60), 2.5, ("lawn",))
+    day = T0.date().isoformat()
+    w = vp.week("roses", [day])[0]
+    assert w == {"avg": round((3.0 + 2.6 + 2.4) / 3, 2), "min": 2.4, "max": 3.0}
+    assert vp.last["roses"]["pts"] == [[0, 3.0], [20, 2.6], [40, 2.4]] and vp.last["lawn"]["pts"] == [[0, 2.4], [20, 2.5]]
+    vp.update(T0 + timedelta(hours=1), 3.1, ("roses",))                     # roses opens again: a new trace
+    assert vp.last["roses"]["pts"] == [[0, 3.1]] and vp.week("x", [day]) == [None]

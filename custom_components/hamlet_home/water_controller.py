@@ -53,6 +53,7 @@ class WaterController:
         self.buckets = water.PressureBuckets()
         self.meter = water.WaterMeter()
         self.tank = water.TankModel()
+        self.vpress = water.ValvePressure()
         self.live: dict[str, Any] = {}
         self.pool_reason = ""
         self._pool_last_desired: bool | None = None
@@ -78,6 +79,8 @@ class WaterController:
         self.pump.days = data.get("pump_days", {})
         self.pool.days = data.get("pool_days", {})
         self.buckets.data = {d: {int(k): v for k, v in slots.items()} for d, slots in data.get("buckets", {}).items()}
+        vp = data.get("vpress") or {}
+        self.vpress.days, self.vpress.last = dict(vp.get("days") or {}), dict(vp.get("last") or {})
         m = data.get("meter") or {}
         self.meter.days, self.meter.total_l, self.meter.last = m.get("days", {}), float(m.get("total_l", 0.0)), m.get("last", {})
         self.tank.load(data.get("tank") or {})
@@ -122,10 +125,13 @@ class WaterController:
         self.meter.days = {d: v for d, v in self.meter.days.items() if d >= mcut}
         self.tank.days = {d: v for d, v in self.tank.days.items() if d >= mcut}
         self.tank.starts = {d: v for d, v in self.tank.starts.items() if d >= mcut}
+        pcut = (today - timedelta(days=35)).isoformat()
+        self.vpress.days = {d: v for d, v in self.vpress.days.items() if d >= pcut}
         return {
             "settings": self.settings, "pump_days": self.pump.days, "pool_days": self.pool.days,
             "buckets": {d: {str(k): v for k, v in slots.items()} for d, slots in self.buckets.data.items()},
             "meter": {"days": self.meter.days, "total_l": self.meter.total_l, "last": self.meter.last},
+            "vpress": {"days": self.vpress.days, "last": self.vpress.last},
             "tank": self.tank.to_dict(),
             "guard": {"tripped": self.guard.tripped, "tripped_at": self.guard.tripped_at.isoformat() if self.guard.tripped_at else None},
         }
@@ -353,6 +359,8 @@ class WaterController:
             live["flow_m3h"] = q
             live["flow_lpm"] = round(q * 1000 / 60, 1) if q is not None else None
             self.meter.update(now, q, self._open_zones())
+        if self.conf.get("water_pressure"):
+            self.vpress.update(now, live["pressure"], self._open_zones())
         self._tank_update(now, live)
         await self._control_borehole(live.get("float_low"), live)
         self.live = live
@@ -479,6 +487,10 @@ class WaterController:
         }
         if self.settings.get("flow_enabled"):
             snap["usage"] = self.usage()
+        if self.conf.get("water_pressure") and self.vpress.last:
+            today = dt_util.now().date()
+            days = [(today - timedelta(days=n)).isoformat() for n in range(6, -1, -1)]
+            snap["valve_pressure"] = {z: {"week": self.vpress.week(z, days), "last": self.vpress.last.get(z)} for z in self.vpress.last}
         if self.settings.get("pump_card"):
             try:
                 snap["pump_card"] = water.parse_card(self.settings["pump_card"])

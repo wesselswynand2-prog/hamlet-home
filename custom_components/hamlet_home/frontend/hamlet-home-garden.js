@@ -273,7 +273,8 @@ class HamletHomeGarden extends HTMLElement {
     if (!force && a && a.closest && a.closest(".form, .hcust")) { this._renderLive(); return; }   // don't redraw a form being typed in
     if (v.view === "zone") {
       const z = irr.zones.find((x) => x.id === v.zone), u = this._usage(v.zone);
-      const key = JSON.stringify([v.zone, v.page, z.name, z.minutes, z.setpoint, z.group, z.litres, z.is_hose, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month, !!this._daily]);
+      const vpk = v.page === "history" ? this._d?.water?.valve_pressure?.[v.zone] : null;
+      const key = JSON.stringify([v.zone, v.page, z.name, z.minutes, z.setpoint, z.group, z.litres, z.is_hose, vpk && vpk.last && vpk.last.pts.length, vpk && vpk.week, z.available, this._progsFor(v.zone), irr.setpoint_ok, u && u.week, u && u.month, !!this._daily]);
       if (!force && this._zKey === key) { this._renderLive(); return; }
       this._zKey = key;
       nav.innerHTML = [["now", "Now"], ["history", "History"], ["settings", "Settings"]].map(([id, l]) => `<button role="tab" data-page="${id}" aria-selected="${v.page === id}">${NAV[id]}${l}</button>`).join("");
@@ -402,7 +403,7 @@ class HamletHomeGarden extends HTMLElement {
 
   _history(view, z) {
     const u = this._usage(z.id);
-    if (!u || !u.week) { view.innerHTML = `<div class="chart"><div class="cap">Water used</div><div class="note" style="text-align:center;padding:20px 8px">Switch on <b>Count the water</b> (Pump tab → Water use) to see the litres per valve.</div></div>`; return; }
+    if (!u || !u.week) { view.innerHTML = `<div class="chart"><div class="cap">Water used</div><div class="note" style="text-align:center;padding:20px 8px">Switch on <b>Count the water</b> (Pump tab → Water use) to see the litres per valve.</div></div>${this._pressureHistory(z)}`; return; }
     const wk = u.week, max = Math.max(...wk, 1), W = 400, H = 230, top = 14, bot = 196, x = (i) => 40 + i * ((W - 54) / 6), y = (v) => bot - (v / max) * (bot - top);
     const today = new Date(), lab = (i) => { const d = new Date(today); d.setDate(d.getDate() - (6 - i)); return i === 6 ? "Today" : DAYS[(d.getDay() + 6) % 7]; };
     const nice = max >= 1000 ? (v) => `${(v / 1000).toFixed(1)}k` : (v) => `${Math.round(v)}`;
@@ -418,7 +419,50 @@ class HamletHomeGarden extends HTMLElement {
         </svg>
         <div class="cap">Last 7 days – litres</div><div class="cap2">about ${fmtL(avg)} a day · this month ${fmtL(u.month)}</div>
       </div>
-      <div class="daylist">${wk.map((v, i) => `<div>${lab(i)}<b>${fmtL(v)}</b></div>`).join("")}</div>`;
+      <div class="daylist">${wk.map((v, i) => `<div>${lab(i)}<b>${fmtL(v)}</b></div>`).join("")}</div>
+      ${this._pressureHistory(z)}`;
+  }
+
+  // pressure while this valve waters: its latest run (bar over the minutes) and min / average / max per day for 7 days
+  _pressureHistory(z) {
+    const vp = this._d?.water?.valve_pressure?.[z.id];
+    if (!vp) return this._d?.water?.features?.water_pressure ? `<div class="chart"><div class="cap">Pressure</div><div class="note" style="text-align:center;padding:14px 8px">Shows after this valve has watered once.</div></div>` : "";
+    const W = 400, top = 14, bot = 150, H = 182, L = 40;
+    const sp = num(z.setpoint), today = new Date();
+    const lab = (i) => { const d = new Date(today); d.setDate(d.getDate() - (6 - i)); return i === 6 ? "Today" : DAYS[(d.getDay() + 6) % 7]; };
+    let out = "";
+    const pts = (vp.last && vp.last.pts) || [];
+    if (pts.length > 1) {
+      const tmax = Math.max(pts[pts.length - 1][0], 60), pmax = Math.max(...pts.map((p) => p[1]), sp || 0, 1) * 1.15;
+      const x = (sec) => L + (sec / tmax) * (W - L - 10), y = (b) => bot - (b / pmax) * (bot - top);
+      const line = pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ");
+      const ticks = [0, 0.5, 1].map((f) => f * pmax);
+      const mins = tmax / 60, step = mins > 40 ? 10 : mins > 15 ? 5 : mins > 6 ? 2 : 1;
+      const tx = []; for (let m = 0; m <= mins + 0.01; m += step) tx.push(m);
+      const avg = pts.reduce((a, p) => a + p[1], 0) / pts.length, lo = Math.min(...pts.map((p) => p[1])), hi = Math.max(...pts.map((p) => p[1]));
+      const when = vp.last.at ? this._when(vp.last.at) : "";
+      out += `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pressure during the last run, ${lo.toFixed(1)} to ${hi.toFixed(1)} bar">
+          ${ticks.map((t) => `<line x1="${L - 4}" x2="${W - 8}" y1="${y(t)}" y2="${y(t)}" stroke="var(--g-line)"/><text x="0" y="${y(t) + 4}">${t.toFixed(1)}</text>`).join("")}
+          ${sp ? `<line x1="${L}" x2="${W - 8}" y1="${y(sp)}" y2="${y(sp)}" stroke="var(--g-water)" stroke-dasharray="5 4"/><text x="${W - 10}" y="${y(sp) - 5}" text-anchor="end" style="fill:var(--g-water)">set ${sp.toFixed(1)}</text>` : ""}
+          <polyline points="${line}" fill="none" stroke="var(--g-water)" stroke-width="2.5" stroke-linejoin="round"/>
+          ${tx.map((m, i) => `<text x="${x(m * 60)}" y="${H - 8}" text-anchor="${i === tx.length - 1 ? "end" : "middle"}">${m}${i === tx.length - 1 ? " min" : ""}</text>`).join("")}
+        </svg>
+        <div class="cap">Pressure – last run</div><div class="cap2">${when} · ${lo.toFixed(1)}–${hi.toFixed(1)} bar · about ${avg.toFixed(1)} bar</div></div>`;
+    }
+    const wk = vp.week || [];
+    if (wk.some(Boolean)) {
+      const pmax = Math.max(...wk.filter(Boolean).map((d) => d.max), sp || 0, 1) * 1.15;
+      const x = (i) => L + 12 + i * ((W - L - 30) / 6), y = (b) => bot - (b / pmax) * (bot - top);
+      out += `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pressure per day for the last 7 days: lowest, average and highest while this valve watered">
+          ${[0, 0.5, 1].map((f) => f * pmax).map((t) => `<line x1="${L - 4}" x2="${W - 8}" y1="${y(t)}" y2="${y(t)}" stroke="var(--g-line)"/><text x="0" y="${y(t) + 4}">${t.toFixed(1)}</text>`).join("")}
+          ${sp ? `<line x1="${L}" x2="${W - 8}" y1="${y(sp)}" y2="${y(sp)}" stroke="var(--g-water)" stroke-dasharray="5 4" opacity=".7"/>` : ""}
+          ${wk.map((d, i) => d ? `<rect x="${x(i) - 7}" y="${y(d.max)}" width="14" height="${Math.max(y(d.min) - y(d.max), 2)}" rx="7" fill="var(--g-tile)"/><circle cx="${x(i)}" cy="${y(d.avg)}" r="4.5" fill="var(--g-water)"/>` : "").join("")}
+          ${wk.map((_, i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${lab(i)}</text>`).join("")}
+        </svg>
+        <div class="cap">Pressure – last 7 days</div><div class="cap2">bar while it watered: lowest–highest, dot = average</div></div>
+        <div class="daylist">${wk.map((d, i) => `<div>${lab(i)}<b>${d ? d.avg.toFixed(1) : "–"}</b></div>`).join("")}</div>`;
+    }
+    return out;
   }
 
   _settings(view, z) {

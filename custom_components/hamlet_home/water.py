@@ -583,3 +583,38 @@ def parse_card(text: str) -> dict | None:
     if not isinstance(cfg, dict) or not isinstance(cfg.get("type"), str) or not cfg["type"]:
         raise ValueError("The card needs a type, e.g. type: custom:delta-cp2000-card")
     return cfg
+
+
+@dataclass
+class ValvePressure:
+    """Pressure while each irrigation valve waters: min / average / max per day, and the trace of its latest run."""
+    days: dict[str, dict] = field(default_factory=dict)   # date -> {zid: [sum, n, min, max]}
+    last: dict[str, dict] = field(default_factory=dict)   # zid -> {"at": iso, "pts": [[seconds, bar], …]}
+    _open: dict = field(default_factory=dict)              # zid -> start time of the run being traced
+    MAX_PTS = 400
+
+    def update(self, t: datetime, bar: float | None, zones_open: tuple) -> None:
+        for z in [z for z in self._open if z not in zones_open]:
+            self._open.pop(z, None)
+        for z in zones_open:
+            if z not in self._open:                     # a new run of this valve: new trace
+                self._open[z] = t
+                self.last[z] = {"at": t.isoformat(), "pts": []}
+            if bar is None:
+                continue
+            d = self.days.setdefault(t.date().isoformat(), {})
+            a = d.get(z)
+            d[z] = [bar, 1, bar, bar] if a is None else [a[0] + bar, a[1] + 1, min(a[2], bar), max(a[3], bar)]
+            pts = self.last[z]["pts"]
+            secs = int((t - self._open[z]).total_seconds())
+            if not pts or secs - pts[-1][0] >= 10 or abs(bar - pts[-1][1]) >= 0.2:
+                pts.append([secs, round(bar, 2)])
+                if len(pts) > self.MAX_PTS:
+                    del pts[1:len(pts) // 2:2]       # thin the older half, keep the start
+
+    def week(self, zid: str, days: list[str]) -> list[dict | None]:
+        out = []
+        for day in days:
+            a = self.days.get(day, {}).get(zid)
+            out.append(None if not a else {"avg": round(a[0] / a[1], 2), "min": round(a[2], 2), "max": round(a[3], 2)})
+        return out
